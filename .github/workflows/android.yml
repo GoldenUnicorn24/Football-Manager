@@ -28,12 +28,6 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Create temporary CI signing key
-        shell: bash
-        run: |
-          keytool -genkeypair -v             -keystore app/gruenderelf-update.jks             -storepass ci-temporary-2026             -keypass ci-temporary-2026             -alias gruenderelf             -keyalg RSA -keysize 2048 -validity 10000             -dname "CN=CI Build, OU=CI, O=Football Manager, L=Hamburg, ST=Hamburg, C=DE"
-          echo "GRUENDERELF_KEYSTORE_PASSWORD=ci-temporary-2026" >> "$GITHUB_ENV"
-
       - name: Run unit tests
         run: ./gradlew --no-daemon --stacktrace test
 
@@ -46,7 +40,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: Football-Manager-v0.4.69-debug
+          name: Gruenderelf-v0.5.18-recovered-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
