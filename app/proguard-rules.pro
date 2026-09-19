@@ -1,0 +1,2 @@
+-keepattributes Signature,InnerClasses,EnclosingMethod,RuntimeVisibleAnnotations,AnnotationDefault
+-keepnames class de.gruenderelf.engine.**

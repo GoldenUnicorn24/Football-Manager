@@ -1,0 +1,23 @@
+Gründerelf v0.4.69 – Audioquellen
+
+WWS FootballAustriavs.Sweden.ogg — Work With Sounds / Torsten Nilsson — CC BY 4.0
+https://commons.wikimedia.org/wiki/File:WWS_FootballAustriavs.Sweden.ogg
+Echte Stadionaufnahme. Für Grundkulisse, Heim-/Auswärtsreaktionen, Chancen, Protest und Spannung werden ausschließlich reale Ausschnitte geschnitten, gemischt, gefiltert und normalisiert.
+
+Applause.ogg — Bearbeitung: Sven Manguard — CC BY-SA 3.0
+https://commons.wikimedia.org/wiki/File:Applause.ogg
+Echter Applaus; mit leiser realer Stadionkulisse gemischt.
+
+Whistle.ogg — Ruan123 — CC BY-SA 3.0
+https://commons.wikimedia.org/wiki/File:Whistle.ogg
+Echter Pfiff; nur geschnitten, ausgeblendet und normalisiert.
+
+Soccer kick effect.ogg — Frogfriend99 — CC BY-SA 3.0
+https://commons.wikimedia.org/wiki/File:Soccer_kick_effect.ogg
+Reale Ballkontaktaufnahme; aus v0.4.67 übernommen.
+
+Dull thud.ogg — gregoryweir / PDSounds — Public Domain
+Realer Impact; aus v0.4.67 übernommen.
+
+Chisel.1st.ogg — Membeth — Public Domain
+Reale Metallresonanz; aus v0.4.67 übernommen.
