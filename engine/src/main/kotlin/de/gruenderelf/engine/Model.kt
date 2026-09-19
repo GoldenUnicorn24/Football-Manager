@@ -3,7 +3,7 @@ package de.gruenderelf.engine
 import kotlinx.serialization.Serializable
 import kotlin.math.roundToInt
 
-const val SAVE_VERSION = 4
+const val SAVE_VERSION = 8
 @Serializable enum class Difficulty(val label: String,val money: Double) { CASUAL("Entspannt",1.25), NORMAL("Normal",1.0), REALISTIC("Realistisch",.85), HARDCORE("Hart",.7), SANDBOX("Sandbox",5.0) }
 @Serializable enum class Position(val label: String) { TW("Torwart"),IV("Innenverteidiger"),LV("Linksverteidiger"),RV("Rechtsverteidiger"),DM("Defensives Mittelfeld"),ZM("Zentrales Mittelfeld"),OM("Offensives Mittelfeld"),LA("Linksaußen"),RA("Rechtsaußen"),ST("Stürmer") }
 
@@ -83,11 +83,33 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP->0;Co
 @Serializable enum class TransferInterestLevel(val label:String){LOW("eher kein Interesse"),OPEN("offen für Gespräche"),INTERESTED("interessiert"),VERY_INTERESTED("sehr interessiert"),DESPERATE("will unbedingt zu diesem Verein")}
 @Serializable enum class AssistantTrainingStyle(val label:String){BALANCED("Ausgewogen"),MATCH_PREP("Gegner & Matchplan"),DEVELOPMENT("Entwicklung"),FITNESS("Athletik"),YOUTH("Jugendförderung")}
 @Serializable enum class YouthBlueprint(val label:String){BALANCED("Ausgewogen"),TECHNICAL("Techniker"),PHYSICAL("Athlet"),CREATIVE("Spielmacher"),DEFENSIVE("Defensiv"),FINISHER("Abschluss")}
+@Serializable enum class YouthSquad(val label:String){U19("U19"),U23("U23")}
+@Serializable enum class TransferStage(val label:String){SCOUTING("Scouting"),CLUB("Vereinsverhandlung"),PLAYER_AGENT("Spieler & Berater"),MEDICAL("Medizincheck"),REGISTRATION("Registrierung"),COMPLETED("Abgeschlossen")}
+@Serializable enum class ScoutRegion(val label:String){DOMESTIC("Deutschland"),DACH("DACH"),EUROPE("Europa"),SOUTH_AMERICA("Südamerika"),WORLD("Weltweit")}
+@Serializable enum class PlayerCareerFocus(val label:String,val description:String){BALANCED("Ausgewogen","Keine Spezialisierung; Entwicklung folgt Training und Spielrolle."),GOALGETTER("Torjäger","Zusätzlicher Abschlussfokus für deine Spielerkarriere."),PLAYMAKER("Spielmacher","Zusätzlicher Fokus auf Spielwitz und kreative Aktionen."),ATHLETE("Athlet","Zusätzlicher Tempofokus und körperliche Entwicklung."),CLUB_ICON("Vereinsikone","Bindung, Moral und langfristige Vereinsidentität stehen im Mittelpunkt.")}
+@Serializable enum class PlayerInstruction(val label:String){OVERLAP("Hinterlaufen"),CUT_INSIDE("Nach innen ziehen"),RUN_IN_BEHIND("In die Tiefe"),HOLD_POSITION("Position halten"),PRESS_MORE("Mehr pressen"),PRESS_LESS("Weniger pressen"),TIGHT_MARKING("Enger decken"),RISKY_PASSES("Riskante Pässe"),SHOOT_MORE("Häufiger abschließen")}
+@Serializable enum class AssistantCoachProfile(val label:String,val description:String){BALANCED("Allrounder","Ausgewogene Entscheidungen ohne extreme Schwerpunkte."),ANALYST("Analytiker","Stärker bei Gegneranalyse, Matchplan und datenbasierten Hinweisen."),TACTICIAN("Taktiker","Reagiert im Spiel früher auf taktische Probleme und Wechselbedarf."),DEVELOPER("Entwickler","Fördert Jugend, individuelle Rollen und langfristige Entwicklung."),MOTIVATOR("Motivator","Stabilisiert Moral, Belastung und Mannschaftsdynamik.")}
 @Serializable enum class SponsorCategory(val label:String){MAIN("Hauptpartner"),KIT("Trikotpartner"),YOUTH("Jugendpartner"),STADIUM("Infrastrukturpartner"),REGIONAL("Regionalpartner")}
+@Serializable data class AcademyTeamSeason(var played:Int=0,var wins:Int=0,var draws:Int=0,var losses:Int=0,var goalsFor:Int=0,var goalsAgainst:Int=0,var points:Int=0,var lastResult:String="")
+@Serializable data class YouthTeamStats(var appearances:Int=0,var goals:Int=0,var assists:Int=0,var averageRating:Double=6.5)
+@Serializable data class ScoutAssignment(var playerId:Int=0,var region:ScoutRegion=ScoutRegion.DOMESTIC,var weeksRemaining:Int=0,var startedWeek:Int=0,var cost:Long=0)
+@Serializable data class ScoutReport(var playerId:Int=0,var progress:Int=0,var caMin:Int=1,var caMax:Int=99,var potentialMin:Int=1,var potentialMax:Int=99,var personalityKnown:Boolean=false,var medicalKnown:Boolean=false,var lastUpdatedWeek:Int=-1,var note:String="Noch nicht beobachtet")
+@Serializable data class SavedTactic(var formation:String="4-4-2",var mentality:Int=3,var pressing:Int=3,var line:Int=3,var tempo:Int=3,var width:Int=3,var buildUp:BuildUp=BuildUp.MIXED)
+@Serializable data class TransferHistoryEntry(var season:Int=0,var week:Int=0,var playerId:Int=0,var fromClubId:Int=0,var toClubId:Int=0,var type:DealType=DealType.BUY,var fee:Long=0,var note:String="")
+@Serializable data class CompetingBid(var playerId:Int=0,var clubId:Int=0,var fee:Long=0,var expiresWeek:Int=0)
+@Serializable data class NotificationState(var tiredSeenWeek:Int=-1,var seenTiredPlayerIds:MutableSet<Int> = linkedSetOf(),var contractSeenSeason:Int=-1,var seenExpiringPlayerIds:MutableSet<Int> = linkedSetOf(),var seenCompletedScoutReportIds:MutableSet<Int> = linkedSetOf())
+@Serializable data class PassEvent(var minute:Int=0,var clubId:Int=0,var fromId:Int=0,var toId:Int=0,var completed:Boolean=true,var startX:Float=.5f,var startY:Float=.5f,var endX:Float=.5f,var endY:Float=.5f)
+@Serializable data class TacticChangeEvent(var minute:Int=0,var clubId:Int=0,var label:String="",var xg:Double=0.0,var shots:Int=0,var possessionTicks:Int=0)
+@Serializable data class BallFrame(var serial:Int=0,var minute:Int=0,var x:Float=.5f,var y:Float=.5f,var clubId:Int=0,var phase:LivePhase=LivePhase.POSSESSION,var detail:String="")
+data class PassNetworkNode(val playerId:Int,val x:Float,val y:Float,val touches:Int)
+data class PassNetworkEdge(val fromId:Int,val toId:Int,val count:Int,val startX:Float,val startY:Float,val endX:Float,val endY:Float)
+data class MatchCalibration(val chanceCreation:Double=1.0,val conversion:Double=1.0,val turnover:Double=1.0,val tempo:Double=1.0)
+data class PlayerDecisionContext(val distanceMeters:Double=0.0,val nearbyOpponents:Int=0,val pressureLabel:String="")
+data class CompetitionRuleSet(val maxSubstitutions:Int=5,val substitutionWindows:Int=3,val halfTimeIsFreeWindow:Boolean=true,val extraTimeAdditionalSubstitution:Boolean=true,val varEnabled:Boolean=true,val goalkeeperControlSeconds:Int=8,val substitutionExitSeconds:Int=10)
 @Serializable data class YouthProfile(var learning:Int=60,var maturity:Int=50,var path:DevelopmentPath=DevelopmentPath.NORMAL,var familySupport:Int=60,var adviserPressure:Int=35,var schoolStress:Int=25,var injuryGrowthRisk:Int=20,var seniorTraining:Boolean=false,var mentorId:Int=0,var roleSpark:PlayerRole=PlayerRole.AUTO,var lastTrackedMinutes:Int=0,var confidence:Int=55,var growthSpurtWeeks:Int=0,var homegrownYears:Int=0)
-@Serializable data class AcademyState(var identity:AcademyIdentity=AcademyIdentity.BALANCED,var scouting:Int=25,var boarding:Int=10,var partnerNetwork:Int=10,var loanNetwork:Int=10,var u19Quality:Int=25,var u23Quality:Int=20,var generationCycle:Int=50,var goldenGeneration:Boolean=false,var droughtYears:Int=0,var customIntakeSeason:Int=-1,var customIntakeUsed:Int=0)
+@Serializable data class AcademyState(var identity:AcademyIdentity=AcademyIdentity.BALANCED,var scouting:Int=25,var boarding:Int=10,var partnerNetwork:Int=10,var loanNetwork:Int=10,var u19Quality:Int=25,var u23Quality:Int=20,var generationCycle:Int=50,var goldenGeneration:Boolean=false,var droughtYears:Int=0,var customIntakeSeason:Int=-1,var customIntakeUsed:Int=0,var u19Season:AcademyTeamSeason=AcademyTeamSeason(),var u23Season:AcademyTeamSeason=AcademyTeamSeason())
 @Serializable data class ClubDynamics(var chemistry:Int=55,var tacticalUnderstanding:Int=45,var pressingCoordination:Int=40,var mentalHardness:Int=50,var leadership:Int=45,var hierarchyStability:Int=55,var languageCohesion:Int=70,var fatigueLoad:Int=20,var opponentPrep:Int=20,var staffQuality:Int=45,var patterns:MutableMap<String,Int> = linkedMapOf("AUFBAU" to 35,"PRESSINGFALLE" to 25,"HALBRAUM" to 25,"FLUEGEL" to 30,"DIAGONALE" to 25,"RESTVERTEIDIGUNG" to 30,"STANDARDS" to 30))
-@Serializable data class TransferOffer(var id:Int=0,var buyerClubId:Int=0,var sellerClubId:Int=0,var playerId:Int=0,var type:DealType=DealType.BUY,var role:SquadRole=SquadRole.ROTATION,var fee:Long=0,var wage:Int=0,var signingBonus:Long=0,var sellOnPercent:Int=0,var durationYears:Int=3,var releaseClause:Long=0,var buyOption:Long=0,var buyBackClause:Long=0,var swapPlayerId:Int=0,var playingTimePromise:Int=55,var sellerScore:Int=0,var playerScore:Int=0,var agentScore:Int=0,var status:NegotiationStatus=NegotiationStatus.DRAFT,var round:Int=0,var message:String="")
+@Serializable data class TransferOffer(var id:Int=0,var buyerClubId:Int=0,var sellerClubId:Int=0,var playerId:Int=0,var type:DealType=DealType.BUY,var role:SquadRole=SquadRole.ROTATION,var fee:Long=0,var wage:Int=0,var signingBonus:Long=0,var sellOnPercent:Int=0,var durationYears:Int=3,var releaseClause:Long=0,var buyOption:Long=0,var buyBackClause:Long=0,var swapPlayerId:Int=0,var playingTimePromise:Int=55,var sellerScore:Int=0,var playerScore:Int=0,var agentScore:Int=0,var status:NegotiationStatus=NegotiationStatus.DRAFT,var round:Int=0,var message:String="",var stage:TransferStage=TransferStage.SCOUTING,var medicalPassed:Boolean=false,var medicalRisk:Int=0,var medicalNote:String="",var registrationReady:Boolean=false,var loanWeeksRequested:Int=24,var recallAllowed:Boolean=true,var targetYouthSquad:YouthSquad?=null)
 @Serializable data class MatchAiProfile(var weakness:String="Keine klare Schwäche",var approach:BuildUp=BuildUp.MIXED,var pressingTrap:String="Mittelfeld lenken",var pressureTargetId:Int=0,var adaptation:Int=0,var lastAdjustmentMinute:Int=0,var humanErrorRate:Int=10,var timeWaste:Int=0,var tacticalFoulBias:Int=0,var overloadSide:Int=0,var widthBias:Int=0)
 
 @Serializable data class Attributes(var pace: Int=35,var finishing: Int=35,var passing: Int=35,var technique: Int=35,var tackling: Int=35,var strength: Int=35,var stamina: Int=35,var vision: Int=35,var heading: Int=35,var keeping: Int=15,var setPieces: Int=35) {
@@ -113,7 +135,7 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP->0;Co
 @Serializable data class Stats(var appearances: Int=0,var goals: Int=0,var assists: Int=0,var minutes: Int=0,var yellow: Int=0,var red: Int=0)
 @Serializable data class Appearance(var skin: Int=1,var hair: Int=1,var beard: Int=0,var build: Int=1)
 @Serializable data class PlayerSeason(val season: Int,val clubName: String,val stats: Stats)
-@Serializable data class Player(val id: Int,var clubId: Int=0,var firstName: String="",var lastName: String="",var birthYear: Int=2000,var nationality: String="Deutschland",var height: Int=180,var weight: Int=78,var foot: Foot=Foot.RIGHT,var position: Position=Position.ZM,var secondary: MutableList<Position> = mutableListOf(),var number: Int=10,var appearance: Appearance=Appearance(),var archetype: String="Komplett",var attributes: Attributes=Attributes(),var hidden: Hidden=Hidden(),var fitness: Double=95.0,var morale: Int=65,var form: Double=6.5,var sharpness: Int=60,var injuryWeeks: Int=0,var injury: String="",var unavailableReason: UnavailableReason?=null,var unavailableWeeks: Int=0,var stats: Stats=Stats(),var career: MutableList<PlayerSeason> = mutableListOf(),var youth: Boolean=false,var wantsMove: Boolean=false,var wage: Int=0,var retired: Boolean=false,var trainingProgress: Double=0.0,var lastTalkWeek: Int=-1,var messiMentored: Boolean=false,var role:PlayerRole=PlayerRole.AUTO,var youthProfile:YouthProfile=YouthProfile(),var contractYears:Int=2,var promisedRole:SquadRole=SquadRole.ROTATION,var agentId:Int=0,var marketUncertainty:Int=20,var loanParentClubId:Int=0,var loanBuyerClubId:Int=0,var loanOptionFee:Long=0,var loanWeeks:Int=0,var homegrownClubId:Int=0,var releaseClause:Long=0,var buyBackClubId:Int=0,var buyBackFee:Long=0,var sellOnPercentToPrevious:Int=0) {
+@Serializable data class Player(val id: Int,var clubId: Int=0,var firstName: String="",var lastName: String="",var birthYear: Int=2000,var nationality: String="Deutschland",var height: Int=180,var weight: Int=78,var foot: Foot=Foot.RIGHT,var position: Position=Position.ZM,var secondary: MutableList<Position> = mutableListOf(),var number: Int=10,var appearance: Appearance=Appearance(),var archetype: String="Komplett",var attributes: Attributes=Attributes(),var hidden: Hidden=Hidden(),var fitness: Double=95.0,var morale: Int=65,var form: Double=6.5,var sharpness: Int=60,var injuryWeeks: Int=0,var injury: String="",var unavailableReason: UnavailableReason?=null,var unavailableWeeks: Int=0,var stats: Stats=Stats(),var career: MutableList<PlayerSeason> = mutableListOf(),var youth: Boolean=false,var wantsMove: Boolean=false,var wage: Int=0,var retired: Boolean=false,var trainingProgress: Double=0.0,var lastTalkWeek: Int=-1,var messiMentored: Boolean=false,var role:PlayerRole=PlayerRole.AUTO,var youthProfile:YouthProfile=YouthProfile(),var contractYears:Int=2,var promisedRole:SquadRole=SquadRole.ROTATION,var agentId:Int=0,var marketUncertainty:Int=20,var loanParentClubId:Int=0,var loanBuyerClubId:Int=0,var loanOptionFee:Long=0,var loanWeeks:Int=0,var homegrownClubId:Int=0,var releaseClause:Long=0,var buyBackClubId:Int=0,var buyBackFee:Long=0,var sellOnPercentToPrevious:Int=0,var youthSquad:YouthSquad=YouthSquad.U19,var youthTeamStats:YouthTeamStats=YouthTeamStats(),var precontractClubId:Int=0,var precontractSeason:Int=0,var precontractWage:Int=0,var precontractYears:Int=0,var loanRecallAllowed:Boolean=true,var loanReturnYouth:Boolean=false,var loanReturnYouthSquad:YouthSquad=YouthSquad.U19,var temporarySeniorCallUp:Boolean=false,var temporaryReturnSquad:YouthSquad?=null) {
  val name get()="$firstName $lastName"
  val ca get()=attributes.overall(position)
  val available get()=!retired&&!youth&&injuryWeeks==0&&unavailableWeeks==0
@@ -159,16 +181,17 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP->0;Co
  var freeKickTakerId: Int=0,
  var cornerLeftTakerId: Int=0,
  var cornerRightTakerId: Int=0,
- var roles: MutableMap<Int,PlayerRole> = linkedMapOf()
+ var roles: MutableMap<Int,PlayerRole> = linkedMapOf(),
+ var instructions: MutableMap<Int,MutableList<PlayerInstruction>> = linkedMapOf()
 )
 @Serializable data class Sponsor(var name: String="Bäckerei am Markt",var weekly: Int=210)
 @Serializable data class SponsorDeal(var id:Int=0,var category:SponsorCategory=SponsorCategory.REGIONAL,var name:String="",var weekly:Int=0,var signingBonus:Long=0,var performanceBonus:Int=0,var weeksLeft:Int=40,var minReputation:Int=0,var youthBoost:Int=0,var membersBoost:Int=0,var active:Boolean=false,var acceptedWeek:Int=-1)
-@Serializable data class AssistantCoachState(var autoSeniorTraining:Boolean=false,var autoYouthTraining:Boolean=false,var autoSubstitutions:Boolean=false,var trainingStyle:AssistantTrainingStyle=AssistantTrainingStyle.BALANCED,var substitutionAggression:Int=3,var youthAggression:Int=2,var lastPlanReason:String="",var lastYouthReason:String="",var lastSubReason:String="")
-@Serializable data class IntensiveTrainingProject(var playerId:Int=0,var focus:Focus=Focus.TECHNIQUE,var weeksLeft:Int=4,var totalWeeks:Int=4,var cost:Long=0,var progress:Double=0.0,var startedWeek:Int=0)
+@Serializable data class AssistantCoachState(var autoSeniorTraining:Boolean=false,var autoYouthTraining:Boolean=false,var autoSubstitutions:Boolean=false,var trainingStyle:AssistantTrainingStyle=AssistantTrainingStyle.BALANCED,var profile:AssistantCoachProfile=AssistantCoachProfile.BALANCED,var substitutionAggression:Int=3,var youthAggression:Int=2,var lastPlanReason:String="",var lastYouthReason:String="",var lastSubReason:String="")
+@Serializable data class IntensiveTrainingProject(var playerId:Int=0,var focus:Focus=Focus.TECHNIQUE,var weeksLeft:Int=4,var totalWeeks:Int=4,var cost:Long=0,var progress:Double=0.0,var startedWeek:Int=0,var raisesPotential:Boolean=false)
 @Serializable data class Club(val id: Int,var name: String,var shortName: String,var tier: Int,var city: String="",var founded: Int=2026,var primary: Long=0xFF287254,var secondary: Long=0xFFE7EEE5,var logo: Logo=Logo(),var kits: Kits=Kits(),var stadium: Stadium=Stadium(),var budget: Long=12500,var wageBill: Int=0,var philosophy: String="Zusammenhalt",var playPhilosophy: String="Direkt nach vorn",var youthPhilosophy: String="Talente aus dem Ort",var tactics: Tactics=Tactics(),var sponsor: Sponsor=Sponsor(),var members: Int=55,var reputation: Int=10,var form: MutableList<String> = mutableListOf(),var lastIncome: Int=0,var lastCosts: Int=0,var dynamics:ClubDynamics=ClubDynamics(),var academy:AcademyState=AcademyState(),var sponsorDeals:MutableList<SponsorDeal> = mutableListOf(),var sponsorOffers:MutableList<SponsorDeal> = mutableListOf(),var commercialReputation:Int=30,var financialTrust:Int=60,var lastCommercialRefreshWeek:Int=-99)
 @Serializable data class League(val tier: Int,var name: String,var clubIds: MutableList<Int> = mutableListOf())
 @Serializable data class Calendar(var season: Int=2026,var matchday: Int=1,var absoluteWeek: Int=0)
-@Serializable data class User(val clubId: Int,val playerId: Int,var difficulty: Difficulty=Difficulty.NORMAL)
+@Serializable data class User(val clubId: Int,val playerId: Int,var difficulty: Difficulty=Difficulty.NORMAL,var tutorialEnabled:Boolean=false,var tutorialStep:Int=0,var tutorialCompleted:Boolean=false,var playerCareerFocus:PlayerCareerFocus=PlayerCareerFocus.BALANCED)
 @Serializable data class Fixture(val id: Int,val season: Int,val tier: Int,val matchday: Int,val homeId: Int,val awayId: Int,var played: Boolean=false,val competition: CompetitionType=CompetitionType.LEAGUE,val round: Int=0,val stage: String="",val group: String="",var winnerId: Int=0,var homePens: Int=0,var awayPens: Int=0)
 @Serializable data class MatchStats(var goals: Int=0,var xg: Double=0.0,var shots: Int=0,var shotsOnTarget: Int=0,var shotsOffTarget: Int=0,var blockedShots: Int=0,var possessionTicks: Int=0,var corners: Int=0,var fouls: Int=0,var offsides: Int=0,var throwIns: Int=0,var varChecks: Int=0)
 @Serializable data class PlayerMatchPerformance(
@@ -194,7 +217,7 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP->0;Co
 @Serializable data class Ticker(val minute: Int,val text: String,val tone: String="normal",val clockLabel: String="")
 @Serializable data class Goal(val playerId: Int,val assistId: Int=0,val minute: Int,val clockLabel: String="",val targetLabel: String="")
 @Serializable data class PenaltyKick(val clubId: Int,val playerId: Int,val keeperId: Int,val scored: Boolean,val outcome: ShotOutcome,val targetX: Float,val targetY: Float,val targetLabel: String,val clockLabel: String)
-@Serializable data class MatchRecord(val fixtureId: Int,val homeId: Int,val awayId: Int,val home: MatchStats,val away: MatchStats,val minute: Int,val goals: List<Goal> = emptyList(),val attendance: Int=0,val shotEvents: List<ShotEvent> = emptyList(),val homePens: Int=0,val awayPens: Int=0,val extraTimePlayed: Boolean=false)
+@Serializable data class MatchRecord(val fixtureId: Int,val homeId: Int,val awayId: Int,val home: MatchStats,val away: MatchStats,val minute: Int,val goals: List<Goal> = emptyList(),val attendance: Int=0,val shotEvents: List<ShotEvent> = emptyList(),val passEvents: List<PassEvent> = emptyList(),val tacticChanges: List<TacticChangeEvent> = emptyList(),val homePens: Int=0,val awayPens: Int=0,val extraTimePlayed: Boolean=false)
 @Serializable data class LiveMatch(
  val fixtureId: Int,
  val homeId: Int,
@@ -298,6 +321,8 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP->0;Co
  var lastShotTargetLabel: String="",
  var lastShotOutcome: ShotOutcome=ShotOutcome.OFF_TARGET,
  var shotEvents: MutableList<ShotEvent> = mutableListOf(),
+ var passEvents: MutableList<PassEvent> = mutableListOf(),
+ var tacticChanges: MutableList<TacticChangeEvent> = mutableListOf(),
  var playerPerformance: MutableMap<Int,PlayerMatchPerformance> = mutableMapOf(),
  var pendingVarShotIndex: Int=-1,
  var pendingVarKeeperId: Int=0,
@@ -315,7 +340,23 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP->0;Co
  var assistantSubSuggestedMinute:Int=-1,
  var assistantSubRejectedOutId:Int=0,
  var assistantSubRejectedInId:Int=0,
- var assistantSubRejectedUntilMinute:Int=0
+ var assistantSubRejectedUntilMinute:Int=0,
+ var assistantSubOutIds:MutableList<Int> = mutableListOf(),
+ var assistantSubInIds:MutableList<Int> = mutableListOf(),
+ var assistantSubReasons:MutableList<String> = mutableListOf(),
+ var assistantSubRejectedPairs:MutableList<String> = mutableListOf(),
+ var assistantSubRejectedPlayers:MutableList<Int> = mutableListOf(),
+ var assistantNextSuggestionMinute:Int=0,
+ var assistantLastBatchSize:Int=0,
+ var homeSubWindows:Int=0,
+ var awaySubWindows:Int=0,
+ var lastHomeSubMinute:Int=-1,
+ var lastAwaySubMinute:Int=-1,
+ var keeperControlSeconds:Int=0,
+ var chainPasses:Int=0,
+ var chainZone:String="",
+ var chainNarrative:String="",
+ var ballTrace:MutableList<BallFrame> = mutableListOf()
 
 )
 @Serializable data class IndividualFocus(val playerId: Int,val focus: Focus)
@@ -327,7 +368,7 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP->0;Co
 @Serializable data class Rivalry(val a: Int,val b: Int,var intensity: Int=35)
 @Serializable data class SeasonHistory(val season: Int,val clubId: Int,val league: String,val rank: Int,val points: Int,val goals: Int,val outcome: String,val awards: List<String> = emptyList())
 @Serializable data class NextIds(var player: Int=1,var fixture: Int=1,var news: Int=1,var construction: Int=1,var negotiation:Int=1,var sponsor:Int=1)
-@Serializable data class World(var saveVersion: Int=SAVE_VERSION,val seed: Long,var rngState: Long=seed,var calendar: Calendar=Calendar(),val user: User,var leagues: MutableList<League> = mutableListOf(),var clubs: MutableMap<Int,Club> = linkedMapOf(),var players: MutableMap<Int,Player> = linkedMapOf(),var fixtures: MutableList<Fixture> = mutableListOf(),var matches: MutableMap<Int,MatchRecord> = linkedMapOf(),var live: LiveMatch?=null,var news: MutableList<NewsItem> = mutableListOf(),var events: MutableList<WorldEvent> = mutableListOf(),var rivalries: MutableList<Rivalry> = mutableListOf(),var relationships: MutableMap<Int,Int> = mutableMapOf(),var training: TrainingPlan=TrainingPlan(),var construction: MutableList<ConstructionProject> = mutableListOf(),var history: MutableList<SeasonHistory> = mutableListOf(),var nextIds: NextIds=NextIds(),var privateTopClubMode: Boolean=false,var clubRelations:MutableMap<String,Int> = mutableMapOf(),var agentRelations:MutableMap<Int,Int> = mutableMapOf(),var negotiations:MutableMap<Int,TransferOffer> = linkedMapOf(),var assistantCoach:AssistantCoachState=AssistantCoachState(),var intensiveTraining:MutableList<IntensiveTrainingProject> = mutableListOf()) {
+@Serializable data class World(var saveVersion: Int=SAVE_VERSION,val seed: Long,var rngState: Long=seed,var calendar: Calendar=Calendar(),val user: User,var leagues: MutableList<League> = mutableListOf(),var clubs: MutableMap<Int,Club> = linkedMapOf(),var players: MutableMap<Int,Player> = linkedMapOf(),var fixtures: MutableList<Fixture> = mutableListOf(),var matches: MutableMap<Int,MatchRecord> = linkedMapOf(),var live: LiveMatch?=null,var news: MutableList<NewsItem> = mutableListOf(),var events: MutableList<WorldEvent> = mutableListOf(),var rivalries: MutableList<Rivalry> = mutableListOf(),var relationships: MutableMap<Int,Int> = mutableMapOf(),var training: TrainingPlan=TrainingPlan(),var construction: MutableList<ConstructionProject> = mutableListOf(),var history: MutableList<SeasonHistory> = mutableListOf(),var nextIds: NextIds=NextIds(),var privateTopClubMode: Boolean=false,var clubRelations:MutableMap<String,Int> = mutableMapOf(),var agentRelations:MutableMap<Int,Int> = mutableMapOf(),var negotiations:MutableMap<Int,TransferOffer> = linkedMapOf(),var assistantCoach:AssistantCoachState=AssistantCoachState(),var intensiveTraining:MutableList<IntensiveTrainingProject> = mutableListOf(),var watchlist:MutableList<Int> = mutableListOf(),var scoutReports:MutableMap<Int,ScoutReport> = linkedMapOf(),var scoutAssignments:MutableMap<Int,ScoutAssignment> = linkedMapOf(),var competingBids:MutableList<CompetingBid> = mutableListOf(),var transferHistory:MutableList<TransferHistoryEntry> = mutableListOf(),var savedTactics:MutableMap<String,SavedTactic> = linkedMapOf(),var paidSeasonPrizes:MutableSet<String> = linkedSetOf(),var notifications:NotificationState=NotificationState()) {
  fun club()=clubs.getValue(user.clubId)
  fun self()=players.getValue(user.playerId)
  fun squad(clubId: Int=user.clubId)=players.values.filter{it.clubId==clubId&&!it.retired}

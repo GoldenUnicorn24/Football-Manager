@@ -67,6 +67,6 @@ class ManagerSystemsV0469Test {
   val w=WorldFactory.createWorld(46906L);w.assistantCoach.autoSeniorTraining=true;w.assistantCoach.autoYouthTraining=true;w.assistantCoach.autoSubstitutions=true;w.assistantCoach.trainingStyle=AssistantTrainingStyle.MATCH_PREP
   val p=w.squad().first{!it.youth};p.hidden.potential=maxOf(p.hidden.potential,p.ca+10);w.club().budget=50_000_000L;IntensiveTrainingSystem.start(w,p.id,Focus.VISION);EconomySystem.initialize(w)
   val copy=SaveCodec.decode(SaveCodec.encode(w))
-  assertEquals(4,copy.saveVersion);assertTrue(copy.assistantCoach.autoSeniorTraining);assertTrue(copy.assistantCoach.autoYouthTraining);assertTrue(copy.assistantCoach.autoSubstitutions);assertEquals(AssistantTrainingStyle.MATCH_PREP,copy.assistantCoach.trainingStyle);assertTrue(copy.intensiveTraining.any{it.playerId==p.id});assertTrue(copy.club().sponsorDeals.isNotEmpty())
+  assertEquals(SAVE_VERSION,copy.saveVersion);assertTrue(copy.assistantCoach.autoSeniorTraining);assertTrue(copy.assistantCoach.autoYouthTraining);assertTrue(copy.assistantCoach.autoSubstitutions);assertEquals(AssistantTrainingStyle.MATCH_PREP,copy.assistantCoach.trainingStyle);assertTrue(copy.intensiveTraining.any{it.playerId==p.id});assertTrue(copy.club().sponsorDeals.isNotEmpty())
  }
 }

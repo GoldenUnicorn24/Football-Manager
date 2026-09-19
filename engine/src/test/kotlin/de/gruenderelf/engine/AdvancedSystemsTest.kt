@@ -48,7 +48,7 @@ class AdvancedSystemsTest {
 
  @Test fun newSystemStateSurvivesSaveRoundtrip(){
   val w=WorldFactory.createWorld(46806L);w.club().dynamics.chemistry=88;w.club().academy.identity=AcademyIdentity.STREET;w.training.intensity=5
-  val copy=SaveCodec.decode(SaveCodec.encode(w));assertEquals(4,copy.saveVersion);assertEquals(88,copy.club().dynamics.chemistry);assertEquals(AcademyIdentity.STREET,copy.club().academy.identity);assertEquals(5,copy.training.intensity)
+  val copy=SaveCodec.decode(SaveCodec.encode(w));assertEquals(SAVE_VERSION,copy.saveVersion);assertEquals(88,copy.club().dynamics.chemistry);assertEquals(AcademyIdentity.STREET,copy.club().academy.identity);assertEquals(5,copy.training.intensity)
  }
 
  @Test fun aiClubExercisesSensibleLoanOptionBeforeExpiry(){

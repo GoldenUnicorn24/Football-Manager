@@ -46,6 +46,7 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
      composable("karriere"){CareerScreen(w)}
      composable("editor"){EditorScreen(w,vm)}
      composable("einstellungen"){SettingsScreen(vm)}
+     composable("v0518"){V0518Screen(w,vm){nav.navigate("spieler/$it")}}
      composable("speichern"){SavesScreen(vm,slots,state){nav.popBackStack()}}
      composable("spieler/{id}"){back->ProfileScreen(w,back.arguments?.getString("id")?.toIntOrNull()?:w.user.playerId,vm){nav.popBackStack()}}
     }

@@ -59,6 +59,10 @@ object AssistantCoachSystem {
  fun recommendedPlan(w:World,c:Club=w.club()):TrainingPlan {
   val a=w.assistantCoach;val fatigue=c.dynamics.fatigueLoad;val opponent=nextOpponent(w,c)
   val plan=when{
+   a.profile==AssistantCoachProfile.MOTIVATOR&&c.dynamics.chemistry<58->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.TEAM_BONDING,UnitType.MENTAL,UnitType.TACTICS,UnitType.RECOVERY,UnitType.TEAM_BONDING,UnitType.OFF),intensity=2)
+   a.profile==AssistantCoachProfile.ANALYST&&opponent!=null->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.VIDEO,UnitType.VIDEO,UnitType.TACTICS,UnitType.POSITIONAL,UnitType.RECOVERY,UnitType.OFF),intensity=3,opponentPrep=true)
+   a.profile==AssistantCoachProfile.TACTICIAN&&opponent!=null->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.TACTICS,UnitType.POSITIONAL,UnitType.VIDEO,UnitType.SET_PIECES,UnitType.RECOVERY,UnitType.OFF),intensity=3,opponentPrep=true)
+   a.profile==AssistantCoachProfile.DEVELOPER->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.TECHNIQUE,UnitType.POSITIONAL,UnitType.MENTAL,UnitType.TACTICS,UnitType.RECOVERY,UnitType.OFF),intensity=3)
    fatigue>=72->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.VIDEO,UnitType.OFF,UnitType.TACTICS,UnitType.RECOVERY,UnitType.SET_PIECES,UnitType.OFF),intensity=2)
    a.trainingStyle==AssistantTrainingStyle.FITNESS->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.FITNESS,UnitType.DUELS,UnitType.TECHNIQUE,UnitType.FITNESS,UnitType.RECOVERY,UnitType.OFF),intensity=4)
    a.trainingStyle==AssistantTrainingStyle.DEVELOPMENT->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.TECHNIQUE,UnitType.POSITIONAL,UnitType.FINISHING,UnitType.TACTICS,UnitType.RECOVERY,UnitType.OFF),intensity=3)
@@ -88,17 +92,32 @@ object AssistantCoachSystem {
 
 object IntensiveTrainingSystem {
  fun cost(w:World,p:Player):Long{val base=when{w.club().tier>=8->1_500L;w.club().tier>=6->6_000L;w.club().tier>=4->25_000L;w.club().tier>=2->80_000L;else->160_000L};return (base+TransferEngine.marketValue(w,p)/180L).coerceAtLeast(base)}
- fun reason(w:World,playerId:Int):String?{val p=w.players[playerId]?:return "Spieler nicht gefunden.";val price=cost(w,p);return when{w.live!=null->"Nicht während eines laufenden Spiels.";p.clubId!=w.user.clubId||p.retired->"Spieler gehört nicht zum Verein.";w.intensiveTraining.any{it.playerId==playerId}->"Für diesen Spieler läuft bereits Intensivtraining.";w.intensiveTraining.size>=3->"Maximal drei Intensivprogramme gleichzeitig.";p.hidden.potential<=p.ca->"Der Spieler hat aktuell kaum Entwicklungsspielraum.";w.club().budget<price->"Vereinskasse reicht für ${price} € nicht aus.";else->null}}
- fun start(w:World,playerId:Int,focus:Focus){val reason=reason(w,playerId);require(reason==null){reason?:"Intensivtraining nicht möglich."};val p=w.players.getValue(playerId);val price=cost(w,p);w.club().budget-=price;w.intensiveTraining.add(IntensiveTrainingProject(playerId,focus,4,4,price,0.0,w.calendar.absoluteWeek));w.news("Intensivtraining gestartet","${p.name}: vier Wochen ${focus.label}. Kosten ${price} €. Mehr Entwicklung, aber höhere Belastung.","normal")}
- fun applyWeek(w:World,c:Club,p:Player,report:TrainingReport,rng:SeededRandom){val project=w.intensiveTraining.firstOrNull{it.playerId==p.id}?:return;if(p.injuryWeeks>0)return
-  val age=w.calendar.season-p.birthYear;val youthFactor=when{age<=19->1.18;age<=23->1.08;age>=31->.72;else->1.0};val staff=.65+c.dynamics.staffQuality/180.0;val facility=1+c.stadium.training/220.0+c.stadium.gym/400.0;project.progress+=.32*youthFactor*staff*facility
+ fun potentialCost(w:World,p:Player):Long=maxOf(cost(w,p)*3/2,cost(w,p)+1_000L)
+ private fun commonReason(w:World,playerId:Int,price:Long):String?{val p=w.players[playerId]?:return "Spieler nicht gefunden.";return when{w.live!=null->"Nicht während eines laufenden Spiels.";p.clubId!=w.user.clubId||p.retired->"Spieler gehört nicht zum Verein.";w.intensiveTraining.any{it.playerId==playerId}->"Für diesen Spieler läuft bereits Intensivtraining.";w.intensiveTraining.size>=3->"Maximal drei Intensivprogramme gleichzeitig.";w.club().budget<price->"Vereinskasse reicht für ${price} € nicht aus.";else->null}}
+ fun reason(w:World,playerId:Int):String?{val p=w.players[playerId]?:return "Spieler nicht gefunden.";return commonReason(w,playerId,cost(w,p))?:if(p.hidden.potential<=p.ca)"Natürliches Potenzial erreicht. Nutze Potenzialtraining, um die Entwicklungsgrenze gezielt anzuheben." else null}
+ fun potentialReason(w:World,playerId:Int):String?{val p=w.players[playerId]?:return "Spieler nicht gefunden.";return commonReason(w,playerId,potentialCost(w,p))?:if(p.hidden.potential>=99)"Das reguläre Maximalpotenzial 99 ist bereits erreicht." else null}
+ fun start(w:World,playerId:Int,focus:Focus){val r=reason(w,playerId);require(r==null){r?:"Intensivtraining nicht möglich."};val p=w.players.getValue(playerId);val price=cost(w,p);w.club().budget-=price;w.intensiveTraining.add(IntensiveTrainingProject(playerId,focus,4,4,price,0.0,w.calendar.absoluteWeek,false));w.news("Intensivtraining gestartet","${p.name}: vier Wochen ${focus.label}. Kosten ${price} €. Mehr Entwicklung, aber höhere Belastung.","normal")}
+ fun startPotential(w:World,playerId:Int,focus:Focus){val r=potentialReason(w,playerId);require(r==null){r?:"Potenzialtraining nicht möglich."};val p=w.players.getValue(playerId);val price=potentialCost(w,p);w.club().budget-=price;w.intensiveTraining.add(IntensiveTrainingProject(playerId,focus,4,4,price,0.0,w.calendar.absoluteWeek,true));w.news("Potenzialtraining gestartet","${p.name}: vier Wochen Potenzialförderung ${focus.label}. Kosten ${price} €. Entwicklungsgrenze und aktuelle Stärke werden gezielt angehoben.","normal")}
+ fun applyWeek(w:World,c:Club,p:Player,report:TrainingReport,rng:SeededRandom){
+  val project=w.intensiveTraining.firstOrNull{it.playerId==p.id}?:return;if(p.injuryWeeks>0)return
+  val age=w.calendar.season-p.birthYear;val youth= p.youth && age<20;val youthFactor=when{age<=19->1.18;age<=23->1.08;age>=31->.72;else->1.0};val staff=.65+c.dynamics.staffQuality/180.0;val facility=1+c.stadium.training/220.0+c.stadium.gym/400.0
+  project.progress+=.32*youthFactor*staff*facility*(if(project.raisesPotential&&youth)1.65 else 1.0)
   p.fitness=(p.fitness-3.0).coerceAtLeast(20.0);p.sharpness=(p.sharpness+2).coerceAtMost(100)
-  while(project.progress>=1.0){project.progress-=1.0;if(p.attributes.improve(project.focus,p.hidden.potential)&&c.id==w.user.clubId)report.gains.add("${p.name}: Intensivtraining ${project.focus.label} +1")}
+  while(project.progress>=1.0){project.progress-=1.0;if(p.attributes.improve(project.focus,p.hidden.potential)&&c.id==w.user.clubId)report.gains.add("${p.name}: ${if(project.raisesPotential)"Potenzialtraining" else "Intensivtraining"} ${project.focus.label} +1")}
   val risk=.012*(1+p.hidden.injuryProneness/80.0)*(1-c.stadium.medicine*.005)*(if(p.youthProfile.growthSpurtWeeks>0)1.8 else 1.0);if(rng.chance(risk)){p.injuryWeeks=maxOf(p.injuryWeeks,2);p.injury="Überlastung im Intensivtraining";if(c.id==w.user.clubId)report.injuries.add("${p.name}: Überlastung durch Intensivtraining")}
-  project.weeksLeft--;if(project.weeksLeft<=0){w.intensiveTraining.remove(project);p.hidden.development=(p.hidden.development+1).coerceAtMost(100);if(c.id==w.user.clubId)w.news("Intensivtraining abgeschlossen","${p.name} beendet das vierwöchige Programm ${project.focus.label}. Entwicklung wurde gezielt beschleunigt.","good")}
+  project.weeksLeft--;if(project.weeksLeft>0)return
+  w.intensiveTraining.remove(project);p.hidden.development=(p.hidden.development+1).coerceAtMost(100)
+  if(project.raisesPotential){
+   val beforePotential=p.hidden.potential;val beforeCa=p.ca
+   val academyBonus=if(youth&&c.stadium.youth>=70)1 else 0;val professionalBonus=if(youth&&p.hidden.development>=80&&p.hidden.professionalism>=70)1 else 0
+   val potentialGain=(if(youth)3 else 1)+academyBonus+professionalBonus;p.hidden.potential=(p.hidden.potential+potentialGain).coerceAtMost(99)
+   val targetGain=if(youth)2+academyBonus+professionalBonus else 1
+   repeat(targetGain){if(p.ca<p.hidden.potential){val candidates=Focus.entries.sortedBy{f->when(f){Focus.FINISHING->p.attributes.finishing;Focus.PACE->p.attributes.pace;Focus.TECHNIQUE->p.attributes.technique;Focus.TACKLING->p.attributes.tackling;Focus.KEEPING->p.attributes.keeping;Focus.VISION->p.attributes.vision}};p.attributes.improve(candidates.first(),p.hidden.potential)}}
+   p.attributes.improve(project.focus,p.hidden.potential)
+   if(c.id==w.user.clubId)w.news("Potenzialtraining abgeschlossen","${p.name} beendet die vierwöchige ${if(youth)"Jugend-" else ""}Potenzialförderung. Entwicklungsgrenze +${p.hidden.potential-beforePotential} auf ${p.hidden.potential}; aktuelle Gesamtstärke +${(p.ca-beforeCa).coerceAtLeast(0)} auf ${p.ca}.","good")
+  }else if(c.id==w.user.clubId)w.news("Intensivtraining abgeschlossen","${p.name} beendet das vierwöchige Programm ${project.focus.label}. Entwicklung wurde gezielt beschleunigt.","good")
  }
 }
-
 object CustomYouthSystem {
  fun remainingSlots(w:World):Int{val a=w.club().academy;if(a.customIntakeSeason!=w.calendar.season)return 2;return (2-a.customIntakeUsed).coerceAtLeast(0)}
  private fun compatible(identity:AcademyIdentity,role:PlayerRole)=when(identity){AcademyIdentity.POSSESSION->role in listOf(PlayerRole.PLAYMAKER,PlayerRole.DEEP_PLAYMAKER,PlayerRole.BALL_PLAYING_CB,PlayerRole.INVERTED_FULLBACK);AcademyIdentity.ATHLETIC->role in listOf(PlayerRole.PRESSING_FORWARD,PlayerRole.OVERLAPPING_FULLBACK,PlayerRole.BOX_TO_BOX);AcademyIdentity.STREET->role in listOf(PlayerRole.INSIDE_FORWARD,PlayerRole.PLAYMAKER,PlayerRole.POACHER);AcademyIdentity.DEFENSIVE->role in listOf(PlayerRole.STOPPER,PlayerRole.ANCHOR,PlayerRole.INVERTED_FULLBACK);AcademyIdentity.PRESSING->role in listOf(PlayerRole.PRESSING_FORWARD,PlayerRole.BOX_TO_BOX,PlayerRole.OVERLAPPING_FULLBACK);AcademyIdentity.BALANCED->true}

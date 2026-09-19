@@ -110,6 +110,7 @@ object SeasonEngine {
   w.calendar.absoluteWeek++;EventsEngine.apply(w)
   val own=if(live.homeId==w.user.clubId)live.home.goals else live.away.goals;val other=if(live.homeId==w.user.clubId)live.away.goals else live.home.goals
   w.news("Spieltag ${w.calendar.matchday}: $own:$other","${live.attendance} Zuschauer. Wochenzuflüsse: ${w.club().lastIncome} €. Kosten: ${w.club().lastCosts} €.",if(own>other)"good" else if(own<other)"bad" else "normal")
+  w.squad().filter{it.temporarySeniorCallUp}.map{it.id}.forEach{YouthCompetitionSystem.returnToYouth(w,it)}
   w.live=null;w.calendar.matchday++
   val ownLeague=w.leagues.first{w.user.clubId in it.clubIds};val ownRounds=(ownLeague.clubIds.size-1)*2
   if(w.calendar.matchday>ownRounds){
@@ -140,6 +141,10 @@ object SeasonEngine {
   val top=w.players.values.filter{it.clubId in w.leagues.first{l->l.tier==tier}.clubIds}.sortedWith(compareByDescending<Player>{it.stats.goals}.thenBy{it.id}).firstOrNull()
   if(top?.id==w.user.playerId&&w.self().stats.goals>0)awards.add("Torjäger: ${w.self().stats.goals} Tore")
   w.history.add(SeasonHistory(w.calendar.season,w.user.clubId,WorldFactory.leagueName(w,tier),rank,row.points,row.goalsFor,outcome,awards))
+  for((leagueTier,leagueRows) in tables){leagueRows.firstOrNull()?.let{CompetitionPrizeSystem.award(w,"${w.calendar.season}:league:$leagueTier",it.clubId,CompetitionPrizeSystem.leagueChampionPrize(w,leagueTier))}}
+  val cupWinner=CompetitionPrizeSystem.winnerId(w,CompetitionType.NATIONAL_CUP);if(cupWinner!=0)CompetitionPrizeSystem.award(w,"${w.calendar.season}:cup",cupWinner,if(w.privateTopClubMode)6_000_000L else 500_000L)
+  val clWinner=CompetitionPrizeSystem.winnerId(w,CompetitionType.CHAMPIONS_LEAGUE);if(clWinner!=0)CompetitionPrizeSystem.award(w,"${w.calendar.season}:cl",clWinner,25_000_000L)
+  val elWinner=CompetitionPrizeSystem.winnerId(w,CompetitionType.EUROPA_LEAGUE);if(elWinner!=0)CompetitionPrizeSystem.award(w,"${w.calendar.season}:el",elWinner,12_000_000L)
   // Im privaten Topclub-Spielstand bleibt die 12er-Eliteliga bewusst stabil. Dadurch werden
   // Real-Clubs nicht nach einer Saison in die Fantasiepyramide verschoben.
   if(!w.privateTopClubMode){
