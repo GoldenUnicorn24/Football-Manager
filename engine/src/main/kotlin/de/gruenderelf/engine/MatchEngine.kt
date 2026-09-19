@@ -998,3 +998,321 @@ object MatchEngine {
      val g=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home));val gain=if(prime)7.0+rng.nextDouble()*7.5 else 3.5+rng.nextDouble()*4.0;setDistanceFromGoal(m,home,(g.distanceMeters-gain).coerceAtLeast(if(prime)3.8 else 4.5),(m.ballX+(0.5f-m.ballX)*(if(prime).62f else .35f)).coerceIn(.12f,.88f));log(m,if(prime)"Du ziehst im Messi-Stil zwischen den Gegenspielern durch." else "Du gehst am Gegenspieler vorbei.")
      val type=when{ShotModel.geometry(ShotContext(m.ballX,m.ballY,home)).distanceMeters<8.5->ShotType.CLOSE_RANGE;else->ShotType.BOX_SHOT};resolveShot(w,m,home,p.id,rng,m.decisionAssistId,type)
     }else{perf.turnovers++;log(m,"Beim Dribbling ist der Ball weg.");transferPossession(w,m,!home,PossessionChangeReason.TACKLE,rng,true)}
+   }
+   Decision.PASS,Decision.CROSS->{
+    val perf=ensurePerformance(w,m,p.id);perf.passesAttempted++;val skill=if(decision==Decision.PASS)p.attributes.passing else (p.attributes.passing+p.attributes.technique)/2
+    if(mates.isNotEmpty()&&rng.chance((.45+skill*.004+p.fitness*.001+(if(p.messiMentored).06 else 0.0)).coerceAtMost(if(p.messiMentored).97 else .9))){
+     perf.passesCompleted++;perf.chancesCreated++;val target=targetPlayerFor(w,m,home);val id=if(target in mates&&rng.chance(if(decision==Decision.CROSS).76 else .62))target else mates.maxBy{w.players.getValue(it).attributes.finishing};m.passEvents.add(PassEvent(m.minute,p.clubId,p.id,id,true,m.ballX,m.ballY,(m.ballX+(rng.nextDouble()-.5)*.12).toFloat().coerceIn(.04f,.96f),(m.ballY+(if(home)-1 else 1)*.13).toFloat().coerceIn(.03f,.97f)))
+     if(decision==Decision.CROSS){val d=6.5+rng.nextDouble()*8.0;val type=if(rng.chance(.72))ShotType.HEADER else ShotType.VOLLEY;setDistanceFromGoal(m,home,d,(.32+rng.nextDouble()*.36).toFloat());log(m,"Deine Flanke sucht ${w.players.getValue(id).lastName} im Strafraum.");if(!maybeOffside(w,m,home,id,type,rng))resolveShot(w,m,home,id,rng,p.id,type)}
+     else{val d=6.0+rng.nextDouble()*10.0;val type=if(d<10.5)ShotType.CUTBACK else ShotType.BOX_SHOT;setDistanceFromGoal(m,home,d,(.37+rng.nextDouble()*.26).toFloat());log(m,"Du legst quer auf ${w.players.getValue(id).lastName}.");if(!maybeOffside(w,m,home,id,type,rng))resolveShot(w,m,home,id,rng,p.id,type)}
+    }else{perf.turnovers++;m.passEvents.add(PassEvent(m.minute,p.clubId,p.id,0,false,m.ballX,m.ballY,m.ballX,m.ballY));log(m,"Die Hereingabe wird abgefangen.");transferPossession(w,m,!home,PossessionChangeReason.INTERCEPTION,rng,true)}
+   }
+   Decision.HOLD->{p.fitness=(p.fitness+.18).coerceAtMost(100.0);stats(m,home).possessionTicks+=2;m.chainStep=0;m.chainTicks=0;setBallPhase(m,LivePhase.POSSESSION,home,p.id,"Ball gesichert");moveBallToward(w,m,home,LivePhase.POSSESSION,rng);log(m,"Du sicherst den Ball. Dein Team kann nachrücken.")}
+   Decision.FOUL->{
+    stats(m,home).fouls++;addStoppageTime(m,7);val type=queueSetPiece(w,m,!home,p.id,rng);log(m,"Du stoppst den Gegenspieler. ${type.label} für den Gegner.")
+    if(rng.chance(.65))card(w,m,p.id,false) else showQueuedSetPiece(w,m,rng)
+   }
+  }
+  m.pendingDecision=false;m.decisionAssistId=0;m.decisionCooldown=m.minute+8;m.rngState=rng.state
+  if(!m.incidentPause&&m.pendingSetPieceClubId==0&&m.pendingCornerClubId==0&&m.pendingPossessionClubId==0&&m.pendingVarShotIndex<0&&periodComplete(m))endCurrentPeriod(w,m,rng)
+ }
+
+ fun setConserveEnergy(w: World,m: LiveMatch,clubId: Int=w.user.clubId,enabled: Boolean){
+  require(!m.finished){"Das Spiel ist beendet."};val home=clubId==m.homeId;require(home||clubId==m.awayId)
+  if(home){m.homeConserveEnergy=enabled;if(enabled){m.homeAllOutAttack=false;m.homeControlGame=false}}else{m.awayConserveEnergy=enabled;if(enabled){m.awayAllOutAttack=false;m.awayControlGame=false}}
+  MatchAnalysisSystem.recordTacticChange(w,m,clubId,if(enabled)"Kräfte schonen" else "Kräfte schonen beendet");log(m,"${w.clubs.getValue(clubId).shortName}: ${if(enabled)"Kräfte schonen – tiefer Block und Konter" else "Kräfte schonen beendet"}.")
+ }
+
+ fun setAllOutAttack(w: World,m: LiveMatch,clubId: Int=w.user.clubId,enabled: Boolean){
+  require(!m.finished){"Das Spiel ist beendet."};val home=clubId==m.homeId;require(home||clubId==m.awayId)
+  if(home){m.homeAllOutAttack=enabled;if(enabled){m.homeConserveEnergy=false;m.homeControlGame=false}}else{m.awayAllOutAttack=enabled;if(enabled){m.awayConserveEnergy=false;m.awayControlGame=false}}
+  MatchAnalysisSystem.recordTacticChange(w,m,clubId,if(enabled)"Alles nach vorn" else "Alles nach vorn beendet");log(m,"${w.clubs.getValue(clubId).shortName}: ${if(enabled)"Alles nach vorn – volles Risiko" else "Alles nach vorn beendet"}.")
+ }
+
+ fun setControlGame(w: World,m: LiveMatch,clubId: Int=w.user.clubId,enabled: Boolean){
+  require(!m.finished){"Das Spiel ist beendet."};val home=clubId==m.homeId;require(home||clubId==m.awayId)
+  if(home){m.homeControlGame=enabled;if(enabled){m.homeConserveEnergy=false;m.homeAllOutAttack=false}}else{m.awayControlGame=enabled;if(enabled){m.awayConserveEnergy=false;m.awayAllOutAttack=false}}
+  MatchAnalysisSystem.recordTacticChange(w,m,clubId,if(enabled)"Spiel kontrollieren" else "Spielkontrolle beendet");log(m,"${w.clubs.getValue(clubId).shortName}: ${if(enabled)"Spiel kontrollieren – Ball und Rhythmus sichern" else "Spielkontrolle beendet"}.")
+ }
+
+ fun changeFormation(w: World,m: LiveMatch,clubId: Int=w.user.clubId,newFormation: String){
+  require(!m.finished){"Das Spiel ist beendet."};require(newFormation in Formations.all.keys){"Unbekannte Formation."}
+  val home=clubId==m.homeId;require(home||clubId==m.awayId){"Verein spielt nicht in dieser Partie."}
+  val current=xi(m,home);val reordered=reorderLineup(w,current,newFormation)
+  if(home){m.homeXi=reordered;m.homeFormation=newFormation}else{m.awayXi=reordered;m.awayFormation=newFormation}
+  w.clubs.getValue(clubId).tactics.formation=newFormation;MatchAnalysisSystem.recordTacticChange(w,m,clubId,"Formation $newFormation");log(m,"Taktik: ${w.clubs.getValue(clubId).shortName} stellt auf $newFormation um.")
+ }
+
+ private fun reorderLineup(w: World,current: List<Int>,newFormation: String): MutableList<Int>{
+  val players=current.filter{it!=0}.distinct().toMutableList();val slots=Formations.positions(newFormation);val result=MutableList(slots.size){0};val open=slots.indices.toMutableList()
+  while(players.isNotEmpty()&&open.isNotEmpty()){
+   var bestPlayer=players.first();var bestSlot=open.first();var bestScore=Int.MIN_VALUE
+   for(id in players){val p=w.players[id]?:continue;for(index in open){val target=slots[index];val keeperBias=when{target==Position.TW&&p.position==Position.TW->28;target==Position.TW->-45;p.position==Position.TW->-35;else->0};val score=p.ratingAt(target)+keeperBias;if(score>bestScore){bestScore=score;bestPlayer=id;bestSlot=index}}}
+   result[bestSlot]=bestPlayer;players.remove(bestPlayer);open.remove(bestSlot)
+  }
+  return result
+ }
+
+ fun substitute(w: World,m: LiveMatch,out: Int,incoming: Int,clubId: Int=w.user.clubId){
+  require(!m.finished&&!m.pendingDecision){"Wechsel gerade nicht möglich."};val home=clubId==m.homeId;require(home||clubId==m.awayId)
+  val lineup=xi(m,home);val bench=if(home)m.homeBench else m.awayBench
+  require((if(home)m.homeSubs else m.awaySubs)<5){"Fünf Wechsel sind bereits erfolgt."};require(out!=0&&out in lineup&&incoming in bench&&w.players.getValue(incoming).available){"Dieser Wechsel ist nicht möglich."}
+  lineup[lineup.indexOf(out)]=incoming;bench.remove(incoming);if(home)m.homeSubs++ else m.awaySubs++;addStoppageTime(m,20)
+  ensurePerformance(w,m,incoming);if(incoming !in m.participation)m.participation.add(incoming)
+  log(m,"Wechsel: ${w.players.getValue(incoming).name} für ${w.players.getValue(out).name}.")
+ }
+
+ fun substitutionSuggestions(w: World,m: LiveMatch,clubId: Int=w.user.clubId): List<SubSuggestion>{
+  val home=clubId==m.homeId;require(home||clubId==m.awayId)
+  val lineup=xi(m,home);val bench=(if(home)m.homeBench else m.awayBench).filter{w.players[it]?.available==true};if(bench.isEmpty())return emptyList()
+  val slots=Formations.positions(formation(m,home));val ownGoals=if(home)m.home.goals else m.away.goals;val oppGoals=if(home)m.away.goals else m.home.goals
+  val behind=ownGoals<oppGoals;val ahead=ownGoals>oppGoals;val result=mutableListOf<SubSuggestion>()
+  lineup.forEachIndexed{index,outId->if(outId!=0){
+   val out=w.players[outId]?:return@forEachIndexed;val target=slots.getOrElse(index){out.position};val currentRating=calculatePlayerRating(w,m,outId)
+   val yellow=m.yellows[outId]?:0;val minutes=m.minutesPlayed[outId]?:m.minute;val perf=m.playerPerformance[outId]
+   bench.forEach{inId->
+    val incoming=w.players.getValue(inId);val outRating=out.ratingAt(target);val inRating=incoming.ratingAt(target)
+    val injury=if(outId in m.injured)220.0 else 0.0
+    val fatigue=((78-out.fitness).coerceAtLeast(0.0)*1.25)+(if(out.fitness<62)16.0 else 0.0)
+    val performance=((6.45-currentRating).coerceAtLeast(0.0)*15.0)
+    val cardRisk=yellow*(if(target in listOf(Position.IV,Position.LV,Position.RV,Position.DM))14.0 else 9.0)
+    val load=when{minutes>=82->8.0;minutes>=70->4.0;else->0.0}
+    val hotProtection=(if(currentRating>=7.7)12.0 else 0.0)+(perf?.goals?:0)*9.0+(perf?.assists?:0)*5.5
+    val ratingGain=(inRating-outRating)*1.65
+    val readiness=(incoming.fitness-out.fitness)*.32+(incoming.form-out.form)*3.4+(incoming.sharpness-out.sharpness)*.055+(incoming.morale-out.morale)*.025
+    val positional=(incoming.fit(target)-.80)*34.0
+    val attackDelta=((incoming.attributes.finishing+incoming.attributes.passing+incoming.attributes.pace)-(out.attributes.finishing+out.attributes.passing+out.attributes.pace))/12.0
+    val defendDelta=((incoming.attributes.tackling+incoming.attributes.stamina+incoming.attributes.strength)-(out.attributes.tackling+out.attributes.stamina+out.attributes.strength))/13.0
+    val tactical=when{behind&&m.minute>=58->attackDelta;ahead&&m.minute>=68->defendDelta;else->(attackDelta+defendDelta)*.22}
+    val score=injury+fatigue+performance+cardRisk+load-hotProtection+ratingGain+readiness+positional+tactical
+    val factors=mutableListOf<String>()
+    if(outId in m.injured)factors+="${out.lastName} verletzt"
+    if(out.fitness<72)factors+="Fitness ${out.fitness.roundToInt()} %"
+    if(currentRating<6.3)factors+="Rating ${(currentRating*10).roundToInt()/10.0}"
+    if(yellow>0)factors+="${if(yellow>=2)"Platzverweis" else "Gelb-Risiko"}"
+    if(behind&&m.minute>=58&&attackDelta>1.5)factors+="mehr Offensivwirkung"
+    if(ahead&&m.minute>=68&&defendDelta>1.5)factors+="mehr Stabilität"
+    if(factors.isEmpty())factors+="Belastung/Matchup"
+    val reason=factors.take(3).joinToString(" · ")+" · ${incoming.lastName}: $inRating/99 ${target.name}, ${incoming.fitness.roundToInt()} % fit, Form ${(incoming.form*10).roundToInt()/10.0}"
+    result.add(SubSuggestion(outId,inId,target,score,reason))
+   }
+  }}
+  val sorted=result.sortedByDescending{it.score};val usedIn=mutableSetOf<Int>();val usedOut=mutableSetOf<Int>();val diverse=sorted.filter{usedIn.add(it.inId)&&usedOut.add(it.outId)}.take(5).toMutableList()
+  if(diverse.size<5){val existing=diverse.map{it.outId to it.inId}.toMutableSet();for(sug in sorted){if(diverse.size>=5)break;if(existing.add(sug.outId to sug.inId))diverse.add(sug)}}
+  return diverse.take(5)
+ }
+
+ fun resumeIncident(w: World,m: LiveMatch){
+  require(m.incidentPause){"Das Spiel ist nicht unterbrochen."}
+  if(m.incidentReason==MatchPauseReason.INJURY&&m.incidentClubId==w.user.clubId){
+   val home=w.user.clubId==m.homeId;val lineup=xi(m,home);val bench=if(home)m.homeBench else m.awayBench;val subs=if(home)m.homeSubs else m.awaySubs;val canReplace=subs<5&&bench.any{w.players[it]?.available==true}
+   require(!canReplace||m.incidentPlayerId !in lineup){"Verletzten Spieler zuerst wechseln."}
+  }
+  val reason=m.incidentReason;m.incidentPause=false;m.incidentReason=MatchPauseReason.NONE;m.incidentPlayerId=0;m.incidentClubId=0
+  if(m.pendingSetPieceClubId==0&&periodComplete(m)){val rng=SeededRandom(m.rngState);endCurrentPeriod(w,m,rng)}
+  else log(m,if(reason==MatchPauseReason.RED_CARD)"Nach der taktischen Neuordnung läuft das Spiel weiter." else "Der Schiedsrichter gibt das Spiel wieder frei.")
+ }
+
+ private fun pauseForIncident(m: LiveMatch,reason: MatchPauseReason,playerId: Int,clubId: Int){m.incidentPause=true;m.incidentReason=reason;m.incidentPlayerId=playerId;m.incidentClubId=clubId}
+
+ private fun clearAssistantSubProposal(m:LiveMatch){m.assistantSubPending=false;m.assistantSubOutId=0;m.assistantSubInId=0;m.assistantSubReason="";m.assistantSubSuggestedMinute=-1}
+
+ fun acceptAssistantSubstitution(w:World,m:LiveMatch){
+  require(m.assistantSubPending){"Es liegt kein Co-Trainer-Wechselvorschlag vor."}
+  val out=m.assistantSubOutId;val incoming=m.assistantSubInId;val reason=m.assistantSubReason
+  clearAssistantSubProposal(m)
+  substitute(w,m,out,incoming,w.user.clubId)
+  w.assistantCoach.lastSubReason="${m.minute}. Minute: angenommen · $reason"
+ }
+
+ fun rejectAssistantSubstitution(w:World,m:LiveMatch){
+  require(m.assistantSubPending){"Es liegt kein Co-Trainer-Wechselvorschlag vor."}
+  val out=m.assistantSubOutId;val incoming=m.assistantSubInId;val reason=m.assistantSubReason;val forced=out in m.injured
+  m.assistantSubRejectedOutId=out;m.assistantSubRejectedInId=incoming;m.assistantSubRejectedUntilMinute=m.minute+if(forced)1 else 8
+  clearAssistantSubProposal(m)
+  w.assistantCoach.lastSubReason="${m.minute}. Minute: abgelehnt · $reason"
+  if(forced&&out in xi(m,w.user.clubId==m.homeId))pauseForIncident(m,MatchPauseReason.INJURY,out,w.user.clubId)
+ }
+
+ private fun aiSub(w: World,m: LiveMatch,home: Boolean){
+  if((if(home)m.homeSubs else m.awaySubs)>=5||m.pendingDecision||m.assistantSubPending)return
+  val club=clubId(m,home);val suggestions=substitutionSuggestions(w,m,club)
+  val userAssistant=club==w.user.clubId&&w.assistantCoach.autoSubstitutions
+  val suggestion=suggestions.firstOrNull{candidate->
+   !userAssistant||m.minute>=m.assistantSubRejectedUntilMinute||candidate.outId!=m.assistantSubRejectedOutId||candidate.inId!=m.assistantSubRejectedInId
+  }?:return
+  val forced=suggestion.outId in m.injured
+  val current=w.players[suggestion.outId]?:return
+  val yellow=m.yellows[suggestion.outId]?:0
+  val aggression=if(userAssistant)w.assistantCoach.substitutionAggression.coerceIn(1,5) else 3
+  val urgent=forced||current.fitness<(64+(aggression-3)*2)||yellow>0||calculatePlayerRating(w,m,suggestion.outId)<(6.0+(aggression-3)*.08)
+  val earliest=(62-(aggression-3)*4).coerceIn(52,70)
+  val normalMinute=(74-(aggression-3)*3).coerceIn(64,80)
+  val threshold=17.0-(aggression-3)*3.5
+  if(!urgent&&m.minute<earliest)return
+  if(!urgent&&m.minute<normalMinute&&suggestion.score<threshold)return
+  if(userAssistant){
+   m.assistantSubPending=true;m.assistantSubOutId=suggestion.outId;m.assistantSubInId=suggestion.inId;m.assistantSubReason=suggestion.reason;m.assistantSubSuggestedMinute=m.minute
+   w.assistantCoach.lastSubReason="${m.minute}. Minute: Vorschlag · ${suggestion.reason}"
+   log(m,"Co-Trainer empfiehlt: ${w.players.getValue(suggestion.outId).lastName} raus, ${w.players.getValue(suggestion.inId).lastName} rein.","decision")
+   return
+  }
+  substitute(w,m,suggestion.outId,suggestion.inId,club)
+ }
+
+ private fun resolveShot(w: World,m: LiveMatch,home: Boolean,id: Int,rng: SeededRandom,assist: Int=0,typeHint: ShotType?=null,allowRebound: Boolean=true){
+  if(id==0)return
+  val s=stats(m,home);val p=w.players.getValue(id)
+  val keeperId=xi(m,!home).firstOrNull{it!=0&&it !in m.injured&&w.players[it]?.position==Position.TW}?:xi(m,!home).firstOrNull{it!=0&&it !in m.injured}?:0
+  val keeper=w.players[keeperId]
+  val baseGeometry=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home))
+  val type=typeHint?:when{baseGeometry.distanceMeters>=23.5->ShotType.LONG_RANGE;baseGeometry.distanceMeters<=8.5->ShotType.CLOSE_RANGE;else->ShotType.BOX_SHOT}
+  val context=buildShotContext(w,m,home,p,type,rng,assist);val geometry=ShotModel.geometry(context)
+  val shotXg=ShotModel.xg(context);val goalProbability=ShotModel.goalProbability(shotXg,p,keeper,context)
+  val blockProbability=ShotModel.blockProbability(context);val onTargetProbability=ShotModel.onTargetProbability(goalProbability,p,context)
+  val savedOnTarget=(onTargetProbability-goalProbability).coerceAtLeast(0.0)
+  val woodworkProbability=(.012+shotXg*.060+(if(type in setOf(ShotType.CLOSE_RANGE,ShotType.ONE_ON_ONE)).006 else 0.0)).coerceIn(.010,.052)
+  val r=rng.nextDouble()
+  var outcome=when{
+   r<goalProbability->ShotOutcome.GOAL
+   r<goalProbability+woodworkProbability->ShotOutcome.WOODWORK
+   r<goalProbability+woodworkProbability+blockProbability->ShotOutcome.BLOCKED
+   r<goalProbability+woodworkProbability+blockProbability+savedOnTarget->ShotOutcome.SAVED
+   else->ShotOutcome.OFF_TARGET
+  }
+
+  if(outcome==ShotOutcome.SAVED){
+   val speed=ShotModel.shotSpeed(p,context)
+   val keeperQuality=keeper?.let{(it.attributes.keeping*.72+it.hidden.consistency*.10+it.sharpness*.08+it.fitness*.05+it.form*5.0*.05).coerceIn(10.0,99.0)}?:20.0
+   val secure=(.30+(keeperQuality-45)*.0045+(geometry.distanceMeters-10).coerceIn(0.0,25.0)*.006-speed*.16).coerceIn(.22,.68)
+   val rebound=((.18+speed*.16-(keeperQuality-45)*.0025)+(if(type==ShotType.CLOSE_RANGE||type==ShotType.REBOUND).06 else 0.0)).coerceIn(.08,.34)
+   val corner=(.15+speed*.09+(if(kotlin.math.abs(geometry.lateralMeters)>10).04 else 0.0)).coerceIn(.12,.29)
+   val kr=rng.nextDouble()
+   outcome=when{kr<secure->ShotOutcome.SAVED;kr<secure+corner->ShotOutcome.CORNER;kr<secure+corner+rebound&&allowRebound->ShotOutcome.REBOUND;else->ShotOutcome.DEFLECTED}
+  }
+
+  val perf=ensurePerformance(w,m,id);perf.shots++;perf.xg+=shotXg;s.shots++;s.xg+=shotXg
+  val target=shotTarget(outcome,rng,type==ShotType.PENALTY)
+  m.lastShotType=type;m.lastShotX=context.x;m.lastShotY=context.y;m.lastShotXg=shotXg;m.lastShotGoalProbability=goalProbability;m.lastShotTargetX=target.first;m.lastShotTargetY=target.second;m.lastShotTargetLabel=target.third;m.lastShotOutcome=outcome
+  val validAssist=assist.takeIf{it!=0&&it!=id&&w.players[it]?.clubId==clubId(m,home)}?:0
+  val shotEvent=ShotEvent(m.minute,clubId(m,home),id,validAssist,type,context.x,context.y,geometry.distanceMeters,geometry.angleRadians,context.pressure,context.defendersNearby,context.passQuality,shotXg,goalProbability,outcome,target.first,target.second,target.third,clockLabel(m))
+  m.shotEvents.add(shotEvent)
+  log(m,shotText(p,type,geometry.distanceMeters))
+
+  when(outcome){
+   ShotOutcome.GOAL->{
+    addStoppageTime(m,25)
+    val reviewChance=when(type){ShotType.ONE_ON_ONE->.38;ShotType.CUTBACK->.32;ShotType.HEADER,ShotType.VOLLEY->.28;ShotType.PENALTY->.18;ShotType.FREE_KICK->.12;else->.24}
+    if(rng.chance(reviewChance)){
+     s.varChecks++;m.pendingVarShotIndex=m.shotEvents.lastIndex;m.pendingVarKeeperId=keeperId;m.varReviewStage=0;m.varReviewReason="";m.varReviewResult="";m.varWillOverturn=false
+     setBallPhase(m,LivePhase.GOAL,home,id,"TOR · ${target.third} · ${type.label}")
+     log(m,"Treffer von ${p.name}: ${target.third}. Der VAR kann die Szene noch prüfen.","goal")
+    }else confirmGoal(w,m,home,id,validAssist,keeperId,type)
+   }
+   ShotOutcome.WOODWORK->{
+    val frame=if(rng.chance(.5))"Pfosten" else "Latte"
+    s.shotsOffTarget++;perf.shotsOffTarget++;setBallPhase(m,LivePhase.WOODWORK,home,id,"${target.third} · ${type.label}")
+    log(m,"Aluminium! ${p.lastName} schießt ${target.third}.")
+    if(rng.chance(.38)){m.chainStep=2;m.chainTicks=0;m.ballY=(if(home).08f else .92f);log(m,"Der Abpraller bleibt gefährlich.")}
+    else queueRestart(m,clubId(m,!home),PossessionChangeReason.GOAL_KICK)
+   }
+   ShotOutcome.BLOCKED->{
+    s.blockedShots++;val defenders=xi(m,!home).filter{it!=0&&it !in m.injured};if(defenders.isNotEmpty())ensurePerformance(w,m,rng.pick(defenders)).defensiveActions++
+    if(rng.chance(.42)){queueCorner(w,m,home,id,rng);setBallPhase(m,LivePhase.SHOT_ON_TARGET,home,id,"Geblockt – Ecke");log(m,"Der Abschluss wird geblockt. Ecke.")}
+    else{setBallPhase(m,LivePhase.SHOT_ON_TARGET,home,id,"Schuss geblockt");log(m,"Der Abschluss wird geblockt und geklärt.");queueRestart(m,clubId(m,!home),PossessionChangeReason.CLEARANCE)}
+   }
+   ShotOutcome.OFF_TARGET->{
+    s.shotsOffTarget++;perf.shotsOffTarget++;setBallPhase(m,LivePhase.SHOT_OFF_TARGET,home,id,"${target.third} · ${type.label}");log(m,"${p.name} schießt ${target.third}.");queueRestart(m,clubId(m,!home),PossessionChangeReason.GOAL_KICK)
+   }
+   ShotOutcome.SAVED->{
+    s.shotsOnTarget++;perf.shotsOnTarget++;if(keeperId!=0)ensurePerformance(w,m,keeperId).defensiveActions++
+    setBallPhase(m,LivePhase.SHOT_ON_TARGET,home,id,"${target.third} · gehalten");log(m,"${p.lastName} schießt ${target.third} – der Torwart hält sicher.");queueRestart(m,clubId(m,!home),PossessionChangeReason.SAVE)
+   }
+   ShotOutcome.CORNER->{
+    s.shotsOnTarget++;perf.shotsOnTarget++;if(keeperId!=0)ensurePerformance(w,m,keeperId).defensiveActions++
+    setBallPhase(m,LivePhase.SHOT_ON_TARGET,home,id,"${target.third} · Parade zur Ecke");log(m,"${p.lastName} schießt ${target.third} – starke Parade zur Ecke.");queueCorner(w,m,home,id,rng)
+   }
+   ShotOutcome.DEFLECTED->{
+    s.shotsOnTarget++;perf.shotsOnTarget++;if(keeperId!=0)ensurePerformance(w,m,keeperId).defensiveActions++
+    setBallPhase(m,LivePhase.SHOT_ON_TARGET,home,id,"${target.third} · abgewehrt");log(m,"${p.lastName} schießt ${target.third} – der Torwart wehrt ab.");queueRestart(m,clubId(m,!home),PossessionChangeReason.CLEARANCE)
+   }
+   ShotOutcome.REBOUND->{
+    s.shotsOnTarget++;perf.shotsOnTarget++;if(keeperId!=0)ensurePerformance(w,m,keeperId).defensiveActions++
+    setBallPhase(m,LivePhase.SHOT_ON_TARGET,home,id,"${target.third} · Parade, Abpraller");log(m,"${p.lastName} schießt ${target.third} – der Torwart kann nur abwehren. Abpraller!")
+    val rebounder=selectShooter(w,m,home,rng)
+    if(rebounder!=0){val d=4.5+rng.nextDouble()*7.5;setDistanceFromGoal(m,home,d,(.36+rng.nextDouble()*.28).toFloat());resolveShot(w,m,home,rebounder,rng,typeHint=ShotType.REBOUND,allowRebound=false)}
+    else queueRestart(m,clubId(m,!home),PossessionChangeReason.CLEARANCE)
+   }
+   ShotOutcome.DISALLOWED->{}
+  }
+ }
+
+ private fun card(w: World,m: LiveMatch,id: Int,directRed: Boolean){
+  val p=w.players.getValue(id);val previous=m.yellows[id]?:0;val yellow=if(directRed)previous else previous+1;if(!directRed)m.yellows[id]=yellow
+  val perf=ensurePerformance(w,m,id)
+  if(directRed||yellow>=2){
+   if(!directRed)perf.yellows++ else perf.red++;if(!directRed)perf.red++
+   if(id !in m.sentOff)m.sentOff.add(id);if(id in m.homeXi)m.homeXi[m.homeXi.indexOf(id)]=0 else if(id in m.awayXi)m.awayXi[m.awayXi.indexOf(id)]=0
+   addStoppageTime(m,35);val phase=if(!directRed&&yellow>=2)LivePhase.YELLOW_RED_CARD else LivePhase.RED_CARD;setIncidentPhase(m,phase,p.clubId,id,phase.label);log(m,"${if(directRed)"Rot" else "Gelb-Rot"} für ${p.name}.","bad");pauseForIncident(m,MatchPauseReason.RED_CARD,id,p.clubId)
+  }else{perf.yellows++;addStoppageTime(m,15);setIncidentPhase(m,LivePhase.YELLOW_CARD,p.clubId,id,"Gelbe Karte");log(m,"Gelb für ${p.name}.")}
+ }
+
+ fun calculatePlayerRating(w: World,m: LiveMatch,id: Int): Double {
+  val p=w.players[id]?:return 6.5;val perf=m.playerPerformance[id]?:return 6.5;val minutes=perf.minutes.coerceAtLeast(m.minutesPlayed[id]?:0)
+  val exposure=(minutes/45.0).coerceIn(.18,1.0);var r=6.5
+  val passAccuracy=if(perf.passesAttempted>=4)perf.passesCompleted.toDouble()/perf.passesAttempted else .76
+  r+=(passAccuracy-.76)*1.25*exposure;r-=perf.turnovers*.035*exposure;r+=perf.chancesCreated*.09*exposure
+  val defensiveWeight=when(p.position){Position.TW->.13;Position.IV,Position.LV,Position.RV,Position.DM->.09;else->.045}
+  r+=perf.defensiveActions*defensiveWeight*exposure
+  val goalWeight=when(p.position){Position.TW->1.45;Position.IV,Position.LV,Position.RV->1.18;Position.DM,Position.ZM->1.02;Position.OM,Position.LA,Position.RA->.92;Position.ST->.82}
+  r+=perf.goals*goalWeight+perf.assists*.52+perf.shotsOnTarget*.06-perf.shotsOffTarget*.035
+  val concededWeight=when(p.position){Position.TW->.19;Position.IV,Position.LV,Position.RV,Position.DM->.10;else->.025}
+  r-=perf.goalsConceded*concededWeight*exposure;r-=perf.yellows*.16;r-=perf.red*1.20
+  val loss=(perf.fitnessStart-p.fitness).coerceAtLeast(0.0);if(minutes>=55&&loss>18)r-=(loss-18)*.018
+  // Kurze Einsätze bleiben bewusst nahe an einer neutralen 6,5; klare Tore/Karten wirken dennoch direkt.
+  if(minutes<15&&perf.goals==0&&perf.assists==0&&perf.red==0)r=6.5+(r-6.5)*.38
+  return (round(r.coerceIn(1.0,10.0)*10)/10.0)
+ }
+
+ fun ratingSummary(w: World,m: LiveMatch,id: Int): String {
+  val p=w.players[id]?:return "Ordentlicher, unauffälliger Auftritt.";val perf=m.playerPerformance[id]?:return "Ordentlicher, unauffälliger Auftritt.";val rating=perf.rating
+  return when{
+   perf.red>0->"Platzverweis belastet die Mannschaft deutlich."
+   perf.goals>=2->"Überragend vor dem Tor und ständig gefährlich."
+   perf.goals>0||perf.assists>0->"Entscheidend an den gefährlichen Aktionen beteiligt."
+   perf.turnovers>=6&&perf.passesAttempted>0->"Viele Ballverluste und zu wenig Sicherheit im Spiel."
+   (p.position==Position.TW||p.position in listOf(Position.IV,Position.LV,Position.RV,Position.DM))&&perf.defensiveActions>=4->"Defensiv aufmerksam mit mehreren wichtigen Aktionen."
+   rating>=8.0->"Starker Auftritt, viele gefährliche Aktionen."
+   rating>=7.0->"Gute Leistung mit vielen sauberen Aktionen."
+   rating>=6.0->"Ordentlicher, weitgehend stabiler Auftritt."
+   rating>=5.0->"Schwacher Auftritt mit zu wenig gelungenen Aktionen."
+   else->"Sehr schwieriger Abend mit mehreren folgenschweren Fehlern."
+  }
+ }
+
+ private fun finalizeRatings(w: World,m: LiveMatch){
+  m.participation.distinct().forEach{id->val perf=ensurePerformance(w,m,id);perf.minutes=m.minutesPlayed[id]?:perf.minutes;perf.goals=m.goals.count{it.playerId==id};perf.assists=m.goals.count{it.assistId==id};perf.rating=calculatePlayerRating(w,m,id);perf.summary=ratingSummary(w,m,id)}
+ }
+
+ private fun log(m: LiveMatch,text: String,tone: String="normal"){m.ticker.add(Ticker(m.minute,text,tone,clockLabel(m)));if(m.ticker.size>260)m.ticker.removeAt(0)}
+ private fun finish(w: World,m: LiveMatch){if(m.finished)return;m.finished=true;m.halfTime=false;m.shootoutActive=false;finalizeRatings(w,m);val extra=if(m.extraTimePlayed)" nach Verlängerung" else "";val pens=if(m.homePens>0||m.awayPens>0)" · ${m.homePens}:${m.awayPens} i.E." else "";log(m,"Abpfiff$extra. ${m.home.goals}:${m.away.goals}$pens. Die Mannschaft geht zu den Zuschauern.")}
+
+ private fun autoResolveIncident(w: World,m: LiveMatch){
+  if(!m.incidentPause)return
+  if(m.incidentReason==MatchPauseReason.INJURY&&m.incidentClubId==w.user.clubId){val suggestion=substitutionSuggestions(w,m).firstOrNull{it.outId==m.incidentPlayerId};if(suggestion!=null)substitute(w,m,suggestion.outId,suggestion.inId)}
+  resumeIncident(w,m)
+ }
+
+ fun simulateFullMatch(w: World,f: Fixture): LiveMatch{val m=start(w,f);while(!m.finished){when{m.assistantSubPending->acceptAssistantSubstitution(w,m);m.incidentPause->autoResolveIncident(w,m);m.pendingDecision->decide(w,m,Decision.SHOOT);m.halfTime->secondHalf(m);else->step(w,m)}};return m}
+
+ fun record(w: World,m: LiveMatch){
+  require(m.finished){"Das Spiel läuft noch."};val f=w.fixtures.first{it.id==m.fixtureId};if(f.played)return;f.played=true
+  w.matches[f.id]=MatchRecord(fixtureId=f.id,homeId=m.homeId,awayId=m.awayId,home=m.home.copy(),away=m.away.copy(),minute=m.minute,goals=m.goals.toList(),attendance=m.attendance,shotEvents=m.shotEvents.toList(),passEvents=m.passEvents.toList(),tacticChanges=m.tacticChanges.toList(),homePens=m.homePens,awayPens=m.awayPens,extraTimePlayed=m.extraTimePlayed)
+  for(id in m.participation.distinct()){
+   val p=w.players.getValue(id);val perf=m.playerPerformance[id]?:PlayerMatchPerformance(minutes=m.minutesPlayed[id]?:0,fitnessStart=p.fitness,rating=6.5)
+   p.stats.appearances++;p.stats.minutes+=m.minutesPlayed[id]?:0;p.stats.goals+=m.goals.count{it.playerId==id};p.stats.assists+=m.goals.count{it.assistId==id};p.stats.yellow+=m.yellows[id]?:0
+   if(id in m.sentOff){p.stats.red++;p.unavailableReason=UnavailableReason.SUSPENDED;p.unavailableWeeks=2};p.sharpness=(p.sharpness+5).coerceAtMost(100);p.form=perf.rating.coerceIn(1.0,10.0)
+  }
+  for((id,score,conceded) in listOf(Triple(m.homeId,m.home.goals,m.away.goals),Triple(m.awayId,m.away.goals,m.home.goals))){val c=w.clubs.getValue(id);val result=if(score>conceded)"S" else if(score==conceded)"U" else "N";c.form.add(result);if(c.form.size>5)c.form.removeAt(0);w.squad(id).forEach{it.morale=(it.morale+if(result=="S")4 else if(result=="N")-3 else 0).coerceIn(5,100)};if(id==m.homeId){c.lastIncome=m.attendance*(if(!w.privateTopClubMode&&c.tier>=7)4 else if(w.privateTopClubMode)18 else 22-c.tier*2);c.budget+=c.lastIncome}else c.lastIncome=0}
+ }
+}
