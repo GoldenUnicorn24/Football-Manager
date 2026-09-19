@@ -1,0 +1,27 @@
+name: Restore supplied backup
+on:
+  push:
+    paths:
+      - '.restore/Football-Manager-RESTORED-SOURCE.zip'
+      - '.github/workflows/restore-backup.yml'
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore project tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -qo .restore/Football-Manager-RESTORED-SOURCE.zip -d .
+          chmod +x gradlew || true
+          rm -f RESTORE_INIT.txt
+          rm -rf .restore
+          rm -f .github/workflows/restore-backup.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Restore Startelf v0.4.69 full project backup"
+          git push
