@@ -217,7 +217,7 @@ data class CompetitionRuleSet(val maxSubstitutions:Int=5,val substitutionWindows
 @Serializable data class Ticker(val minute: Int,val text: String,val tone: String="normal",val clockLabel: String="")
 @Serializable data class Goal(val playerId: Int,val assistId: Int=0,val minute: Int,val clockLabel: String="",val targetLabel: String="")
 @Serializable data class PenaltyKick(val clubId: Int,val playerId: Int,val keeperId: Int,val scored: Boolean,val outcome: ShotOutcome,val targetX: Float,val targetY: Float,val targetLabel: String,val clockLabel: String)
-@Serializable data class MatchRecord(val fixtureId: Int,val homeId: Int,val awayId: Int,val home: MatchStats,val away: MatchStats,val minute: Int,val goals: List<Goal> = emptyList(),val attendance: Int=0,val shotEvents: List<ShotEvent> = emptyList(),val passEvents: List<PassEvent> = emptyList(),val tacticChanges: List<TacticChangeEvent> = emptyList(),val homePens: Int=0,val awayPens: Int=0,val extraTimePlayed: Boolean=false)
+@Serializable data class MatchRecord(val fixtureId: Int,val homeId: Int,val awayId: Int,val home: MatchStats,val away: MatchStats,val minute: Int,val goals: List<Goal> = emptyList(),val attendance: Int=0,val shotEvents: List<ShotEvent> = emptyList(),val homePens: Int=0,val awayPens: Int=0,val extraTimePlayed: Boolean=false,val passEvents: List<PassEvent> = emptyList(),val tacticChanges: List<TacticChangeEvent> = emptyList())
 @Serializable data class LiveMatch(
  val fixtureId: Int,
  val homeId: Int,
