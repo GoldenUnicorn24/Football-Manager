@@ -51,6 +51,75 @@ final class GitHubClient {
         if (full.isEmpty()) throw new IllegalStateException("Repository nicht erreichbar");
     }
 
+    List<String> listRepositories() throws Exception {
+        JSONArray arr = getArray("/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member");
+        List<String> repos = new ArrayList<>();
+        for (int i = 0; i < arr.length(); i++) {
+            String full = arr.getJSONObject(i).optString("full_name", "");
+            if (!full.isEmpty()) repos.add(full);
+        }
+        return repos;
+    }
+
+    String getDefaultBranch() throws Exception {
+        JSONObject obj = getJson("/repos/" + repo);
+        String branch = obj.optString("default_branch", "main");
+        return branch.isEmpty() ? "main" : branch;
+    }
+
+    String detectAndroidWorkflow(String branch) throws Exception {
+        JSONObject root = getJson("/repos/" + repo + "/actions/workflows?per_page=100");
+        JSONArray arr = root.optJSONArray("workflows");
+        if (arr == null || arr.length() == 0) {
+            throw new IllegalStateException("Im Projekt wurde kein GitHub-Actions-Workflow gefunden.");
+        }
+
+        List<JSONObject> candidates = new ArrayList<>();
+        for (int i = 0; i < arr.length(); i++) candidates.add(arr.getJSONObject(i));
+        candidates.sort((a, b) -> Integer.compare(workflowScore(b), workflowScore(a)));
+
+        for (JSONObject wf : candidates) {
+            String path = wf.optString("path", "");
+            if (path.isEmpty()) continue;
+            try {
+                String yaml = getFileText(path, branch);
+                if (yaml == null) continue;
+                String low = yaml.toLowerCase(Locale.ROOT);
+                if (low.contains("workflow_dispatch") && workflowScore(wf) > 0) {
+                    String name = wf.optString("name", path);
+                    logger.log("Build-Workflow automatisch erkannt: " + name);
+                    long id = wf.optLong("id", 0);
+                    return id > 0 ? String.valueOf(id) : path.substring(path.lastIndexOf('/') + 1);
+                }
+            } catch (Exception ignored) {}
+        }
+
+        for (JSONObject wf : candidates) {
+            String path = wf.optString("path", "");
+            if (path.isEmpty()) continue;
+            try {
+                String yaml = getFileText(path, branch);
+                if (yaml != null && yaml.toLowerCase(Locale.ROOT).contains("workflow_dispatch")) {
+                    logger.log("Workflow automatisch erkannt: " + wf.optString("name", path));
+                    long id = wf.optLong("id", 0);
+                    return id > 0 ? String.valueOf(id) : path.substring(path.lastIndexOf('/') + 1);
+                }
+            } catch (Exception ignored) {}
+        }
+        throw new IllegalStateException("Kein Workflow mit workflow_dispatch gefunden. Im Expertenmodus kannst du einen Workflow manuell angeben.");
+    }
+
+    private static int workflowScore(JSONObject wf) {
+        String t = (wf.optString("name", "") + " " + wf.optString("path", "")).toLowerCase(Locale.ROOT);
+        int score = 0;
+        if (t.contains("android")) score += 8;
+        if (t.contains("apk")) score += 7;
+        if (t.contains("gradle")) score += 5;
+        if (t.contains("build")) score += 3;
+        if (t.contains("release")) score += 2;
+        return score;
+    }
+
     String createWorkBranch(String baseBranch) throws Exception {
         JSONObject ref = getJson("/repos/" + repo + "/git/ref/heads/" + encPath(baseBranch));
         String sha = ref.getJSONObject("object").getString("sha");
@@ -255,6 +324,15 @@ final class GitHubClient {
         return requestJson("GET", path, null, 200);
     }
 
+    private JSONArray getArray(String path) throws Exception {
+        HttpURLConnection con = open("GET", path);
+        int code = con.getResponseCode();
+        InputStream in = code >= 200 && code < 400 ? con.getInputStream() : con.getErrorStream();
+        String text = readText(in, 500000);
+        if (code != 200) throw new HttpStatusException(code, text);
+        return new JSONArray(text);
+    }
+
     private JSONObject requestJson(String method, String path, JSONObject body, int... expected) throws Exception {
         HttpURLConnection con = open(method, path);
         if (body != null) {
@@ -291,7 +369,7 @@ final class GitHubClient {
         con.setReadTimeout(120000);
         con.setRequestProperty("Accept", "application/vnd.github+json");
         con.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
-        con.setRequestProperty("User-Agent", "AI-Dev-Agent/0.1 Android");
+        con.setRequestProperty("User-Agent", "AI-Dev-Agent/0.2 Android");
         if (!token.isEmpty()) con.setRequestProperty("Authorization", "Bearer " + token);
         return con;
     }
