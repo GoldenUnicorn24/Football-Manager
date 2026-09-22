@@ -23,7 +23,7 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final String PREF = "ai_dev_agent_cfg";
 
-    private EditText endpoint, model, apiKey, githubToken, repo, baseBranch, task, maxRounds, contextChars;
+    private EditText endpoint, model, apiKey, githubToken, repo, baseBranch, workflow, task, maxRounds, contextChars;
     private TextView status, log;
     private Button runButton, stopButton, downloadButton;
     private SecretStore secretStore;
@@ -70,10 +70,11 @@ public class MainActivity extends Activity {
         cerebras.setOnClickListener(v -> { endpoint.setText("https://api.cerebras.ai/v1"); model.setText(""); model.requestFocus(); });
 
         root.addView(section("GitHub-Projekt"));
-        githubToken = field("GitHub Token (Contents: write, Actions: read)", true, false);
+        githubToken = field("GitHub Token (Contents: write, Actions: write)", true, false);
         repo = field("Repository, z. B. owner/projekt", false, false);
         baseBranch = field("Basis-Branch", false, false);
-        root.addView(githubToken, lp()); root.addView(repo, lp()); root.addView(baseBranch, lp());
+        workflow = field("Actions-Workflow, z. B. android.yml", false, false);
+        root.addView(githubToken, lp()); root.addView(repo, lp()); root.addView(baseBranch, lp()); root.addView(workflow, lp());
 
         root.addView(section("Aufgabe"));
         task = field("Was soll weiterentwickelt/repariert werden?", false, true);
@@ -215,10 +216,11 @@ public class MainActivity extends Activity {
             for (int round = 1; round <= c.maxRounds; round++) {
                 checkStop();
                 appendLog("=== Runde " + round + "/" + c.maxRounds + " ===");
-                long pushTime = System.currentTimeMillis();
                 gh.applyPatch(workBranch, patch);
-                appendLog("Patch gepusht. Warte auf GitHub Actions …");
-                Models.BuildResult build = gh.waitForBuild(workBranch, pushTime, 30);
+                long dispatchTime = System.currentTimeMillis();
+                gh.dispatchWorkflow(c.workflow, workBranch);
+                appendLog("Patch gepusht. Workflow " + c.workflow + " auf " + workBranch + " gestartet.");
+                Models.BuildResult build = gh.waitForBuild(workBranch, dispatchTime, 30);
                 lastRunId = build.runId;
 
                 if (build.success()) {
@@ -230,7 +232,7 @@ public class MainActivity extends Activity {
                 }
 
                 if (!build.finished()) {
-                    appendLog("Kein abgeschlossener Build gefunden. Das Ziel-Repository benötigt einen GitHub-Actions Build, der auf dem ai-agent/* Branch läuft.");
+                    appendLog("Kein abgeschlossener Build gefunden. Prüfe, ob der angegebene Workflow workflow_dispatch unterstützt und Actions-Schreibzugriff erlaubt ist.");
                     setStatus("Build nicht abgeschlossen", false);
                     return;
                 }
@@ -331,6 +333,7 @@ public class MainActivity extends Activity {
         c.githubToken = githubToken.getText().toString().trim();
         c.repo = normalizeRepo(repo.getText().toString());
         c.baseBranch = baseBranch.getText().toString().trim().isEmpty() ? "main" : baseBranch.getText().toString().trim();
+        c.workflow = workflow.getText().toString().trim().isEmpty() ? "android.yml" : workflow.getText().toString().trim();
         c.maxRounds = clamp(parseInt(maxRounds.getText().toString(), 4), 1, 20);
         c.contextChars = clamp(parseInt(contextChars.getText().toString(), 70000), 10000, 250000);
         return c;
@@ -340,7 +343,7 @@ public class MainActivity extends Activity {
         Models.Config c = readConfig();
         getSharedPreferences(PREF, MODE_PRIVATE).edit()
                 .putString("endpoint", c.endpoint).putString("model", c.model).putString("repo", c.repo)
-                .putString("baseBranch", c.baseBranch).putInt("maxRounds", c.maxRounds).putInt("contextChars", c.contextChars).apply();
+                .putString("baseBranch", c.baseBranch).putString("workflow", c.workflow).putInt("maxRounds", c.maxRounds).putInt("contextChars", c.contextChars).apply();
         secretStore.put("apiKey", c.apiKey);
         secretStore.put("githubToken", c.githubToken);
     }
@@ -351,6 +354,7 @@ public class MainActivity extends Activity {
         model.setText(p.getString("model", "llama-3.3-70b-versatile"));
         repo.setText(p.getString("repo", ""));
         baseBranch.setText(p.getString("baseBranch", "main"));
+        workflow.setText(p.getString("workflow", "android.yml"));
         maxRounds.setText(String.valueOf(p.getInt("maxRounds", 4)));
         contextChars.setText(String.valueOf(p.getInt("contextChars", 70000)));
         apiKey.setText(secretStore.get("apiKey"));
@@ -366,6 +370,7 @@ public class MainActivity extends Activity {
     private void requireGitHub(Models.Config c) {
         if (c.githubToken.isEmpty()) throw new IllegalArgumentException("GitHub Token fehlt.");
         if (!c.repo.matches("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")) throw new IllegalArgumentException("Repository muss owner/name sein.");
+        if (c.workflow.isEmpty()) throw new IllegalArgumentException("Actions-Workflow fehlt.");
     }
 
     private static String coderSystem() {
