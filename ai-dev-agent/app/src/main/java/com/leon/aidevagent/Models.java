@@ -17,6 +17,7 @@ final class Models {
         String githubToken;
         String repo;
         String baseBranch;
+        String workflow;
         int maxRounds;
         int contextChars;
 
@@ -27,6 +28,7 @@ final class Models {
             githubToken = "";
             repo = "";
             baseBranch = "main";
+            workflow = "android.yml";
             maxRounds = 4;
             contextChars = 70000;
         }
