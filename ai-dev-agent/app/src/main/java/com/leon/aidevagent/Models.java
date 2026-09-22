@@ -35,11 +35,7 @@ final class Models {
     static final class PatchFile {
         final String path;
         final String content;
-
-        PatchFile(String path, String content) {
-            this.path = path;
-            this.content = content;
-        }
+        PatchFile(String path, String content) { this.path = path; this.content = content; }
     }
 
     static final class PatchBundle {
@@ -48,14 +44,11 @@ final class Models {
         final List<PatchFile> files;
 
         PatchBundle(String summary, String commitMessage, List<PatchFile> files) {
-            this.summary = summary;
-            this.commitMessage = commitMessage;
-            this.files = files;
+            this.summary = summary; this.commitMessage = commitMessage; this.files = files;
         }
 
         static PatchBundle fromModelText(String text) throws JSONException {
-            String json = extractJsonObject(text);
-            JSONObject root = new JSONObject(json);
+            JSONObject root = new JSONObject(extractJsonObject(text));
             String summary = root.optString("summary", "AI-Agent Änderungen");
             String commit = root.optString("commitMessage", "AI agent changes");
             JSONArray arr = root.getJSONArray("files");
@@ -79,11 +72,7 @@ final class Models {
         final String logs;
 
         BuildResult(long runId, String status, String conclusion, String htmlUrl, String logs) {
-            this.runId = runId;
-            this.status = status;
-            this.conclusion = conclusion;
-            this.htmlUrl = htmlUrl;
-            this.logs = logs;
+            this.runId = runId; this.status = status; this.conclusion = conclusion; this.htmlUrl = htmlUrl; this.logs = logs;
         }
 
         boolean success() { return "success".equalsIgnoreCase(conclusion); }
@@ -100,7 +89,7 @@ final class Models {
 
     static boolean isSafeRepoPath(String path) {
         if (path == null || path.isEmpty()) return false;
-        if (path.startsWith("/") || path.contains("..") || path.contains("\")) return false;
+        if (path.startsWith("/") || path.contains("..") || path.contains("\\")) return false;
         String p = path.toLowerCase();
         return !p.startsWith(".git/") && !p.equals(".git") && !p.contains("/secrets/") && !p.endsWith(".jks") && !p.endsWith(".keystore");
     }
