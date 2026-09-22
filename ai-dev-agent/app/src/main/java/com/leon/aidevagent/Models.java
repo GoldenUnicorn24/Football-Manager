@@ -27,9 +27,9 @@ final class Models {
             apiKey = "";
             githubToken = "";
             repo = "";
-            baseBranch = "main";
-            workflow = "android.yml";
-            maxRounds = 4;
+            baseBranch = "AUTO";
+            workflow = "AUTO";
+            maxRounds = 6;
             contextChars = 70000;
         }
     }
