@@ -100,6 +100,15 @@ final class GitHubClient {
         }
     }
 
+    void dispatchWorkflow(String workflowFile, String branch) throws Exception {
+        String wf = workflowFile == null ? "" : workflowFile.trim();
+        if (wf.contains("/")) wf = wf.substring(wf.lastIndexOf('/') + 1);
+        if (wf.isEmpty()) throw new IllegalArgumentException("Workflow-Datei fehlt.");
+        JSONObject body = new JSONObject();
+        body.put("ref", branch);
+        requestJson("POST", "/repos/" + repo + "/actions/workflows/" + encQuery(wf) + "/dispatches", body, 204);
+    }
+
     Models.BuildResult waitForBuild(String branch, long notBeforeMillis, int maxPolls) throws Exception {
         long runId = 0;
         String html = "";
