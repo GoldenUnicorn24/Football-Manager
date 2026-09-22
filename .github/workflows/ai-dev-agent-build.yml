@@ -3,7 +3,7 @@ name: AI Dev Agent APK
 on:
   push:
     branches:
-      - ai-dev-agent-v0.1
+      - ai-dev-agent-v0.2
     paths:
       - 'ai-dev-agent/**'
       - '.github/workflows/ai-dev-agent-build.yml'
@@ -26,6 +26,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ai-dev-agent-v0.1-debug
+          name: ai-dev-agent-v0.2-debug
           path: ai-dev-agent/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
