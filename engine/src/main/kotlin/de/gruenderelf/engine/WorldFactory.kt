@@ -55,6 +55,9 @@ object WorldFactory {
   return if(fallback !in used)fallback else (prefixCode+city.takeLast(2)).take(4)
  }
  fun migrateGeneratedIdentity(w: World){
+  // Reale Vereinskürzel wie B04 oder S04 enthalten absichtlich Ziffern.
+  // Die alte Kürzel-/Namensmigration gehört ausschließlich zur Fantasieliga.
+  if(w.privateTopClubMode)return
   val needsMigration=w.clubs.values.any{it.id!=w.user.clubId&&(it.shortName.matches(Regex("^[SFTV][0-9][A-L]$"))||it.shortName.any(Char::isDigit))}
   if(!needsMigration)return
   val used=mutableSetOf(w.club().shortName.uppercase())
@@ -178,7 +181,7 @@ object WorldFactory {
     w.clubs[id]=c
     if(clubSeed.players.isNotEmpty()){
      clubSeed.players.forEach{ps->
-      val parts=ps.name.trim().split(Regex("\\s+")).filter{it.isNotBlank()};val last=parts.lastOrNull()?:ps.name;val first=parts.dropLast(1).joinToString(" ").ifBlank{"Spieler"}
+      val parts=ps.name.trim().split(Regex("\\s+")).filter{it.isNotBlank()};val first=if(parts.size==1)parts.single() else parts.dropLast(1).joinToString(" ");val last=if(parts.size==1)"" else parts.last()
       val r=ps.rating.coerceIn(45,94)
       val p=Player(w.nextIds.player++,id,first,last,ps.born,nationality=ps.nationality,position=ps.position,number=ps.number.coerceIn(1,99),attributes=realSeedAttributes(r,ps.position),
        hidden=Hidden((r+7).coerceAtMost(96),25,72,75,65,75,76,70),fitness=94.0,morale=70,form=6.6,sharpness=74,wage=(300+(6-leagueSeed.level).coerceAtLeast(1)*900+(reputation-50)*55).coerceAtLeast(120))
@@ -186,7 +189,14 @@ object WorldFactory {
      }
     }else{
      val positions=Formations.positions("4-2-3-1")+listOf(Position.TW,Position.IV,Position.LV,Position.RV,Position.DM,Position.ZM,Position.OM,Position.LA,Position.RA,Position.ST,Position.ST)
-     positions.forEach{pos->val p=generatePlayer(w.nextIds.player++,id,leagueSeed.level,pos,rng,2026);p.number=(1..99).first{n->w.squad(id).none{it.number==n}};p.nationality="Deutschland";w.players[p.id]=p}
+     positions.forEach{pos->val p=generatePlayer(w.nextIds.player++,id,leagueSeed.level,pos,rng,2026);p.number=(1..99).first{n->w.squad(id).none{it.number==n}};p.nationality=leagueSeed.country;w.players[p.id]=p}
+    }
+    // Registrierungslisten mit weniger als 20 Spielern erhalten klar markierte
+    // simulierte Ergänzungen, damit Aufstellung und Ersatzbank spielbar bleiben.
+    while(w.squad(id).count{!it.youth}<20){
+     val filled=w.squad(id);val position=Formations.positions("4-2-3-1").firstOrNull{pos->filled.none{it.position==pos}}?:rng.pick(Position.entries)
+     val p=generatePlayer(w.nextIds.player++,id,leagueSeed.level,position,rng,2026)
+     p.number=(1..99).first{n->filled.none{it.number==n}};p.nationality=leagueSeed.country;w.players[p.id]=p
     }
    }
   }
@@ -205,8 +215,8 @@ object WorldFactory {
   val result=w.copy(user=User(selectedId,me.id,Difficulty.SANDBOX),privateTopClubMode=true)
   makeSchedule(result)
   result.news("Verein übernommen","Du übernimmst ${userClub.name} in der ${leagueName(result,userClub.tier)}. Dein eigener Spieler wurde zusätzlich in den Kader aufgenommen.","good")
-  result.news("Deutscher Ligabaum","Bundesliga, 2. Bundesliga, 3. Liga, Regionalliga Nord und Oberliga Hamburg sind als 2026/27-Ligen enthalten.","normal")
-  result.news("Datenhinweis","Topligen nutzen den vorhandenen 2026/27-Kaderdatenstand. Unterhalb der Bundesliga werden reale Vereinsnamen mit ligaabhängig generierten Spielern verwendet.","normal")
+  result.news("Europäische Ligen","Neben Deutschland sind weitere nationale Spielklassen und Pokale spielbar.","normal")
+  result.news("Datenhinweis","Die fünf bisherigen Topligen nutzen den vorhandenen Kaderdatenstand. Weitere Vereinslisten enthalten spielbare, simulierte Kader; sie sind noch keine verifizierten Spielerlisten.","normal")
   initializeManagerSystems(result)
   return result
  }
@@ -232,13 +242,14 @@ object WorldFactory {
  }
  private fun applyDraft(p: Player,d: PlayerDraft,sandbox: Boolean,index: Int){
   validateDraft(d,if(index==0)"Dein Spieler" else "Sandbox-Spieler ${index+1}")
-  p.firstName=d.firstName.trim();p.lastName=d.lastName.trim();p.birthYear=d.birthYear;p.nationality=d.nationality.trim().ifEmpty{"Deutschland"};p.height=d.height;p.weight=d.weight;p.foot=d.foot;p.position=d.position;p.secondary=d.secondary.filter{it!=d.position}.distinct().toMutableList();p.number=d.number;p.appearance=d.appearance;p.archetype=d.archetype
+  p.firstName=d.firstName.trim();p.lastName=d.lastName.trim();p.birthYear=d.birthYear;p.nationality=d.nationality.trim().ifEmpty{"Deutschland"};p.height=d.height;p.weight=d.weight;p.foot=d.foot;p.position=d.position;p.secondary=d.secondary.filter{it!=d.position}.distinct().toMutableList();p.number=d.number;p.appearance=d.appearance;p.archetype=d.archetype;p.generated=false
   if(sandbox)p.attributes=d.attributes.copy(pace=d.attributes.pace.coerceIn(1,99),finishing=d.attributes.finishing.coerceIn(1,99),passing=d.attributes.passing.coerceIn(1,99),technique=d.attributes.technique.coerceIn(1,99),tackling=d.attributes.tackling.coerceIn(1,99),strength=d.attributes.strength.coerceIn(1,99),stamina=d.attributes.stamina.coerceIn(1,99),vision=d.attributes.vision.coerceIn(1,99),heading=d.attributes.heading.coerceIn(1,99),keeping=d.attributes.keeping.coerceIn(1,99),setPieces=d.attributes.setPieces.coerceIn(1,99))
  }
 
  internal fun generatePlayer(id: Int,clubId: Int,tier: Int,pos: Position,rng: SeededRandom,year: Int): Player {
   val base=32+(10-tier)*5;fun a()=rng.int(base-8,base+8).coerceIn(1,95)
   val p=Player(id,clubId,rng.pick(firstNames),rng.pick(lastNames),year-rng.int(18,35),position=pos,attributes=Attributes(a(),a(),a(),a(),a(),a(),a(),a(),a(),if(pos==Position.TW)a()+8 else rng.int(5,18),a()),hidden=Hidden((base+rng.int(10,30)).coerceAtMost(98),rng.int(10,65),rng.int(40,90),rng.int(35,90),rng.int(30,95),rng.int(30,90),rng.int(40,90),rng.int(30,85)),fitness=rng.int(86,100).toDouble(),wage=if(tier>=7)rng.int(0,9) else (11-tier)*rng.int(150,400))
+  p.generated=true
   p.secondary=p.secondaryOptions().take(2).toMutableList();p.agentId=(id%97)+1;p.marketUncertainty=rng.int(8,35);p.contractYears=rng.int(1,4);p.promisedRole=if(p.ca>=72)SquadRole.STARTER else SquadRole.ROTATION;p.homegrownClubId=clubId
   return p
  }

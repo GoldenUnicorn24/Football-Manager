@@ -6,8 +6,8 @@ import kotlin.math.roundToInt
 
 /** Recovered v0.5.18 systems reconstructed from the shipped APK. */
 object CompetitionPrizeSystem {
- fun winnerId(w: World, competition: CompetitionType): Int = w.fixtures
-  .filter { it.season == w.calendar.season && it.competition == competition && it.played && it.winnerId != 0 }
+ fun winnerId(w: World, competition: CompetitionType, group:String=""): Int = w.fixtures
+  .filter { it.season == w.calendar.season && it.competition == competition && (group.isBlank()||CompetitionEngine.cupGroup(w,it)==group) && it.played && it.winnerId != 0 }
   .maxWithOrNull(compareBy<Fixture> { it.round }.thenBy { it.matchday }.thenBy { it.id })?.winnerId ?: 0
 
  fun award(w: World, key: String, clubId: Int, amount: Long): Boolean {
@@ -31,8 +31,28 @@ object CompetitionPrizeSystem {
    "3. Liga" -> 1_500_000L
    "Regionalliga Nord" -> 350_000L
    "Oberliga Hamburg" -> 150_000L
-   else -> 1_000_000L
+   else -> when(RealModeDatabase.levelForTier(tier)){1->8_000_000L;2->1_500_000L;else->350_000L}
   }
+ }
+
+ fun settleSeason(w:World,tables:Map<Int,List<TableRow>>):List<String>{
+  val earned=mutableListOf<String>()
+  fun trophy(title:String,clubId:Int,amount:Long,key:String){
+   if(clubId==0||w.trophies.any{it.season==w.calendar.season&&it.competition==title})return
+   award(w,"${w.calendar.season}:$key",clubId,amount)
+   w.trophies.add(Trophy(w.calendar.season,title,clubId,amount))
+   if(clubId==w.user.clubId)earned.add(title)
+  }
+  for((tier,rows) in tables){val league=w.leagues.first{it.tier==tier};rows.firstOrNull()?.let{trophy("Meister: ${league.name}",it.clubId,leagueChampionPrize(w,tier),"league:$tier")}}
+  for(group in w.fixtures.filter{it.season==w.calendar.season&&it.competition==CompetitionType.NATIONAL_CUP}.map{CompetitionEngine.cupGroup(w,it)}.distinct()){
+   val final=w.fixtures.filter{it.season==w.calendar.season&&it.competition==CompetitionType.NATIONAL_CUP&&CompetitionEngine.cupGroup(w,it)==group}.maxByOrNull{it.round}
+   if(final?.played==true&&final.winnerId!=0)trophy(CompetitionEngine.cupName(w,group),final.winnerId,DomesticCompetitionData.byId(group)?.winnerPrize?:if(group=="Deutschland")6_000_000L else 2_000_000L,"cup:$group")
+  }
+  for((type,prize) in listOf(CompetitionType.CHAMPIONS_LEAGUE to 25_000_000L,CompetitionType.EUROPA_LEAGUE to 12_000_000L,CompetitionType.CLUB_WORLD_CUP to 40_000_000L,CompetitionType.ETERNAL_CROWN to 50_000_000L,CompetitionType.EURO_ELITE to 12_000_000L)){
+   val final=w.fixtures.filter{it.season==w.calendar.season&&it.competition==type&&it.stage=="Finale"}.firstOrNull()
+   if(final?.played==true&&final.winnerId!=0)trophy(type.label,final.winnerId,prize,"title:${type.name}")
+  }
+  return earned
  }
 
  fun awardSeasonPrizes(w: World, leagueWinnerId: Int, tier: Int) {
@@ -50,7 +70,7 @@ object CompetitionRulesEngine {
  fun rules(w: World, m: LiveMatch): CompetitionRuleSet {
   val fixture = w.fixtures.firstOrNull { it.id == m.fixtureId } ?: return CompetitionRuleSet()
   val league = w.leagues.firstOrNull { fixture.homeId in it.clubIds || fixture.awayId in it.clubIds }
-  val level = league?.tier ?: fixture.tier.coerceAtLeast(1)
+  val level = league?.let{if(w.privateTopClubMode)RealModeDatabase.levelForTier(it.tier) else it.tier} ?: fixture.tier.coerceAtLeast(1)
   return when (fixture.competition) {
    CompetitionType.LEAGUE -> CompetitionRuleSet(extraTimeAdditionalSubstitution = false, varEnabled = !(w.privateTopClubMode && level > 2))
    else -> CompetitionRuleSet(extraTimeAdditionalSubstitution = true, varEnabled = true)
@@ -132,7 +152,8 @@ object ScoutingTransferSystem {
  private fun regionMultiplier(region: ScoutRegion) = when (region) { ScoutRegion.DOMESTIC -> 1.0; ScoutRegion.DACH -> 1.15; ScoutRegion.EUROPE -> 1.35; ScoutRegion.SOUTH_AMERICA -> 1.55; ScoutRegion.WORLD -> 1.8 }
  fun windowOpen(w: World) = w.calendar.matchday <= 7 || w.calendar.matchday in 15..17
  fun cost(w: World, player: Player, region: ScoutRegion): Long {
-  val base = player.ca * 22L + 900L + w.club().tier.coerceAtMost(10) * 70L
+  val tier=if(w.privateTopClubMode)RealModeDatabase.levelForTier(w.club().tier) else w.club().tier.coerceAtMost(10)
+  val base = player.ca * 22L + 900L + tier * 70L
   return (base * regionMultiplier(region)).roundToInt().toLong().coerceAtLeast(250L)
  }
  fun report(w: World, playerId: Int): ScoutReport? {

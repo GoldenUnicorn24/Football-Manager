@@ -75,13 +75,15 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  fun resumeIncident()=liveAction{w->w.live?.let{MatchEngine.resumeIncident(w,it)}}
  fun secondHalf()=liveAction{it.live?.let{m->MatchEngine.secondHalf(m)}}
  fun finishWeek()=action("Partie abgeschlossen und gespeichert."){SeasonEngine.advanceWeek(it)}
+ fun advanceIdleWeek()=action("Vereinswoche abgeschlossen und gespeichert."){SeasonEngine.advanceIdleWeek(it)}
+ fun advanceUntilNextMatch()=action("Bis zur nächsten eigenen Partie vorgespult."){SeasonEngine.advanceUntilNextMatch(it)}
  fun exportTo(uri: Uri)=work{
   val w=mutable.value.world?:return@work
   withContext(Dispatchers.IO){val stream=getApplication<Application>().contentResolver.openOutputStream(uri)?:error("Datei nicht erreichbar.");stream.use{it.write(SaveCodec.encode(w).toByteArray(Charsets.UTF_8));it.flush()}}
   mutable.update{it.copy(message="Spielstand als Datei exportiert.")}
  }
  fun importFrom(uri: Uri,slot: Int)=work{
-  val w=withContext(Dispatchers.IO){val stream=getApplication<Application>().contentResolver.openInputStream(uri)?:error("Datei nicht erreichbar.");val text=stream.use{input->val out=java.io.ByteArrayOutputStream();val buffer=ByteArray(8192);while(true){val n=input.read(buffer);if(n<0)break;require(out.size()+n<=32*1024*1024){"Die Datei ist zu groß."};out.write(buffer,0,n)};out.toString("UTF-8")};SaveCodec.decode(text)}
+  val w=withContext(Dispatchers.IO){val stream=getApplication<Application>().contentResolver.openInputStream(uri)?:error("Datei nicht erreichbar.");val text=stream.use{input->val out=java.io.ByteArrayOutputStream();val buffer=ByteArray(8192);while(true){val n=input.read(buffer);if(n<0)break;require(out.size()+n<=128*1024*1024){"Die Datei ist zu groß."};out.write(buffer,0,n)};out.toString("UTF-8")};SaveCodec.decode(text)}
   repo.save(slot,w);mutable.value=GameState(w,slot,message="Spielstand importiert.",revision=mutable.value.revision+1)
  }
 }

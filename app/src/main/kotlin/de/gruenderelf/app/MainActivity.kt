@@ -44,6 +44,7 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
      composable("training"){TrainingScreen(w,vm)}
      composable("transfers"){TransfersScreen(w,vm){nav.navigate("spieler/$it")}}
      composable("karriere"){CareerScreen(w)}
+     composable("trophaeen"){TrophyScreen(w,vm)}
      composable("editor"){EditorScreen(w,vm)}
      composable("einstellungen"){SettingsScreen(vm)}
      composable("v0518"){V0518Screen(w,vm){nav.navigate("spieler/$it")}}

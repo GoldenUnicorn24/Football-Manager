@@ -1,8 +1,8 @@
-name: Recovery v0.5.18 CI
+name: Gründerelf v0.5.20 Android CI
 
 on:
   push:
-    branches: [ "recover-v0.5.18" ]
+    branches: [ "recover-v0.5.*" ]
   workflow_dispatch:
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gruenderelf-v0.5.18-recovered-debug
+          name: Gruenderelf-v0.5.20-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
