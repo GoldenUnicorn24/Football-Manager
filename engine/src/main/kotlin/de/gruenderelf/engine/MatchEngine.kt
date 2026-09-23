@@ -987,28 +987,106 @@ object MatchEngine {
   val raw=(territory+possession+quality).roundToInt().coerceIn(-100,100);m.attackMomentum=(m.attackMomentum*.58+raw*.42).roundToInt().coerceIn(-100,100);m.momentumHistory.add(m.attackMomentum);if(m.momentumHistory.size>100)m.momentumHistory.removeAt(0)
  }
 
+ private fun playerDecisionContext(w:World,m:LiveMatch):PlayerDecisionContext{
+  val p=w.self();val home=p.clubId==m.homeId
+  if(!home&&p.clubId!=m.awayId)return PlayerDecisionContext(0,0,"unbekannt")
+  val distance=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home)).distanceMeters.roundToInt().coerceIn(1,105)
+  val opponents=xi(m,!home).filter{it!=0&&it !in m.sentOff&&it !in m.injured&&it in w.players}
+  val defenders=opponents.count{w.players[it]?.position in setOf(Position.IV,Position.LV,Position.RV,Position.DM)}
+  val opp=w.clubs.getValue(clubId(m,!home)).tactics
+  var nearby=when{distance<=10->4;distance<=18->3;distance<=28->2;else->1}
+  if(m.ballX in .32f.. .68f)nearby++
+  nearby+=when{opp.pressing>=4->1;opp.pressing<=2->-1;else->0}
+  if(opp.line>=4&&distance>18)nearby++
+  val maxNearby=minOf(6,maxOf(1,defenders+2),maxOf(1,opponents.size-1))
+  nearby=nearby.coerceIn(1,maxNearby)
+  val label=when(nearby){1->"sehr wenige";2->"wenige";3->"mehrere";else->"viele"}
+  return PlayerDecisionContext(distance,nearby,label)
+ }
+
  fun decide(w: World,m: LiveMatch,decision: Decision){
-  require(m.pendingDecision){"Gerade steht keine Entscheidung an."};val rng=SeededRandom(m.rngState);val p=w.self();val home=p.clubId==m.homeId
-  val mates=xi(m,home).filter{it!=0&&it!=p.id&&it !in m.injured&&w.players[it]?.position!=Position.TW}
+  require(m.pendingDecision){"Gerade steht keine Entscheidung an."}
+  val rng=SeededRandom(m.rngState);val p=w.self();val home=p.clubId==m.homeId
+  require(p.id in xi(m,home)){"Dein Spieler ist für diese Entscheidung nicht mehr auf dem Feld."}
+  if(m.chainOwnerClubId!=p.clubId||m.liveClubId!=p.clubId)setBallPhase(m,LivePhase.DANGEROUS_ATTACK,home,p.id,"Spielerentscheidung – Ballbesitz synchronisiert",if(m.chainOwnerClubId==0||m.chainOwnerClubId==p.clubId)PossessionChangeReason.NONE else PossessionChangeReason.INTERCEPTION)
+  val mates=xi(m,home).filter{it!=0&&it!=p.id&&it !in m.injured&&it !in m.sentOff&&w.players[it]?.position!=Position.TW}
+  val context=playerDecisionContext(w,m)
   when(decision){
+   Decision.PASS->{
+    val perf=ensurePerformance(w,m,p.id);perf.passesAttempted++
+    val opp=w.clubs.getValue(clubId(m,!home)).tactics
+    val quality=p.attributes.passing*.55+p.attributes.vision*.25+p.attributes.technique*.20
+    val success=(.73+quality*.0024+p.fitness*.0007-(opp.pressing-3)*.012-(context.nearbyOpponents-2)*.008+(if(p.messiMentored).03 else 0.0)).coerceIn(.72,.985)
+    val sx=m.ballX;val sy=m.ballY
+    if(mates.isNotEmpty()&&rng.chance(success)){
+     perf.passesCompleted++
+     val id=mates.maxBy{id->val q=w.players.getValue(id);q.fitness.roundToInt()+q.attributes.passing+q.attributes.vision+q.attributes.technique}
+     setBallPhase(m,LivePhase.ATTACK,home,id,"Sicherungspass – Ball bleibt in den eigenen Reihen")
+     moveBallToward(w,m,home,LivePhase.ATTACK,rng)
+     m.passEvents.add(PassEvent(m.minute,p.clubId,p.id,id,true,sx,sy,m.ballX,m.ballY))
+     stats(m,home).possessionTicks+=2
+     log(m,"Du spielst den sicheren Pass auf ${w.players.getValue(id).lastName}.")
+    }else{
+     perf.turnovers++;m.passEvents.add(PassEvent(m.minute,p.clubId,p.id,0,false,sx,sy,sx,sy))
+     log(m,"Auch der Sicherungspass wird unter Druck abgefangen.")
+     transferPossession(w,m,!home,PossessionChangeReason.INTERCEPTION,rng,true)
+    }
+   }
    Decision.SHOOT->resolveShot(w,m,home,p.id,rng,m.decisionAssistId,m.decisionShotType)
    Decision.DRIBBLE->{
     val perf=ensurePerformance(w,m,p.id);val prime=p.messiMentored
-    val dribbleChance=(.31+p.attributes.technique*.005+p.fitness*.0015+(if(prime).16 else 0.0)).coerceAtMost(if(prime).965 else .82)
+    val dribbleChance=(.33+p.attributes.technique*.005+p.attributes.pace*.0012+p.fitness*.0012-(context.nearbyOpponents-1)*.035+(if(prime).16 else 0.0)).coerceIn(.18,if(prime).965 else .84)
     if(rng.chance(dribbleChance)){
-     val g=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home));val gain=if(prime)7.0+rng.nextDouble()*7.5 else 3.5+rng.nextDouble()*4.0;setDistanceFromGoal(m,home,(g.distanceMeters-gain).coerceAtLeast(if(prime)3.8 else 4.5),(m.ballX+(0.5f-m.ballX)*(if(prime).62f else .35f)).coerceIn(.12f,.88f));log(m,if(prime)"Du ziehst im Messi-Stil zwischen den Gegenspielern durch." else "Du gehst am Gegenspieler vorbei.")
-     val type=when{ShotModel.geometry(ShotContext(m.ballX,m.ballY,home)).distanceMeters<8.5->ShotType.CLOSE_RANGE;else->ShotType.BOX_SHOT};resolveShot(w,m,home,p.id,rng,m.decisionAssistId,type)
+     val g=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home));val gain=if(prime)7.0+rng.nextDouble()*7.5 else 3.5+rng.nextDouble()*4.0
+     setDistanceFromGoal(m,home,(g.distanceMeters-gain).coerceAtLeast(if(prime)3.8 else 4.5),(m.ballX+(0.5f-m.ballX)*(if(prime).62f else .35f)).coerceIn(.12f,.88f))
+     log(m,if(prime)"Du ziehst im Messi-Stil zwischen den Gegenspielern durch." else "Du gehst am Gegenspieler vorbei.")
+     val type=if(ShotModel.geometry(ShotContext(m.ballX,m.ballY,home)).distanceMeters<8.5)ShotType.CLOSE_RANGE else ShotType.BOX_SHOT
+     resolveShot(w,m,home,p.id,rng,m.decisionAssistId,type)
     }else{perf.turnovers++;log(m,"Beim Dribbling ist der Ball weg.");transferPossession(w,m,!home,PossessionChangeReason.TACKLE,rng,true)}
    }
-   Decision.PASS,Decision.CROSS->{
-    val perf=ensurePerformance(w,m,p.id);perf.passesAttempted++;val skill=if(decision==Decision.PASS)p.attributes.passing else (p.attributes.passing+p.attributes.technique)/2
-    if(mates.isNotEmpty()&&rng.chance((.45+skill*.004+p.fitness*.001+(if(p.messiMentored).06 else 0.0)).coerceAtMost(if(p.messiMentored).97 else .9))){
-     perf.passesCompleted++;perf.chancesCreated++;val target=targetPlayerFor(w,m,home);val id=if(target in mates&&rng.chance(if(decision==Decision.CROSS).76 else .62))target else mates.maxBy{w.players.getValue(it).attributes.finishing};m.passEvents.add(PassEvent(m.minute,p.clubId,p.id,id,true,m.ballX,m.ballY,(m.ballX+(rng.nextDouble()-.5)*.12).toFloat().coerceIn(.04f,.96f),(m.ballY+(if(home)-1 else 1)*.13).toFloat().coerceIn(.03f,.97f)))
-     if(decision==Decision.CROSS){val d=6.5+rng.nextDouble()*8.0;val type=if(rng.chance(.72))ShotType.HEADER else ShotType.VOLLEY;setDistanceFromGoal(m,home,d,(.32+rng.nextDouble()*.36).toFloat());log(m,"Deine Flanke sucht ${w.players.getValue(id).lastName} im Strafraum.");if(!maybeOffside(w,m,home,id,type,rng))resolveShot(w,m,home,id,rng,p.id,type)}
-     else{val d=6.0+rng.nextDouble()*10.0;val type=if(d<10.5)ShotType.CUTBACK else ShotType.BOX_SHOT;setDistanceFromGoal(m,home,d,(.37+rng.nextDouble()*.26).toFloat());log(m,"Du legst quer auf ${w.players.getValue(id).lastName}.");if(!maybeOffside(w,m,home,id,type,rng))resolveShot(w,m,home,id,rng,p.id,type)}
-    }else{perf.turnovers++;m.passEvents.add(PassEvent(m.minute,p.clubId,p.id,0,false,m.ballX,m.ballY,m.ballX,m.ballY));log(m,"Die Hereingabe wird abgefangen.");transferPossession(w,m,!home,PossessionChangeReason.INTERCEPTION,rng,true)}
+   Decision.CROSS->{
+    val perf=ensurePerformance(w,m,p.id);perf.passesAttempted++
+    val success=(.49+((p.attributes.passing+p.attributes.technique)/2)*.0037+p.fitness*.001-(context.nearbyOpponents-2)*.018+(if(p.messiMentored).055 else 0.0)).coerceIn(.42,if(p.messiMentored).96 else .88)
+    val sx=m.ballX;val sy=m.ballY
+    if(mates.isNotEmpty()&&rng.chance(success)){
+     perf.passesCompleted++;perf.chancesCreated++
+     val preferred=targetPlayerFor(w,m,home);val id=if(preferred in mates&&rng.chance(.76))preferred else mates.maxBy{w.players.getValue(it).attributes.heading}
+     val d=6.5+rng.nextDouble()*8.0;val type=if(rng.chance(.72))ShotType.HEADER else ShotType.VOLLEY
+     setDistanceFromGoal(m,home,d,(.32+rng.nextDouble()*.36).toFloat())
+     m.passEvents.add(PassEvent(m.minute,p.clubId,p.id,id,true,sx,sy,m.ballX,m.ballY))
+     log(m,"Deine Flanke sucht ${w.players.getValue(id).lastName} im Strafraum.")
+     if(!maybeOffside(w,m,home,id,type,rng))resolveShot(w,m,home,id,rng,p.id,type)
+    }else{
+     perf.turnovers++;m.passEvents.add(PassEvent(m.minute,p.clubId,p.id,0,false,sx,sy,sx,sy))
+     log(m,"Die Flanke wird abgefangen.");transferPossession(w,m,!home,PossessionChangeReason.INTERCEPTION,rng,true)
+    }
    }
-   Decision.HOLD->{p.fitness=(p.fitness+.18).coerceAtMost(100.0);stats(m,home).possessionTicks+=2;m.chainStep=0;m.chainTicks=0;setBallPhase(m,LivePhase.POSSESSION,home,p.id,"Ball gesichert");moveBallToward(w,m,home,LivePhase.POSSESSION,rng);log(m,"Du sicherst den Ball. Dein Team kann nachrücken.")}
+   Decision.THROUGH_PASS->{
+    val perf=ensurePerformance(w,m,p.id);perf.passesAttempted++
+    val quality=p.attributes.passing*.55+p.attributes.vision*.30+p.attributes.technique*.15
+    val success=(.43+quality*.0041+p.fitness*.0008-(context.nearbyOpponents-2)*.025+(if(p.messiMentored).07 else 0.0)).coerceIn(.34,if(p.messiMentored).94 else .84)
+    val sx=m.ballX;val sy=m.ballY
+    if(mates.isNotEmpty()&&rng.chance(success)){
+     perf.passesCompleted++;perf.chancesCreated+=2
+     val preferred=targetPlayerFor(w,m,home)
+     val id=if(preferred in mates&&rng.chance(.72))preferred else mates.maxBy{id->val q=w.players.getValue(id);q.attributes.pace+q.attributes.finishing+q.attributes.technique/2}
+     val current=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home)).distanceMeters
+     val d=(current-(6.0+rng.nextDouble()*10.0)).coerceIn(5.5,16.5)
+     setDistanceFromGoal(m,home,d,(.38+rng.nextDouble()*.24).toFloat())
+     m.passEvents.add(PassEvent(m.minute,p.clubId,p.id,id,true,sx,sy,m.ballX,m.ballY))
+     log(m,"Dein Steilpass schickt ${w.players.getValue(id).lastName} hinter die Kette.")
+     val type=if(d<=10.5)ShotType.ONE_ON_ONE else ShotType.BOX_SHOT
+     if(!maybeOffside(w,m,home,id,type,rng))resolveShot(w,m,home,id,rng,p.id,type)
+    }else{
+     perf.turnovers++;m.passEvents.add(PassEvent(m.minute,p.clubId,p.id,0,false,sx,sy,sx,sy))
+     log(m,"Der Steilpass wird gelesen und abgefangen.");transferPossession(w,m,!home,PossessionChangeReason.INTERCEPTION,rng,true)
+    }
+   }
+   Decision.HOLD->{
+    p.fitness=(p.fitness+.18).coerceAtMost(100.0);stats(m,home).possessionTicks+=2;m.chainStep=0;m.chainTicks=0
+    setBallPhase(m,LivePhase.POSSESSION,home,p.id,"Ball gesichert");moveBallToward(w,m,home,LivePhase.POSSESSION,rng)
+    log(m,"Du sicherst den Ball. Dein Team kann nachrücken.")
+   }
    Decision.FOUL->{
     stats(m,home).fouls++;addStoppageTime(m,7);val type=queueSetPiece(w,m,!home,p.id,rng);log(m,"Du stoppst den Gegenspieler. ${type.label} für den Gegner.")
     if(rng.chance(.65))card(w,m,p.id,false) else showQueuedSetPiece(w,m,rng)
@@ -1017,7 +1095,6 @@ object MatchEngine {
   m.pendingDecision=false;m.decisionAssistId=0;m.decisionCooldown=m.minute+8;m.rngState=rng.state
   if(!m.incidentPause&&m.pendingSetPieceClubId==0&&m.pendingCornerClubId==0&&m.pendingPossessionClubId==0&&m.pendingVarShotIndex<0&&periodComplete(m))endCurrentPeriod(w,m,rng)
  }
-
  fun setConserveEnergy(w: World,m: LiveMatch,clubId: Int=w.user.clubId,enabled: Boolean){
   require(!m.finished){"Das Spiel ist beendet."};val home=clubId==m.homeId;require(home||clubId==m.awayId)
   if(home){m.homeConserveEnergy=enabled;if(enabled){m.homeAllOutAttack=false;m.homeControlGame=false}}else{m.awayConserveEnergy=enabled;if(enabled){m.awayAllOutAttack=false;m.awayControlGame=false}}
