@@ -199,7 +199,7 @@ object MatchEngine {
    role*p.fit(slot)*(.70+p.fitness*.003).coerceIn(.72,1.0)
   }}.sum()
   if(count==0)return 4.0
-  val effective=effectiveTactics(w,m,home);val pressLevel=effective.pressing
+  val pressLevel=effective.pressing
   val lineLevel=effective.line
   val pressFactor=.88+pressLevel*.035
   val lineFactor=.97+(lineLevel-3)*.018
@@ -342,7 +342,7 @@ object MatchEngine {
  }
 
  private fun strength(w: World,m: LiveMatch,home: Boolean,attack: Boolean): Double {
-  val c=w.clubs.getValue(clubId(m,home));val ids=xi(m,home);val slots=Formations.positions(formation(m,home))
+  val c=w.clubs.getValue(clubId(m,home));val effective=effectiveTactics(w,m,home);val ids=xi(m,home);val slots=Formations.positions(formation(m,home))
   val value=ids.mapIndexed{i,id->val p=w.players[id];if(p==null||id in m.injured)0.0 else{
    val slot=slots.getOrElse(i){p.position}
    val skill=if(attack)p.attributes.overall(slot)*.58+p.attributes.passing*.20+p.attributes.finishing*.22 else p.attributes.overall(slot)*.64+p.attributes.tackling*.25+p.attributes.vision*.11
@@ -1012,7 +1012,7 @@ object MatchEngine {
 
  private fun playerDecisionContext(w:World,m:LiveMatch):PlayerDecisionContext{
   val p=w.self();val home=p.clubId==m.homeId
-  if(!home&&p.clubId!=m.awayId)return PlayerDecisionContext(0,0,"unbekannt")
+  if(!home&&p.clubId!=m.awayId)return PlayerDecisionContext(0.0,0,"unbekannt")
   val distance=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home)).distanceMeters.roundToInt().coerceIn(1,105)
   val opponents=xi(m,!home).filter{it!=0&&it !in m.sentOff&&it !in m.injured&&it in w.players}
   val defenders=opponents.count{w.players[it]?.position in setOf(Position.IV,Position.LV,Position.RV,Position.DM)}
@@ -1024,7 +1024,7 @@ object MatchEngine {
   val maxNearby=minOf(6,maxOf(1,defenders+2),maxOf(1,opponents.size-1))
   nearby=nearby.coerceIn(1,maxNearby)
   val label=when(nearby){1->"sehr wenige";2->"wenige";3->"mehrere";else->"viele"}
-  return PlayerDecisionContext(distance,nearby,label)
+  return PlayerDecisionContext(distance.toDouble(),nearby,label)
  }
 
  fun decide(w: World,m: LiveMatch,decision: Decision){
