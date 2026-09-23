@@ -876,6 +876,19 @@ object MatchEngine {
   }
 
 
+  val keeperDelayContext=m.liveDetail.contains("Torwart",true)||m.possessionChangeReason==PossessionChangeReason.SAVE
+  if(keeperDelayContext){
+   m.keeperControlSeconds=if(rng.chance(.004))9 else rng.int(3,7)
+   if(m.keeperControlSeconds>8){
+    val attackingHome=!ownerHome
+    val taker=moverFor(w,m,attackingHome,rng)
+    setBallPhase(m,LivePhase.CORNER,attackingHome,taker,"Ecke nach Torwart-Zeitspiel",PossessionChangeReason.GOALKEEPER_DELAY)
+    queueCorner(w,m,attackingHome,taker,rng)
+    log(m,"Der Torwart hält den Ball länger als acht Sekunden – Ecke für ${w.clubs.getValue(clubId(m,attackingHome)).shortName}.","bad")
+    m.keeperControlSeconds=0;m.rngState=rng.state;return
+   }
+  }else m.keeperControlSeconds=0
+
   if(m.minute>=45&&m.minute%6==0)for(home in listOf(true,false)){
    val note=MatchIntelligence.adapt(w,m,home,rng);if(note!=null)log(m,note,"normal")
    if(clubId(m,home)!=w.user.clubId||w.assistantCoach.autoSubstitutions)aiSub(w,m,home)
