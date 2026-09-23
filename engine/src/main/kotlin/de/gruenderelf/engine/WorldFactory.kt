@@ -186,7 +186,7 @@ object WorldFactory {
      }
     }else{
      val positions=Formations.positions("4-2-3-1")+listOf(Position.TW,Position.IV,Position.LV,Position.RV,Position.DM,Position.ZM,Position.OM,Position.LA,Position.RA,Position.ST,Position.ST)
-     positions.forEach{pos->val p=generatePlayer(w.nextIds.player++,id,leagueSeed.level,pos,rng,2026);p.number=(1..99).first{n->w.squad(id).none{it.number==n}};p.nationality="Deutschland";w.players[p.id]=p}
+     positions.forEach{pos->val p=generatePlayer(w.nextIds.player++,id,leagueSeed.level,pos,rng,2026);p.number=(1..99).first{n->w.squad(id).none{it.number==n}};p.nationality=clubSeed.country;w.players[p.id]=p}
     }
    }
   }
