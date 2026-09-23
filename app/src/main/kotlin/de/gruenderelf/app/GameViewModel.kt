@@ -40,6 +40,7 @@ class GameViewModel(application: Application): AndroidViewModel(application){
   }
  }
  private fun liveBlocked(m:LiveMatch)=m.finished||m.halfTime||m.pendingDecision||m.incidentPause||m.assistantSubPending
+ private fun liveCheckpoint(beforeMinute:Int,m:LiveMatch)=m.pendingDecision||m.halfTime||m.finished||m.incidentPause||m.assistantSubPending||m.minute/15!=beforeMinute/15
  fun startLiveRunner(){
   liveRunnerEnabled=true
   if(liveRunnerJob?.isActive==true)return
@@ -57,12 +58,13 @@ class GameViewModel(application: Application): AndroidViewModel(application){
       val live=current.live?:return@withLock
       if(!liveRunnerEnabled||live.fixtureId!=fixtureId||live.liveEventSerial!=serial||liveBlocked(live))return@withLock
       try{
-       val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->w.live?.let{MatchEngine.step(w,it)}}}
-       val after=next.live
-       val checkpoint=after!=null&&(after.minute/5!=(current.live?.minute?:0)/5||after.pendingDecision||after.halfTime||after.finished||after.incidentPause||after.assistantSubPending)
-       mutable.update{it.copy(world=next,revision=it.revision+1,error=null)}
+       val beforeMinute=live.minute
+       withContext(Dispatchers.Default){MatchEngine.step(current,live)}
+       val after=current.live
+       val checkpoint=after!=null&&liveCheckpoint(beforeMinute,after)
+       mutable.update{it.copy(world=current,revision=it.revision+1,error=null)}
        if(checkpoint){
-        try{repo.save(mutable.value.slot,next)}catch(e:CancellationException){throw e}catch(e:Exception){
+        try{repo.save(mutable.value.slot,current)}catch(e:CancellationException){throw e}catch(e:Exception){
          liveRunnerEnabled=false
          mutable.update{it.copy(error="Der Live-Checkpoint konnte nicht gespeichert werden.")}
         }
@@ -95,51 +97,57 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  fun setMatchSpeed(v: MatchSpeed){viewModelScope.launch{repo.setMatchSpeed(v)}}
  fun setSoundsEnabled(enabled: Boolean){viewModelScope.launch{repo.setSoundsEnabled(enabled)}}
  fun action(message: String?=null,block: (World)->Unit)=work{
-  val current=mutable.value.world?:return@work;val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also(block)}
-  repo.save(mutable.value.slot,next);mutable.update{it.copy(world=next,revision=it.revision+1,message=message)}
+  val current=mutable.value.world?:return@work
+  withContext(Dispatchers.Default){block(current)}
+  repo.save(mutable.value.slot,current);mutable.update{it.copy(world=current,revision=it.revision+1,message=message)}
  }
  fun startMatch()=action{require(it.live==null){"Das Spiel läuft bereits."};it.live=MatchEngine.start(it)}
  fun step(count: Int)=work{
   val current=mutable.value.world?:return@work
-  val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->val m=w.live?:return@also;repeat(count){MatchEngine.step(w,m)}}}
-  val m=next.live;if(m!=null&&(m.minute/5!=(current.live?.minute?:0)/5||m.pendingDecision||m.halfTime||m.finished))repo.save(mutable.value.slot,next)
-  mutable.update{it.copy(world=next,revision=it.revision+1)}
+  val beforeMinute=current.live?.minute?:0
+  withContext(Dispatchers.Default){current.live?.let{m->repeat(count){if(!m.finished)MatchEngine.step(current,m)}}}
+  val m=current.live;if(m!=null&&liveCheckpoint(beforeMinute,m))repo.save(mutable.value.slot,current)
+  mutable.update{it.copy(world=current,revision=it.revision+1)}
  }
  // Der automatische Livetakt nutzt absichtlich nicht den globalen busy-Status.
  // Dadurch bleiben Taktik-, Pause- und Wechselknöpfe zwischen den einzelnen Minuten bedienbar.
  fun liveStep(){viewModelScope.launch{lock.withLock{
   try{
    val current=mutable.value.world?:return@withLock
-   val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->w.live?.let{MatchEngine.step(w,it)}}}
-   val m=next.live;if(m!=null&&(m.minute/5!=(current.live?.minute?:0)/5||m.pendingDecision||m.halfTime||m.finished||m.incidentPause||m.assistantSubPending))repo.save(mutable.value.slot,next)
-   mutable.update{it.copy(world=next,revision=it.revision+1,error=null)}
+   val m=current.live?:return@withLock
+   val beforeMinute=m.minute
+   withContext(Dispatchers.Default){MatchEngine.step(current,m)}
+   if(liveCheckpoint(beforeMinute,m))repo.save(mutable.value.slot,current)
+   mutable.update{it.copy(world=current,revision=it.revision+1,error=null)}
   }catch(e: CancellationException){throw e}catch(e: Exception){mutable.update{it.copy(error=if(e is IllegalArgumentException||e is IllegalStateException)e.message?:"Aktion nicht möglich." else "Die Live-Simulation konnte nicht fortgesetzt werden.")}}
  }}}
  fun liveAction(block: (World)->Unit){viewModelScope.launch{lock.withLock{
   try{
    val current=mutable.value.world?:return@withLock
-   val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also(block)}
-   repo.save(mutable.value.slot,next);mutable.update{it.copy(world=next,revision=it.revision+1,error=null)}
+   withContext(Dispatchers.Default){block(current)}
+   // Live-Aktionen werden beim nächsten 15-Minuten-/Ereignis-Checkpoint persistiert.
+   // Dadurch lösen Slider, Taktikschalter und Wechsel keine Vollwelt-GZIP-Saves mehr aus.
+   mutable.update{it.copy(world=current,revision=it.revision+1,error=null)}
   }catch(e: CancellationException){throw e}catch(e: Exception){mutable.update{it.copy(error=if(e is IllegalArgumentException||e is IllegalStateException)e.message?:"Aktion nicht möglich." else "Die Live-Aktion konnte nicht bestätigt werden.")}}
  }}}
  fun simulateToHalf()=run{stopLiveRunner();work{
   val current=mutable.value.world?:return@work
-  val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->
-   val m=w.live?:error("Es läuft kein Spiel.")
+  withContext(Dispatchers.Default){
+   val m=current.live?:error("Es läuft kein Spiel.")
    require(!m.finished){"Das Spiel ist bereits beendet."}
    require(m.period==1&&!m.halfTime){"Die erste Halbzeit ist bereits vorbei."}
-   MatchEngine.fastForward(w,m,true)
-  }}
-  repo.save(mutable.value.slot,next);mutable.update{it.copy(world=next,revision=it.revision+1,message="Bis zur Halbzeit simuliert.")}
+   MatchEngine.fastForward(current,m,true)
+  }
+  repo.save(mutable.value.slot,current);mutable.update{it.copy(world=current,revision=it.revision+1,message="Bis zur Halbzeit simuliert.")}
  }}
  fun simulateMatch()=run{stopLiveRunner();work{
   val current=mutable.value.world?:return@work
-  val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->
-   val m=w.live?:error("Es läuft kein Spiel.")
+  withContext(Dispatchers.Default){
+   val m=current.live?:error("Es läuft kein Spiel.")
    require(!m.finished){"Das Spiel ist bereits beendet."}
-   MatchEngine.fastForward(w,m,false)
-  }}
-  repo.save(mutable.value.slot,next);mutable.update{it.copy(world=next,revision=it.revision+1,message="Spiel vollständig simuliert.")}
+   MatchEngine.fastForward(current,m,false)
+  }
+  repo.save(mutable.value.slot,current);mutable.update{it.copy(world=current,revision=it.revision+1,message="Spiel vollständig simuliert.")}
  }}
  fun decide(d: Decision)=liveAction{w->w.live?.let{MatchEngine.decide(w,it,d)}}
  fun changeFormation(formation: String)=liveAction{w->w.live?.let{MatchEngine.changeFormation(w,it,w.user.clubId,formation)}}
