@@ -22,7 +22,7 @@ object CompetitionRulesEngine {
   val level=league?.let{RealModeDatabase.levelForTier(it.tier)}?:fixture.tier.coerceAtLeast(1)
   return when(fixture.competition){
    CompetitionType.CHAMPIONS_LEAGUE,CompetitionType.EUROPA_LEAGUE->CompetitionRuleSet(varEnabled=true,extraTimeAdditionalSubstitution=true)
-   CompetitionType.NATIONAL_CUP->CompetitionRuleSet(varEnabled=true,extraTimeAdditionalSubstitution=true)
+   CompetitionType.NATIONAL_CUP,CompetitionType.CLUB_WORLD_CUP,CompetitionType.ETERNAL_CROWN->CompetitionRuleSet(varEnabled=true,extraTimeAdditionalSubstitution=true)
    CompetitionType.LEAGUE->CompetitionRuleSet(varEnabled=!w.privateTopClubMode||level<=2,extraTimeAdditionalSubstitution=false)
    CompetitionType.EURO_ELITE->CompetitionRuleSet(varEnabled=true,extraTimeAdditionalSubstitution=true)
   }
