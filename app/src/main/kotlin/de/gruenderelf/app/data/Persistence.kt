@@ -8,6 +8,11 @@ import androidx.datastore.preferences.preferencesDataStore
 import de.gruenderelf.engine.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.Base64
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 @Entity(tableName="savegames",indices=[Index(value=["slot"],unique=true)])
 data class Savegame(@PrimaryKey val id: Int,val slot: Int,val clubName: String,val season: Int,val matchday: Int,val leagueName: String,val difficulty: String,val updatedAt: Long,val worldJson: String,@ColumnInfo(defaultValue="2") val saveVersion: Int=2)
@@ -36,6 +41,18 @@ abstract class SaveDatabase: RoomDatabase(){
   fun open(context: Context,name: String="gruenderelf.db")=Room.databaseBuilder(context,SaveDatabase::class.java,name).setJournalMode(JournalMode.WRITE_AHEAD_LOGGING).addMigrations(MIGRATION_1_2).addCallback(object: Callback(){override fun onOpen(db: SupportSQLiteDatabase){super.onOpen(db);db.execSQL("PRAGMA synchronous=FULL")}}).build()
  }
 }
+private const val SAVE_STORAGE_PREFIX="gz1:"
+private fun encodeStoredWorld(raw:String):String{
+ val out=ByteArrayOutputStream()
+ GZIPOutputStream(out).bufferedWriter(Charsets.UTF_8).use{it.write(raw)}
+ return SAVE_STORAGE_PREFIX+Base64.getEncoder().encodeToString(out.toByteArray())
+}
+private fun decodeStoredWorld(stored:String):String{
+ if(!stored.startsWith(SAVE_STORAGE_PREFIX))return stored
+ val packed=Base64.getDecoder().decode(stored.removePrefix(SAVE_STORAGE_PREFIX))
+ return GZIPInputStream(ByteArrayInputStream(packed)).bufferedReader(Charsets.UTF_8).use{it.readText()}
+}
+
 private val Context.settings by preferencesDataStore(name="einstellungen")
 class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.open(context)){
  private val settings=context.applicationContext.settings
@@ -46,10 +63,20 @@ class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.
  val soundsEnabled=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[soundKey]?:true}
  suspend fun setMatchSpeed(value: MatchSpeed){settings.edit{it[speedKey]=value.name;it[fastKey]=value==MatchSpeed.FAST}}
  suspend fun setSoundsEnabled(enabled: Boolean){settings.edit{it[soundKey]=enabled}}
- suspend fun load(slot: Int): World=withContext(Dispatchers.IO){require(slot in 1..5);val row=db.saves().get(slot)?:error("Dieser Speicherplatz ist leer.");val w=SaveCodec.decode(row.worldJson);if(row.saveVersion!=SAVE_VERSION||row.worldJson!=SaveCodec.encode(w))save(slot,w);settings.edit{it[lastKey]=slot};w}
+ suspend fun load(slot: Int): World=withContext(Dispatchers.IO){
+  require(slot in 1..5)
+  val row=db.saves().get(slot)?:error("Dieser Speicherplatz ist leer.")
+  val raw=decodeStoredWorld(row.worldJson)
+  val w=SaveCodec.decode(raw)
+  val canonical=SaveCodec.encode(w)
+  if(row.saveVersion!=SAVE_VERSION||!row.worldJson.startsWith(SAVE_STORAGE_PREFIX)||raw!=canonical)save(slot,w)
+  settings.edit{it[lastKey]=slot};w
+ }
  suspend fun save(slot: Int,w: World)=withContext(Dispatchers.IO+NonCancellable){
-  require(slot in 1..5){"Es gibt fünf Speicherplätze."};val payload=SaveCodec.encode(w)
-  require(payload.toByteArray().size<=32*1024*1024){"Der Spielstand überschreitet 32 MB."}
+  require(slot in 1..5){"Es gibt fünf Speicherplätze."}
+  val raw=SaveCodec.encode(w)
+  val payload=encodeStoredWorld(raw)
+  require(payload.toByteArray(Charsets.UTF_8).size<=32*1024*1024){"Der komprimierte Spielstand überschreitet 32 MB."}
   val row=Savegame(slot,slot,w.club().name,w.calendar.season,w.calendar.matchday,WorldFactory.leagueName(w,w.club().tier),w.user.difficulty.label,System.currentTimeMillis(),payload,SAVE_VERSION)
   db.withTransaction{db.saves().put(row)};settings.edit{it[lastKey]=slot}
  }
