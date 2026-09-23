@@ -26,7 +26,7 @@ class EuropeanExpansionTest {
   val cups=EuropeanLeagueData.domesticCups
   assertEquals(cups.size,cups.map{it.id}.distinct().size)
   val countries=cups.map{it.country}.toSet()
-  listOf("Deutschland","England","Spanien","Italien","Frankreich","Kroatien","Russland","Niederlande","Belgien","Österreich","Polen","Schweden").forEach{
+  listOf("Deutschland","England","Spanien","Italien","Frankreich","Kroatien","Russland","Niederlande","Belgien","Österreich","Polen","Schweden","Portugal","Türkei","Schweiz","Schottland","Griechenland","Tschechien","Dänemark","Serbien","Ukraine","Norwegen").forEach{
    assertTrue(it in countries,"Nationaler Pokal fehlt fuer $it")
   }
   assertEquals("Copa del Rey",EuropeanLeagueData.cupById("COPA_DEL_REY")?.name)
