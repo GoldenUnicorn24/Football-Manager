@@ -231,6 +231,37 @@ class EngineTest {
   assertTrue(Position.ZM in p.secondaryOptions(),"ZM sollte als natürliche Nebenposition eines DM angeboten werden")
   assertTrue(p.fit(Position.ZM)>=.95,"Positionsnähe DM/ZM zu niedrig: ${p.fit(Position.ZM)}")
  }
+ @Test fun fantasyCrownCanBeDisabledBeforeCareerCreation(){
+  val selected=RealModeDatabase.leagues.first().clubs.first()
+  val me=PlayerDraft(firstName="Cup",lastName="Probe",number=77,position=Position.ZM)
+  val disabled=WorldFactory.createRealModeWorld(250521L,selected.key,me,false)
+  assertFalse(disabled.fantasyCupEnabled)
+  assertTrue(disabled.fixtures.none{it.competition==CompetitionType.ETERNAL_CROWN})
+ }
+
+ @Test fun realRosterSeedsHaveNoPlaceholderNamesOrInvalidCoreFields(){
+  val seeded=RealModeDatabase.options.filter{it.players.isNotEmpty()}
+  assertTrue(seeded.isNotEmpty())
+  for(club in seeded){
+   assertTrue(club.players.size>=20,"${club.name}: verifizierter Kader hat nur ${club.players.size} Spieler")
+   assertEquals(club.players.size,club.players.map{it.name.trim().lowercase()}.toSet().size,"${club.name}: doppelte Spielernamen")
+   for(p in club.players){
+    assertTrue(p.name.isNotBlank()&&!p.name.startsWith("Spieler ",ignoreCase=true)&&!p.name.equals("Spieler",ignoreCase=true),"${club.name}: Platzhaltername ${p.name}")
+    assertTrue(p.born in 1980..2010,"${club.name}: unplausibles Geburtsjahr bei ${p.name}: ${p.born}")
+    assertTrue(p.number in 1..99,"${club.name}: ungültige Nummer bei ${p.name}: ${p.number}")
+    assertTrue(p.rating in 45..94,"${club.name}: ungültiges Rating bei ${p.name}: ${p.rating}")
+   }
+  }
+ }
+
+ @Test fun compactRealModeSaveStaysBelowLegacy32MbJsonLimit(){
+  val selected=RealModeDatabase.leagues.first().clubs.first()
+  val w=WorldFactory.createRealModeWorld(250522L,selected.key,PlayerDraft(firstName="Save",lastName="Probe",number=76))
+  val bytes=SaveCodec.encode(w).toByteArray(Charsets.UTF_8).size
+  println("COMPACT_REAL_SAVE_BYTES=$bytes")
+  assertTrue(bytes<32*1024*1024,"Kompakter Real-Modus-Spielstand ist noch zu groß: $bytes Bytes")
+ }
+
 }
 object SaveProcessProbe {
  @JvmStatic fun main(args: Array<String>){
