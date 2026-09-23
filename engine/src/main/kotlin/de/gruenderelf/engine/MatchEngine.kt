@@ -1303,6 +1303,24 @@ object MatchEngine {
   resumeIncident(w,m)
  }
 
+ fun fastForward(w:World,m:LiveMatch,untilBreak:Boolean=false){
+  val startPeriod=m.period
+  var guard=0
+  while(!m.finished&&guard++<5000){
+   if(untilBreak&&m.halfTime)break
+   when{
+    m.assistantSubPending->acceptAssistantSubstitution(w,m)
+    m.incidentPause->autoResolveIncident(w,m)
+    m.pendingDecision->decide(w,m,Decision.SHOOT)
+    m.halfTime->{if(untilBreak)break else secondHalf(m)}
+    else->step(w,m)
+   }
+   if(untilBreak&&m.halfTime)break
+  }
+  require(m.finished||m.halfTime||(!untilBreak&&guard<5000)){"Die Schnellsimulation konnte die Partie nicht abschließen."}
+  if(untilBreak)require(m.finished||m.halfTime||m.period!=startPeriod){"Die Schnellsimulation hat keinen gültigen Haltepunkt erreicht."}
+ }
+
  fun simulateFullMatch(w: World,f: Fixture): LiveMatch{val m=start(w,f);while(!m.finished){when{m.assistantSubPending->acceptAssistantSubstitution(w,m);m.incidentPause->autoResolveIncident(w,m);m.pendingDecision->decide(w,m,Decision.SHOOT);m.halfTime->secondHalf(m);else->step(w,m)}};return m}
 
  fun record(w: World,m: LiveMatch){
