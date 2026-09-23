@@ -13,7 +13,7 @@ import de.gruenderelf.engine.*
  var scoutId by rememberSaveable{mutableIntStateOf(w.watchlist.firstOrNull()?:w.players.values.firstOrNull{!it.retired&&it.clubId!=w.user.clubId}?.id?:0)}
  var scoutRegion by rememberSaveable{mutableStateOf(ScoutRegion.DOMESTIC)}
  var tacticName by rememberSaveable{mutableStateOf("Mein Matchplan")}
- Page("Manager-Zentrale","GRÜNDERELF · v0.5.18"){
+ Page("Manager-Zentrale","GRÜNDERELF · v0.5.21"){
   Section("Changelog & erneuertes Tutorial"){
    Text("v0.5.18 stellt die in der aktuellen APK enthaltenen Manager-Systeme wieder her.",color=Grass)
    Text("Neu bzw. wiederhergestellt: U19/U23-Spielbetrieb, Potenzialtraining, Scouting-Zentrale und Watchlist, Verkauf/Verleih eigener Spieler, Medizincheck & Registrierung, Transferhistorie, Konkurrenzangebote, Co-Trainer-Profile, Benachrichtigungen, Taktik-Zentrale sowie Matchanalyse mit Passdaten.",color=Muted)
