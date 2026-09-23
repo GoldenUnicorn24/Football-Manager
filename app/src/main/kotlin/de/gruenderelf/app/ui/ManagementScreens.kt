@@ -12,7 +12,7 @@ import de.gruenderelf.engine.*
 @Composable fun MoreScreen(onNavigate: (String)->Unit,onMenu: ()->Unit){Page("Hinter der Bande","VEREIN & VERANTWORTUNG"){listOf("verein" to "Verein, Finanzen & Partner","training" to "Training & Co-Trainer","transfers" to "Transfers & Jugend","karriere" to "Deine Karriere","editor" to "Editor","v0518" to "v0.5.18 Manager-Zentrale","einstellungen" to "Einstellungen","speichern" to "Speicherstände").forEach{(route,label)->Action(label,secondary=true){onNavigate(route)}};Section("Gründerelf · 0.5.18"){Text("Offline. Ohne Werbung. Ohne Käufe.",color=Grass);Text("Wiederhergestellt aus der aktuellen APK: U19/U23, Scouting, Verkauf/Verleih, Medizincheck & Registrierung, Potenzialtraining, Matchanalyse, Benachrichtigungen und erneuertes Tutorial.",color=Muted);Text("Die Manager-Zentrale bündelt die neuen v0.5.18-Systeme.",color=Muted,style=MaterialTheme.typography.bodySmall)};Action("Speichern & zum Startbildschirm",secondary=true,onClick=onMenu)}}
 
 @Composable fun TrainingScreen(w: World,vm: GameViewModel){
- val effective=TrainingEngine.effectiveDays(w);val amateur=w.club().tier>=7;val assistant=w.assistantCoach
+ val effective=TrainingEngine.effectiveDays(w);val amateur=!w.privateTopClubMode&&w.club().tier>=7;val assistant=w.assistantCoach
  var playerId by remember{mutableIntStateOf(w.user.playerId)};var focus by remember{mutableStateOf(Focus.FINISHING)}
  var intensivePlayerId by rememberSaveable{mutableIntStateOf(w.user.playerId)};var intensiveFocus by rememberSaveable{mutableStateOf(Focus.TECHNIQUE)};var intensiveConfirm by remember{mutableStateOf<Int?>(null)}
  var masterclassPlayerId by rememberSaveable{mutableIntStateOf(w.user.playerId)};var masterclassConfirm by remember{mutableStateOf<Int?>(null)}
@@ -74,7 +74,7 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
   }
   Section(s.name){Text("${s.surface.label} · ${s.capacity} Plätze · ${s.seats} Sitzplätze");Text(if(s.floodlights)"Flutlicht vorhanden" else "Noch ohne Flutlicht",color=if(s.floodlights)Grass else Muted);Meter("Platzqualität",s.pitchQuality)}
   if(w.construction.isNotEmpty())Section("Laufende Arbeiten"){w.construction.forEach{p->Text(p.facility.label,style=MaterialTheme.typography.titleMedium);LinearProgressIndicator(progress={1f-p.weeksLeft.toFloat()/p.totalWeeks},modifier=Modifier.fillMaxWidth());Text("Noch ${p.weeksLeft} von ${p.totalWeeks} Wochen",color=Muted)}}
-  Text("${if(c.tier>=7)1 else 2} gleichzeitige Baustelle(n)",color=Muted)
+  Text("${if(!w.privateTopClubMode&&c.tier>=7)1 else 2} gleichzeitige Baustelle(n)",color=Muted)
   Facility.entries.forEach{f->Section(f.label){if(f !in listOf(Facility.FLOODLIGHTS,Facility.ARTIFICIAL,Facility.CAPACITY))Meter("Ausbaustand",ConstructionEngine.level(s,f));Text(facilityEffect(f));Text("${euros(ConstructionEngine.price(w,f))} · ${ConstructionEngine.weeks(w,f)} Wochen",color=Grass);val reason=ConstructionEngine.reason(w,f);Action("Ausbau beauftragen",reason==null&&w.live==null){confirm=f};if(reason!=null)Text(reason,color=Muted,style=MaterialTheme.typography.bodySmall)}}
  }
  confirm?.let{f->Confirm("${f.label} bauen?","${euros(ConstructionEngine.price(w,f))} werden sofort bezahlt. Bauzeit: ${ConstructionEngine.weeks(w,f)} Wochen.",{confirm=null}){confirm=null;vm.action{ConstructionEngine.start(it,f)}}}

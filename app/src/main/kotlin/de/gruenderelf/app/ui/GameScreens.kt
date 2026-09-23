@@ -77,10 +77,12 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
 @Composable fun LeagueScreen(w: World){
  val real=w.privateTopClubMode;val cupName=CompetitionEngine.displayName(w,CompetitionType.NATIONAL_CUP)
  val ownLeague=w.leagues.first{w.user.clubId in it.clubIds};val ownCountry=WorldFactory.leagueCountry(w,ownLeague.tier)
- val competitionOptions=if(real)listOf("Liga",cupName,CompetitionType.CHAMPIONS_LEAGUE.label,CompetitionType.EUROPA_LEAGUE.label) else listOf("Liga",cupName,CompetitionType.EURO_ELITE.label)
+ val realCups=if(real)CompetitionEngine.userDomesticCups(w) else emptyList()
+ val cupNames=if(real)realCups.map{it.name} else listOf(cupName)
+ val competitionOptions=if(real)listOf("Liga")+cupNames+listOf(CompetitionType.CHAMPIONS_LEAGUE.label,CompetitionType.EUROPA_LEAGUE.label) else listOf("Liga",cupName,CompetitionType.EURO_ELITE.label)
  var competition by rememberSaveable{mutableStateOf("Liga")};var country by rememberSaveable(w.user.clubId,w.calendar.season){mutableStateOf(ownCountry)};var tier by rememberSaveable(w.user.clubId,w.calendar.season){mutableIntStateOf(ownLeague.tier)};var day by rememberSaveable(w.calendar.season){mutableIntStateOf(w.calendar.matchday)};var fullTable by rememberSaveable{mutableStateOf(false)};var group by rememberSaveable{mutableStateOf("A")};var euroRound by rememberSaveable(w.calendar.season){mutableIntStateOf(1)}
  if(competition !in competitionOptions)competition="Liga"
- val eyebrow=if(real)"LIGEN · DFB-POKAL · CHAMPIONS LEAGUE · EUROPA LEAGUE" else "LIGA · GRÜNDERPOKAL · EUROPA-ELITELIGA"
+ val eyebrow=if(real)"LIGEN · NATIONALE POKALE · CHAMPIONS LEAGUE · EUROPA LEAGUE" else "LIGA · GRÜNDERPOKAL · EUROPA-ELITELIGA"
  Page("Wettbewerbe",eyebrow){
   Pick("Wettbewerb",competition,competitionOptions,{it}){competition=it}
   when(competition){
@@ -96,10 +98,19 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
     Pick("Spieltag",day,(1..rounds).toList(),{"Spieltag $it"}){day=it}
     w.fixtures.filter{it.competition==CompetitionType.LEAGUE&&it.tier==tier&&it.matchday==day}.forEach{f->Section{CompetitionResultRow(w,f)}}
    }
-   cupName->{
-    val count=w.fixtures.count{it.competition==CompetitionType.NATIONAL_CUP&&it.round==1}
-    Section(cupName){Text("${count*2} Vereine · sechs K.-o.-Runden · jede Runde ein Spiel. Bei Gleichstand folgen Verlängerung und Elfmeterschießen.",color=Muted);if(real)Text("Im DFB-Pokal starten 64 deutsche Vereine aus dem im Spiel enthaltenen Ligabaum.",color=Grass);val own=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP&&(it.homeId==w.user.clubId||it.awayId==w.user.clubId)};if(own.isEmpty())Text("Dein Verein ist in dieser Saison nicht qualifiziert.",color=Muted)else Text("Dein Weg: ${own.count{it.played}} von ${own.size} bislang angesetzten Partien.",color=Grass)}
-    val rounds=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP}.groupBy{it.round}.toSortedMap();rounds.forEach{(_,games)->Section(games.first().stage){games.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}}
+   in cupNames->{
+    val spec=realCups.firstOrNull{it.name==competition}
+    val games=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP&&(!real||spec==null||CompetitionEngine.cupId(w,it)==spec.id)}
+    val firstRound=games.minOfOrNull{it.round}?:1
+    val count=games.count{it.round==firstRound}
+    val plannedRounds=spec?.roundNames?.size?:6
+    Section(competition){
+     Text("${count*2} Vereine · ${plannedRounds} K.-o.-Runden · jede Runde ein Spiel. Bei Gleichstand folgen Verlängerung und Elfmeterschießen.",color=Muted)
+     if(real&&spec!=null)Text("${spec.name} · ${spec.country} · eigener, unabhängig ausgeloster Pokalbaum.",color=Grass)
+     val own=games.filter{it.homeId==w.user.clubId||it.awayId==w.user.clubId}
+     if(own.isEmpty())Text("Dein Verein ist in dieser Saison nicht qualifiziert.",color=Muted)else Text("Dein Weg: ${own.count{it.played}} von ${own.size} bislang angesetzten Partien.",color=Grass)
+    }
+    val rounds=games.groupBy{it.round}.toSortedMap();rounds.forEach{(_,roundGames)->Section(roundGames.first().stage){roundGames.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}}
    }
    else->{
     val type=when(competition){CompetitionType.CHAMPIONS_LEAGUE.label->CompetitionType.CHAMPIONS_LEAGUE;CompetitionType.EUROPA_LEAGUE.label->CompetitionType.EUROPA_LEAGUE;else->CompetitionType.EURO_ELITE}
