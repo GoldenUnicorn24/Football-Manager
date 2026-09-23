@@ -37,4 +37,19 @@ class RecoveryV0518Test {
   val w=WorldFactory.createWorld(51806L);val tired=w.squad().first{!it.youth};tired.fitness=50.0;tired.contractYears=1;assertTrue(tired.id in NotificationSystem.unreadTired(w));assertTrue(tired.id in NotificationSystem.unreadExpiring(w));NotificationSystem.markTiredSeen(w);NotificationSystem.markContractsSeen(w);assertFalse(tired.id in NotificationSystem.unreadTired(w));assertFalse(tired.id in NotificationSystem.unreadExpiring(w))
   val m=MatchEngine.start(w);m.minute=31;m.shotEvents+=ShotEvent(10,w.user.clubId,tired.id,xg=.25);m.shotEvents+=ShotEvent(30,w.user.clubId,tired.id,xg=.40);m.passEvents+=PassEvent(12,w.user.clubId,tired.id,w.user.playerId,true,.2f,.3f,.4f,.5f);MatchAnalysisSystem.recordTacticChange(w,m,w.user.clubId,"Pressing erhöht");val timeline=MatchAnalysisSystem.xgTimeline(m,w.user.clubId);assertTrue(timeline.last().second>=.65);val network=MatchAnalysisSystem.passNetwork(m,w.user.clubId);assertTrue(network.first.isNotEmpty());assertTrue(network.second.single().count==1);assertEquals(1,m.tacticChanges.size)
  }
+ @Test fun emergencyYouthCallUpAutomaticallyReturnsAfterNextLeagueMatch(){
+  val w=WorldFactory.createWorld(51807L);val youth=w.squad().first{it.youth};youth.birthYear=w.calendar.season-18;youth.youthSquad=YouthSquad.U19
+  YouthCompetitionSystem.callUp(w,youth.id);assertTrue(youth.temporarySeniorCallUp);assertFalse(youth.youth)
+  val fixture=w.nextFixture()!!;val m=MatchEngine.simulateFullMatch(w,fixture);w.live=m;SeasonEngine.advanceWeek(w)
+  assertTrue(youth.youth);assertFalse(youth.temporarySeniorCallUp);assertEquals(YouthSquad.U19,youth.youthSquad)
+ }
+
+ @Test fun outboundTransferRunsReceivingClubMedicalBeforeCompletion(){
+  val w=WorldFactory.createWorld(51808L);val p=w.squad().first{!it.youth&&it.id!=w.user.playerId};p.hidden.injuryProneness=3;p.injuryWeeks=0;p.wantsMove=true
+  val buyer=w.clubs.values.filter{it.id!=w.user.clubId}.maxBy{TransferInterestSystem.score(w,p,it.id)};buyer.budget=50_000_000L
+  val o=TransferOffer(id=w.nextIds.negotiation++,buyerClubId=buyer.id,sellerClubId=w.user.clubId,playerId=p.id,type=DealType.BUY,role=SquadRole.ROTATION,fee=1_000L,wage=maxOf(5,p.wage),status=NegotiationStatus.COUNTER,stage=TransferStage.CLUB);w.negotiations[o.id]=o
+  OutboundTransferSystem.accept(w,o.id)
+  assertEquals(NegotiationStatus.COMPLETED,o.status);assertEquals(TransferStage.COMPLETED,o.stage);assertTrue(o.medicalPassed);assertTrue(o.medicalNote.contains("aufnehmenden Verein"));assertEquals(buyer.id,p.clubId)
+ }
+
 }
