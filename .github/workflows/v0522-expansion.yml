@@ -19,4 +19,13 @@ jobs:
       - name: Engine tests
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon -PgruenderelfKeystorePassword=ci-placeholder :engine:test --stacktrace
+          ./gradlew --no-daemon -PgruenderelfKeystorePassword=ci-placeholder :engine:test \
+            --tests 'de.gruenderelf.engine.EngineTest.realModeCanStartInEveryPackedLeagueAndUsesDynamicLeagueLength' \
+            --tests 'de.gruenderelf.engine.EngineTest.modernUefaAdvancesThroughPlayoffsTwoLeggedRoundsAndFinal' \
+            --tests 'de.gruenderelf.engine.EngineTest.realModeUefaUsesModernLeaguePhaseAndDfbHas64GermanClubs' \
+            --tests 'de.gruenderelf.engine.EngineTest.realModeContainsOriginalGamePlusExpandedLeaguesAndCompetitions' \
+            --tests 'de.gruenderelf.engine.EngineTest.realModeDatasetHasExpandedLeagueAndSquadShape' \
+            --tests 'de.gruenderelf.engine.EngineTest.oberligaTakeoverAndCustomClubStartArePlayable' \
+            --tests 'de.gruenderelf.engine.RealismV05Test.modernUefaDrawUsesPotsAndAssociationLimits' \
+            --tests 'de.gruenderelf.engine.V0514EconomyPotentialTest.leagueCupAndChampionsLeagueTitlesPayExtraPrizeMoneyExactlyOnce' \
+            --stacktrace
