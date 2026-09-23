@@ -247,14 +247,12 @@ object OutboundTransferSystem {
   require(w.live==null){"Transfer erst außerhalb eines laufenden Spiels bestätigen."}
   val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED)){"Dieses Angebot kann nicht angenommen werden."}
   val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId)
+  if(TransferInterestSystem.score(w,p,buyer.id)<28&&!p.wantsMove){o.status=NegotiationStatus.REJECTED;o.message="${p.name} lehnt den Wechsel zu ${buyer.name} ab.";return}
   if(buyer.budget<o.fee+o.signingBonus){o.status=NegotiationStatus.REJECTED;o.message="${buyer.name} kann das Angebot finanziell nicht mehr hinterlegen.";return}
-  if(TransferInterestSystem.score(w,p,buyer.id)<35){o.status=NegotiationStatus.REJECTED;o.message="${p.name} lehnt den Wechsel zu ${buyer.name} ab.";return}
-  o.stage=TransferStage.MEDICAL;o.medicalRisk=(p.hidden.injuryProneness*.55+p.injuryWeeks*8+(w.calendar.season-p.birthYear-30).coerceAtLeast(0)*2.2).roundToInt().coerceIn(0,100)
-  if(o.medicalRisk>=78){o.medicalPassed=false;o.status=NegotiationStatus.REJECTED;o.medicalNote="Medizincheck beim aufnehmenden Verein nicht bestanden: Risiko ${o.medicalRisk}/100.";o.message=o.medicalNote;return}
-  o.medicalPassed=true;o.medicalNote="Medizincheck vom aufnehmenden Verein bestanden";o.message=o.medicalNote
-  o.status=NegotiationStatus.AGREED;o.stage=TransferStage.REGISTRATION;o.registrationReady=true
+  o.status=NegotiationStatus.AGREED;o.stage=TransferStage.REGISTRATION;o.medicalPassed=true;o.medicalNote="Medizincheck vom aufnehmenden Verein bestanden";o.registrationReady=true
   TransferEngine.complete(w,o.id)
-  w.negotiations.values.filter{it.id!=o.id&&it.playerId==p.id&&isOutbound(w,it)&&it.status!=NegotiationStatus.COMPLETED}.forEach{it.status=NegotiationStatus.REJECTED;it.message="Spieler hat sich für ein anderes Angebot entschieden."}
+  w.negotiations.values.filter{it.id!=o.id&&it.playerId==p.id&&isOutbound(w,it)&&it.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED)}.forEach{it.status=NegotiationStatus.REJECTED;it.message="Spieler hat sich für ein anderes Angebot entschieden."}
+  w.news(if(o.type==DealType.BUY)"Spieler verkauft" else "Leihe vereinbart","${p.name} → ${buyer.name} · ${if(o.fee>0)"${o.fee} €" else "ohne Gebühr"}${if(o.type==DealType.LOAN_OPTION&&o.buyOption>0)" · Kaufoption ${o.buyOption} €" else ""}.","good")
  }
  fun negotiate(w:World,offerId:Int,kind:String){
   val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED));val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId);o.round++
@@ -271,16 +269,25 @@ object TransferV0518System {
   val p=w.players.getValue(o.playerId)
   if(o.stage==TransferStage.MEDICAL&&!o.medicalPassed){
    o.medicalRisk=(p.hidden.injuryProneness*.55+p.injuryWeeks*8+(w.calendar.season-p.birthYear-30).coerceAtLeast(0)*2.2).roundToInt().coerceIn(0,100)
-   if(o.medicalRisk>=78){o.medicalPassed=false;o.status=NegotiationStatus.REJECTED;o.medicalNote="Medizincheck nicht bestanden: Risiko ${o.medicalRisk}/100.";o.message=o.medicalNote;return false}
-   o.medicalPassed=true;o.medicalNote="Medizincheck bestanden: Risiko ${o.medicalRisk}/100.";o.stage=TransferStage.REGISTRATION
+   if(o.medicalRisk>=78){o.medicalPassed=false;o.status=NegotiationStatus.REJECTED;o.medicalNote="Medizincheck auffällig: Risiko ${o.medicalRisk}/100. Der Transfer wird nicht registriert.";o.message=o.medicalNote;return false}
+   o.medicalPassed=true;o.medicalNote="Medizincheck bestanden · Risiko ${o.medicalRisk}/100";o.stage=TransferStage.REGISTRATION
   }
   if(o.stage!=TransferStage.REGISTRATION)return false
   val rosterOk=youthSlotValid(w,o,p)||w.squad(o.buyerClubId).count{!it.youth&&!it.retired}<32
   val budgetOk=availableBudget(w,o.buyerClubId,o.id)>=o.fee+o.signingBonus
   o.registrationReady=rosterOk&&budgetOk
   o.status=if(o.registrationReady)NegotiationStatus.AGREED else NegotiationStatus.COUNTER
-  o.message=when{!budgetOk->"Registrierung blockiert: reserviertes Budget reicht nicht aus.";!rosterOk->"Registrierung blockiert: Profikader ist voll.";else->"Medizincheck bestanden. Registrierung ist vorbereitet."}
+  o.message=o.medicalNote+when{
+   o.registrationReady->". Registrierung freigegeben – Budget und Kaderplatz sind reserviert."
+   !budgetOk->". Registrierung wartet: frei verfügbares Budget reicht aktuell nicht. Der ausgehandelte Deal bleibt bestehen und kann erneut geprüft werden."
+   else->". Registrierung wartet: Der Profikader hat bereits 32 Spieler. U19 und U23 zählen nicht zu dieser Grenze. Der Deal bleibt bestehen und kann nach einem freien Profiplatz erneut geprüft werden."
+  }
   return o.registrationReady
  }
- fun withdraw(w:World,offerId:Int){val o=w.negotiations.getValue(offerId);require(o.buyerClubId==w.user.clubId){"Nur eigene Verhandlungen können zurückgezogen werden."};require(o.status!=NegotiationStatus.COMPLETED){"Abgeschlossene Transfers können nicht zurückgezogen werden."};o.registrationReady=false;o.status=NegotiationStatus.REJECTED;o.message="Verhandlung zurückgezogen; reserviertes Budget ist wieder frei."}
+ fun withdraw(w:World,offerId:Int){
+  val o=w.negotiations.getValue(offerId);require(o.buyerClubId==w.user.clubId){"Nur eigene Kaufverhandlungen können hier zurückgezogen werden."};require(o.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED)){"Diese Verhandlung ist bereits beendet."}
+  val released=if(o.stage==TransferStage.REGISTRATION&&o.status==NegotiationStatus.AGREED&&o.registrationReady)o.fee+o.signingBonus else 0L
+  o.registrationReady=false;o.status=NegotiationStatus.REJECTED;o.message=if(released>0)"Verhandlung zurückgezogen. ${released} € reserviertes Budget und der Kaderplatz sind sofort wieder freigegeben." else "Verhandlung von dir zurückgezogen."
+  w.players[o.playerId]?.let{w.news("Verhandlung beendet: ${it.name}",o.message,"normal")}
+ }
 }
