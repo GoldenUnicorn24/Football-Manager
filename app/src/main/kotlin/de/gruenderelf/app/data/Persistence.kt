@@ -10,6 +10,11 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.util.Base64
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 
 @Entity(tableName="savegames",indices=[Index(value=["slot"],unique=true)])
 data class Savegame(@PrimaryKey val id: Int,val slot: Int,val clubName: String,val season: Int,val matchday: Int,val leagueName: String,val difficulty: String,val updatedAt: Long,val worldJson: String,@ColumnInfo(defaultValue="2") val saveVersion: Int=2)
@@ -24,7 +29,7 @@ data class SaveHeader(val id: Int,val slot: Int,val clubName: String,val season:
  @Transaction suspend fun get(slot: Int): Savegame? {
   val h=header(slot)?:return null;val size=jsonSize(slot)?:error("Spielstanddaten fehlen.");require(size in 1..(128*1024*1024)){"Spielstandgröße ungültig."}
   val out=java.io.ByteArrayOutputStream(size);var offset=1
-  while(out.size()<size){val bytes=jsonChunk(slot,offset,262144)?:error("Spielstand unvollständig.");check(bytes.isNotEmpty());out.write(bytes);offset+=bytes.size}
+  while(out.size()<size){val bytes=jsonChunk(slot,offset,1048576)?:error("Spielstand unvollständig.");check(bytes.isNotEmpty());out.write(bytes);offset+=bytes.size}
   return Savegame(h.id,h.slot,h.clubName,h.season,h.matchday,h.leagueName,h.difficulty,h.updatedAt,out.toString("UTF-8"),h.saveVersion)
  }
  @Upsert suspend fun put(save: Savegame)
@@ -39,6 +44,18 @@ abstract class SaveDatabase: RoomDatabase(){
   fun open(context: Context,name: String="gruenderelf.db")=Room.databaseBuilder(context,SaveDatabase::class.java,name).setJournalMode(JournalMode.WRITE_AHEAD_LOGGING).addMigrations(MIGRATION_1_2).addCallback(object: Callback(){override fun onOpen(db: SupportSQLiteDatabase){super.onOpen(db);db.execSQL("PRAGMA synchronous=NORMAL")}}).build()
  }
 }
+private const val SAVE_STORAGE_PREFIX="gz1:"
+private fun encodeStoredWorld(raw:String):String{
+ val out=ByteArrayOutputStream()
+ GZIPOutputStream(out).bufferedWriter(Charsets.UTF_8).use{it.write(raw)}
+ return SAVE_STORAGE_PREFIX+Base64.getEncoder().encodeToString(out.toByteArray())
+}
+private fun decodeStoredWorld(stored:String):String{
+ if(!stored.startsWith(SAVE_STORAGE_PREFIX))return stored
+ val packed=Base64.getDecoder().decode(stored.removePrefix(SAVE_STORAGE_PREFIX))
+ return GZIPInputStream(ByteArrayInputStream(packed)).bufferedReader(Charsets.UTF_8).use{it.readText()}
+}
+
 private val Context.settings by preferencesDataStore(name="einstellungen")
 class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.open(context)){
  private val saveMutex=Mutex()
@@ -57,7 +74,7 @@ class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.
   if(row==null)return null
   // OutOfMemoryError darf NICHT wie ein kaputter Save behandelt werden. Sonst würde load()
   // zusätzlich noch das Backup laden und den Speicherdruck weiter erhöhen.
-  return try{SaveCodec.decode(row.worldJson)}catch(e:Exception){null}
+  return try{SaveCodec.decode(decodeStoredWorld(row.worldJson))}catch(e:Exception){null}
  }
  private fun utf8Size(text:String):Long {
   var bytes=0L;var i=0
@@ -69,21 +86,21 @@ class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.
   return bytes
  }
  suspend fun load(slot: Int): World=withContext(Dispatchers.IO){
-  require(slot in 1..5);val dao=db.saves();var primary=dao.get(slot);val hadPrimary=primary!=null;val primaryVersion=primary?.saveVersion
+  require(slot in 1..5);val dao=db.saves();var primary=dao.get(slot);val hadPrimary=primary!=null;val primaryVersion=primary?.saveVersion;val primaryCompressed=primary?.worldJson?.startsWith(SAVE_STORAGE_PREFIX)==true
   var w=decodeOrNull(primary)
   // Die große JSON-Zeichenkette sofort freigeben, bevor ggf. ein Backup oder Re-Save folgt.
   primary=null
   if(w==null){
    var backup=dao.get(backupSlot(slot));w=decodeOrNull(backup)?:if(!hadPrimary)error("Dieser Speicherplatz ist leer.") else error("Spielstand und Sicherheitskopie sind beschädigt.")
    backup=null;dao.delete(slot);checkpoint(slot,w)
-  }else if(primaryVersion!=SAVE_VERSION){save(slot,w)}
+  }else if(primaryVersion!=SAVE_VERSION||!primaryCompressed){save(slot,w)}
   // Kein encode(w)-Vergleich mehr beim Laden. Der erzeugte früher eine zweite Vollkopie des Saves.
   settings.edit{it[lastKey]=slot};w
  }
  private fun saveRow(slot:Int,w:World,payload:String)=Savegame(slot,slot,w.club().name,w.calendar.season,w.calendar.matchday,WorldFactory.leagueName(w,w.club().tier),w.user.difficulty.label,System.currentTimeMillis(),payload,SAVE_VERSION)
  suspend fun save(slot: Int,w: World)=saveMutex.withLock{withContext(Dispatchers.IO+NonCancellable){
-  require(slot in 1..5){"Es gibt fünf Speicherplätze."};SaveCodec.requireRuntimeIntegrity(w);val payload=SaveCodec.encode(w)
-  require(utf8Size(payload)<=128L*1024*1024){"Der Spielstand überschreitet 128 MB."}
+  require(slot in 1..5){"Es gibt fünf Speicherplätze."};SaveCodec.requireRuntimeIntegrity(w);val raw=SaveCodec.encode(w);val payload=encodeStoredWorld(raw)
+  require(utf8Size(payload)<=32L*1024*1024){"Der komprimierte Spielstand überschreitet 32 MB."}
   // World ist bereits ein gültiger Engine-Zustand. Ein komplettes encode->decode nur zur Kontrolle
   // verdoppelte den Peak-RAM. Backup und Primärstand werden nun atomar aus demselben Payload geschrieben.
   val row=saveRow(slot,w,payload);val dao=db.saves();db.withTransaction{
@@ -98,8 +115,8 @@ class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.
   * Room/WAL schreibt die neue Zeile atomar; die letzte Vollsicherung bleibt als Backup erhalten.
   */
  suspend fun checkpoint(slot:Int,w:World)=saveMutex.withLock{withContext(Dispatchers.IO){
-  require(slot in 1..5);SaveCodec.requireRuntimeIntegrity(w);val payload=SaveCodec.encode(w)
-  require(utf8Size(payload)<=128L*1024*1024){"Der Spielstand überschreitet 128 MB."}
+  require(slot in 1..5);SaveCodec.requireRuntimeIntegrity(w);val raw=SaveCodec.encode(w);val payload=encodeStoredWorld(raw)
+  require(utf8Size(payload)<=32L*1024*1024){"Der komprimierte Spielstand überschreitet 32 MB."}
   db.saves().put(saveRow(slot,w,payload));settings.edit{it[lastKey]=slot}
  }}
  suspend fun delete(slot: Int)=withContext(Dispatchers.IO){db.withTransaction{db.saves().deleteWithBackup(slot,backupSlot(slot))}}
