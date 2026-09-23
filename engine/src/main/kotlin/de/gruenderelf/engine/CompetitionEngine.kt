@@ -113,7 +113,11 @@ object CompetitionEngine {
  private fun selectedCupClubs(w: World,cup: DomesticCupSeed): List<Int>{
   val candidates=cupCandidates(w,cup)
   if(candidates.isEmpty())return emptyList()
-  val ordered=candidates.sortedWith(compareByDescending<Int>{w.clubs.getValue(it).reputation}.thenBy{it})
+  val ordered=if(cup.id=="DFB_POKAL"){
+   val direct=w.leagues.filter{RealModeDatabase.countryForLeague(it.name)=="Deutschland"&&RealModeDatabase.levelForTier(it.tier)<=3}.flatMap{it.clubIds}.distinct()
+   val lower=candidates.filter{it !in direct}.sortedWith(compareByDescending<Int>{w.clubs.getValue(it).reputation}.thenBy{it})
+   (direct+lower).distinct()
+  }else candidates.sortedWith(compareByDescending<Int>{w.clubs.getValue(it).reputation}.thenBy{it})
   if(cup.maxParticipants<=0||ordered.size<=cup.maxParticipants)return ordered
   val selected=ordered.take(cup.maxParticipants).toMutableList()
   if(w.user.clubId in candidates&&w.user.clubId !in selected)selected[selected.lastIndex]=w.user.clubId
