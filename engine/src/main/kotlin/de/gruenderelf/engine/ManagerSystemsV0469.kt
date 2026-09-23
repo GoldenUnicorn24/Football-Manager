@@ -29,8 +29,9 @@ object TransferInterestSystem {
   if(best<=p.ca-4){score+=10;reasons+="sieht realistische Einsatzchancen"} else if(best>=p.ca+12){score-=8;reasons+="starke Konkurrenz auf seiner Position"}
   val age=w.calendar.season-p.birthYear
   if(age<=23&&target.academy.u23Quality>=60){score+=6;reasons+="gutes Entwicklungsumfeld"}
-  if(target.tier<(current?.tier?:target.tier)){score+=5;reasons+="höhere Spielklasse"}
-  if(target.tier>(current?.tier?:target.tier)+2){score-=7;reasons+="deutlich niedrigere Spielklasse"}
+  val targetLevel=WorldFactory.leagueLevel(w,target.tier);val currentLevel=current?.let{WorldFactory.leagueLevel(w,it.tier)}?:targetLevel
+  if(targetLevel<currentLevel){score+=5;reasons+="höhere Spielklasse"}
+  if(targetLevel>currentLevel+2){score-=7;reasons+="deutlich niedrigere Spielklasse"}
   if(!p.wantsMove&&p.clubId!=0){val loyaltyPenalty=(p.hidden.loyalty-45).coerceAtLeast(0)/5;score-=loyaltyPenalty;if(loyaltyPenalty>=7)reasons+="starke Bindung an aktuellen Verein"}
   score+=(p.hidden.ambition-55)/7
   val final=score.coerceIn(5,100)
@@ -91,7 +92,7 @@ object AssistantCoachSystem {
 }
 
 object IntensiveTrainingSystem {
- fun cost(w:World,p:Player):Long{val base=when{w.club().tier>=8->1_500L;w.club().tier>=6->6_000L;w.club().tier>=4->25_000L;w.club().tier>=2->80_000L;else->160_000L};return (base+TransferEngine.marketValue(w,p)/180L).coerceAtLeast(base)}
+ fun cost(w:World,p:Player):Long{val level=WorldFactory.leagueLevel(w,w.club().tier);val base=when{level>=8->1_500L;level>=6->6_000L;level>=4->25_000L;level>=2->80_000L;else->160_000L};return (base+TransferEngine.marketValue(w,p)/180L).coerceAtLeast(base)}
  fun potentialCost(w:World,p:Player):Long=maxOf(cost(w,p)*3/2,cost(w,p)+1_000L)
  private fun commonReason(w:World,playerId:Int,price:Long):String?{val p=w.players[playerId]?:return "Spieler nicht gefunden.";return when{w.live!=null->"Nicht während eines laufenden Spiels.";p.clubId!=w.user.clubId||p.retired->"Spieler gehört nicht zum Verein.";w.intensiveTraining.any{it.playerId==playerId}->"Für diesen Spieler läuft bereits Intensivtraining.";w.intensiveTraining.size>=3->"Maximal drei Intensivprogramme gleichzeitig.";w.club().budget<price->"Vereinskasse reicht für ${price} € nicht aus.";else->null}}
  fun reason(w:World,playerId:Int):String?{val p=w.players[playerId]?:return "Spieler nicht gefunden.";return commonReason(w,playerId,cost(w,p))?:if(p.hidden.potential<=p.ca)"Natürliches Potenzial erreicht. Nutze Potenzialtraining, um die Entwicklungsgrenze gezielt anzuheben." else null}
@@ -153,7 +154,7 @@ object EconomySystem {
  fun weekly(w:World,c:Club){if(c.sponsorDeals.isEmpty())initialize(w);if(w.calendar.absoluteWeek-c.lastCommercialRefreshWeek>=8)refreshOffers(w,c)
   val wins=if(c.form.lastOrNull()=="S")1 else 0;var sponsorIncome=0
   for(d in c.sponsorDeals.filter{it.active}.toList()){sponsorIncome+=d.weekly+wins*d.performanceBonus;d.weeksLeft--;if(d.weeksLeft<=0){d.active=false;if(c.id==w.user.clubId)w.news("Partnerschaft ausgelaufen","${d.name} ist ausgelaufen. Neue Angebote erscheinen im Vereinsbereich.","normal")}}
-  c.sponsorDeals.removeAll{!it.active&&it.weeksLeft<=0};val membership=c.members*2;val kitFactor=if(c.sponsorDeals.any{it.active&&it.category==SponsorCategory.KIT})1.12 else 1.0;val mainFactor=if(c.sponsorDeals.any{it.active&&it.category==SponsorCategory.MAIN})1.08 else 1.0;val merchandising=(c.members*(c.commercialReputation+20)/80.0*kitFactor).roundToInt();val media=(c.reputation*c.reputation*(11-c.tier).coerceAtLeast(1)/55.0*mainFactor).roundToInt();val commercialIncome=sponsorIncome+membership+merchandising+media
+  c.sponsorDeals.removeAll{!it.active&&it.weeksLeft<=0};val membership=c.members*2;val kitFactor=if(c.sponsorDeals.any{it.active&&it.category==SponsorCategory.KIT})1.12 else 1.0;val mainFactor=if(c.sponsorDeals.any{it.active&&it.category==SponsorCategory.MAIN})1.08 else 1.0;val merchandising=(c.members*(c.commercialReputation+20)/80.0*kitFactor).roundToInt();val level=WorldFactory.leagueLevel(w,c.tier);val media=(c.reputation*c.reputation*(11-level).coerceAtLeast(1)/55.0*mainFactor).roundToInt();val commercialIncome=sponsorIncome+membership+merchandising+media
   val stadiumUpkeep=c.stadium.capacity/18+(c.stadium.pitchQuality+c.stadium.training+c.stadium.medicine+c.stadium.youth+c.stadium.gym)/3;val staffCost=(c.dynamics.staffQuality*c.dynamics.staffQuality/16.0).roundToInt();val academyCost=(c.academy.scouting+c.academy.u19Quality+c.academy.u23Quality+c.academy.boarding)*4;val partnerDiscount=if(c.sponsorDeals.any{it.active&&it.category==SponsorCategory.STADIUM})(stadiumUpkeep*.10).roundToInt() else 0;val nonWage=(stadiumUpkeep+staffCost+academyCost-partnerDiscount).coerceAtLeast(50);c.lastCosts=c.wageBill+nonWage;c.lastIncome+=commercialIncome;c.budget+=commercialIncome-c.lastCosts
   c.financialTrust=(c.financialTrust+(if(c.budget>=0)1 else -4)).coerceIn(0,100);val targetCommercial=(c.reputation*.7+c.members.coerceAtMost(30000)/1000.0).roundToInt().coerceIn(10,100);c.commercialReputation=(c.commercialReputation+(targetCommercial-c.commercialReputation).coerceIn(-1,1)).coerceIn(0,100)
   if(w.calendar.absoluteWeek%8==0){c.sponsorDeals.filter{it.active&&it.category==SponsorCategory.YOUTH}.forEach{c.academy.u19Quality=(c.academy.u19Quality+1).coerceAtMost(100)};c.sponsorDeals.filter{it.active&&it.category==SponsorCategory.REGIONAL}.forEach{c.members+=maxOf(1,it.membersBoost/4)}}
