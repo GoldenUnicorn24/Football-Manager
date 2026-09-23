@@ -2,8 +2,14 @@ package de.gruenderelf.engine
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 object SaveCodec {
- val json=Json{encodeDefaults=true;ignoreUnknownKeys=true;coerceInputValues=true}
- fun encode(w: World)=json.encodeToString(w)
+ val json=Json{encodeDefaults=false;ignoreUnknownKeys=true;coerceInputValues=true}
+ fun encode(w: World): String {
+  // Standardwerte nicht tausendfach in jeden Spieler/Spielplan schreiben. Die Versionsnummer
+  // bleibt absichtlich explizit, damit kompakte Spielstände weiterhin eindeutig migrierbar sind.
+  val root=json.encodeToJsonElement(w).jsonObject.toMutableMap()
+  root["saveVersion"]=JsonPrimitive(w.saveVersion)
+  return JsonObject(root).toString()
+ }
  fun copy(w: World)=decode(encode(w))
  fun decode(text: String): World {
   require(text.length<=128*1024*1024){"Spielstand ist zu groß (maximal 128 MB)."}
