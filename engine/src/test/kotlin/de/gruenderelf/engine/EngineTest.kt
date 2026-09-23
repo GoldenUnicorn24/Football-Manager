@@ -245,6 +245,7 @@ class EngineTest {
   for(club in seeded){
    assertTrue(club.players.size>=20,"${club.name}: verifizierter Kader hat nur ${club.players.size} Spieler")
    assertEquals(club.players.size,club.players.map{it.name.trim().lowercase()}.toSet().size,"${club.name}: doppelte Spielernamen")
+   assertEquals(club.players.size,club.players.map{it.number}.toSet().size,"${club.name}: doppelte Rückennummern")
    for(p in club.players){
     assertTrue(p.name.isNotBlank()&&!p.name.startsWith("Spieler ",ignoreCase=true)&&!p.name.equals("Spieler",ignoreCase=true),"${club.name}: Platzhaltername ${p.name}")
     assertTrue(p.born in 1980..2010,"${club.name}: unplausibles Geburtsjahr bei ${p.name}: ${p.born}")
