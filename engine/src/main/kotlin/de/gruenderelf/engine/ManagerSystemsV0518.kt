@@ -242,6 +242,14 @@ object OutboundTransferSystem {
  fun isOutbound(w:World,o:TransferOffer)=o.sellerClubId==w.user.clubId&&o.buyerClubId!=w.user.clubId
  fun maxBuyOffer(w:World,buyer:Club,p:Player):Long{val need=positionNeed(w,buyer,p);val age=w.calendar.season-p.birthYear;val upside=(p.hidden.potential-p.ca).coerceAtLeast(0);val repGap=(buyer.reputation-(w.clubs[p.clubId]?.reputation?:buyer.reputation)).coerceIn(-30,30);return (TransferEngine.marketValue(w,p)*(0.72+need*.09+upside*.008+repGap*.006+(if(age<=23).08 else 0.0))).toLong().coerceAtMost((buyer.budget*.8).toLong()).coerceAtLeast(0)}
  private fun positionNeed(w:World,buyer:Club,p:Player):Int{val count=w.squad(buyer.id).count{!it.youth&&!it.retired&&it.position==p.position};return when(count){0->4;1->3;2->2;else->1}}
+ private fun maxLoanFee(w:World,buyer:Club,p:Player):Long{
+  val need=positionNeed(w,buyer,p);val value=TransferEngine.marketValue(w,p)
+  return minOf((value*(.18+need*.045)).toLong(),(buyer.budget*.18).toLong()).coerceAtLeast(500L)
+ }
+ private fun maxLoanOption(w:World,buyer:Club,p:Player):Long{
+  val need=positionNeed(w,buyer,p);val value=TransferEngine.marketValue(w,p)
+  return minOf((value*(.80+need*.055)).toLong(),(buyer.budget*.88).toLong()).coerceAtLeast(1_000L)
+ }
  fun reject(w:World,offerId:Int){val o=w.negotiations.getValue(offerId);require(isOutbound(w,o));o.status=NegotiationStatus.REJECTED;o.message="Angebot abgelehnt."}
  fun accept(w:World,offerId:Int){
   require(w.live==null){"Transfer erst außerhalb eines laufenden Spiels bestätigen."}
@@ -255,9 +263,30 @@ object OutboundTransferSystem {
   w.news(if(o.type==DealType.BUY)"Spieler verkauft" else "Leihe vereinbart","${p.name} → ${buyer.name} · ${if(o.fee>0)"${o.fee} €" else "ohne Gebühr"}${if(o.type==DealType.LOAN_OPTION&&o.buyOption>0)" · Kaufoption ${o.buyOption} €" else ""}.","good")
  }
  fun negotiate(w:World,offerId:Int,kind:String){
-  val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED));val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId);o.round++
-  when(kind){"fee"->o.fee=(o.fee*1.08).toLong();"sellon"->o.sellOnPercent=(o.sellOnPercent+5).coerceAtMost(25);"option"->o.buyOption=(o.buyOption*1.08).toLong();else->error("Unbekannter Verhandlungspunkt.")}
-  val cap=maxBuyOffer(w,buyer,p);if(o.round>=4&&o.fee>cap*1.08){o.status=NegotiationStatus.REJECTED;o.message="Der Käufer steigt aus."}else if(o.fee<=cap){o.status=NegotiationStatus.AGREED;o.message="Der Käufer akzeptiert die Konditionen."}else{o.status=NegotiationStatus.COUNTER;o.fee=((o.fee+cap)/2);o.message="Der Käufer legt ein Gegenangebot vor."}
+  val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status==NegotiationStatus.COUNTER){"Dieses Angebot kann nicht nachverhandelt werden."}
+  val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId)
+  when(kind){
+   "fee"->o.fee=maxOf(o.fee+500L,(o.fee*1.08).toLong())
+   "sellon"->o.sellOnPercent=(o.sellOnPercent+5).coerceAtMost(25)
+   "option"->{require(o.type==DealType.LOAN_OPTION){"Eine Kaufoption kann nur bei einer Leihe mit Kaufoption nachverhandelt werden."};o.buyOption=maxOf(o.buyOption+1_000L,(o.buyOption*1.08).toLong())}
+   else->error("Unbekannter Verhandlungspunkt.")
+  }
+  o.round++
+  val feeCap=if(o.type==DealType.BUY)maxBuyOffer(w,buyer,p) else maxLoanFee(w,buyer,p)
+  val optionCap=if(o.type==DealType.LOAN_OPTION)maxLoanOption(w,buyer,p) else Long.MAX_VALUE
+  val budgetOk=buyer.budget-o.fee-o.signingBonus>=0L
+  val feeOk=o.fee<=feeCap
+  val optionOk=o.type!=DealType.LOAN_OPTION||o.buyOption<=optionCap
+  if(!budgetOk){o.status=NegotiationStatus.REJECTED;o.message="${buyer.name} zieht das Angebot zurück: Das Paket passt nicht mehr ins Budget.";return}
+  if(o.round>=4&&!feeOk&&!optionOk){o.status=NegotiationStatus.REJECTED;o.message="${buyer.name} bricht die Verhandlung nach mehreren Runden ab.";return}
+  if(feeOk&&optionOk){o.status=NegotiationStatus.AGREED;o.message="${buyer.name} akzeptiert dein Gegenangebot. Du kannst den Deal jetzt bestätigen.";return}
+  val modestFee=o.fee<=feeCap*13/10
+  val modestOption=o.type!=DealType.LOAN_OPTION||o.buyOption<=optionCap*13/10
+  if(modestFee&&modestOption){
+   o.fee=minOf(o.fee,maxOf(500L,(feeCap*98/100)))
+   if(o.type==DealType.LOAN_OPTION)o.buyOption=minOf(o.buyOption,maxOf(1_000L,(optionCap*98/100)))
+   o.status=NegotiationStatus.COUNTER;o.message="${buyer.name} bleibt am Tisch und legt ein letztes Gegenangebot vor."
+  }else{o.status=NegotiationStatus.REJECTED;o.message="${buyer.name} lehnt deine Forderung ab und steigt aus."}
  }
 }
 
