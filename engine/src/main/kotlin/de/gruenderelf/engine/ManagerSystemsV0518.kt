@@ -240,6 +240,36 @@ object OutboundTransferSystem {
   w.negotiations[o.id]=o;w.news("Transferangebot für ${p.name}","${buyer.name}: ${type.label} · ${fee} €${if(o.buyOption>0)" · Option ${o.buyOption} €" else ""}.","normal")
  }
  fun isOutbound(w:World,o:TransferOffer)=o.sellerClubId==w.user.clubId&&o.buyerClubId!=w.user.clubId
+ fun activeOffers(w:World,playerId:Int=0):List<TransferOffer> = w.negotiations.values
+  .filter{isOutbound(w,it)&&(playerId==0||it.playerId==playerId)&&it.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED)}
+  .sortedWith(compareBy<TransferOffer>{it.playerId}.thenBy{it.status.ordinal}.thenByDescending{it.fee})
+ fun requestOffers(w:World,playerId:Int,type:DealType):Int{
+  require(w.live==null){"Eigene Spieler erst außerhalb eines laufenden Spiels anbieten."}
+  require(ScoutingTransferSystem.windowOpen(w)){"Das Transferfenster ist geschlossen."}
+  require(type in listOf(DealType.BUY,DealType.LOAN,DealType.LOAN_OPTION)){"Nur Verkauf oder Leihe können angeboten werden."}
+  val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&!p.retired&&p.id!=w.user.playerId&&p.loanParentClubId==0){"Dieser Spieler kann aktuell nicht angeboten werden."}
+  activeOffers(w,p.id).forEach{it.status=NegotiationStatus.REJECTED;it.message="Durch eine neue Angebotsrunde ersetzt."}
+  val buyers=w.clubs.values.filter{it.id!=w.user.clubId&&it.budget>1_000L&&TransferInterestSystem.score(w,p,it.id)>=28}
+   .sortedByDescending{TransferInterestSystem.score(w,p,it.id)}.take(8)
+  if(buyers.isEmpty()){w.news("Keine ernsthaften Interessenten","Aktuell gibt es nicht genügend ernsthafte Interessenten.","normal");return 0}
+  var made=0
+  w.random{rng->
+   val pool=buyers.take((2+rng.int(0,2)).coerceAtMost(buyers.size))
+   for(buyer in pool){
+    val value=TransferEngine.marketValue(w,p);val interest=TransferInterestSystem.score(w,p,buyer.id)
+    val fee=when(type){
+     DealType.BUY->(value*(.68+interest/360.0+rng.nextDouble()*.12)).toLong().coerceAtMost((buyer.budget*.75).toLong())
+     else->(value*(.035+interest/1800.0+rng.nextDouble()*.025)).toLong().coerceAtLeast(500L)
+    }
+    val option=if(type==DealType.LOAN_OPTION)(value*(.82+interest/500.0+rng.nextDouble()*.10)).toLong().coerceAtLeast(1_000L) else 0L
+    val role=when{p.ca>=78->SquadRole.STAR;p.ca>=68->SquadRole.STARTER;p.ca>=56->SquadRole.ROTATION;else->SquadRole.PROSPECT}
+    val o=TransferOffer(id=w.nextIds.negotiation++,buyerClubId=buyer.id,sellerClubId=w.user.clubId,playerId=p.id,type=type,role=role,fee=fee,wage=maxOf(p.wage,(p.wage*1.08).roundToInt()),buyOption=option,status=NegotiationStatus.COUNTER,stage=TransferStage.CLUB,message="${buyer.name} legt ein Angebot für ${p.name} vor.")
+    w.negotiations[o.id]=o;made++
+   }
+  }
+  if(made>0)w.news("Angebote für ${p.name}","Der Spieler wird aktiv mehreren passenden Vereinen angeboten. Angebote bleiben getrennt, damit du vergleichen und mit jedem Verein einzeln verhandeln kannst.","good")
+  return made
+ }
  fun maxBuyOffer(w:World,buyer:Club,p:Player):Long{val need=positionNeed(w,buyer,p);val age=w.calendar.season-p.birthYear;val upside=(p.hidden.potential-p.ca).coerceAtLeast(0);val repGap=(buyer.reputation-(w.clubs[p.clubId]?.reputation?:buyer.reputation)).coerceIn(-30,30);return (TransferEngine.marketValue(w,p)*(0.72+need*.09+upside*.008+repGap*.006+(if(age<=23).08 else 0.0))).toLong().coerceAtMost((buyer.budget*.8).toLong()).coerceAtLeast(0)}
  private fun positionNeed(w:World,buyer:Club,p:Player):Int{val count=w.squad(buyer.id).count{!it.youth&&!it.retired&&it.position==p.position};return when(count){0->4;1->3;2->2;else->1}}
  private fun maxLoanFee(w:World,buyer:Club,p:Player):Long{
