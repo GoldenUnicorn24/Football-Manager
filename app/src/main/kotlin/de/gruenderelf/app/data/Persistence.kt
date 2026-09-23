@@ -49,7 +49,7 @@ class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.
  suspend fun load(slot: Int): World=withContext(Dispatchers.IO){require(slot in 1..5);val row=db.saves().get(slot)?:error("Dieser Speicherplatz ist leer.");val w=SaveCodec.decode(row.worldJson);if(row.saveVersion!=SAVE_VERSION||row.worldJson!=SaveCodec.encode(w))save(slot,w);settings.edit{it[lastKey]=slot};w}
  suspend fun save(slot: Int,w: World)=withContext(Dispatchers.IO+NonCancellable){
   require(slot in 1..5){"Es gibt fünf Speicherplätze."};val payload=SaveCodec.encode(w)
-  require(payload.toByteArray().size<=32*1024*1024){"Der Spielstand überschreitet 32 MB."}
+  require(payload.toByteArray().size<=64*1024*1024){"Der Spielstand überschreitet 64 MB."}
   val row=Savegame(slot,slot,w.club().name,w.calendar.season,w.calendar.matchday,WorldFactory.leagueName(w,w.club().tier),w.user.difficulty.label,System.currentTimeMillis(),payload,SAVE_VERSION)
   db.withTransaction{db.saves().put(row)};settings.edit{it[lastKey]=slot}
  }
