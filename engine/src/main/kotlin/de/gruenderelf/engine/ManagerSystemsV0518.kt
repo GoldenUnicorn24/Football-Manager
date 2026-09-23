@@ -107,26 +107,56 @@ object MatchAnalysisSystem {
   if (last?.clubId == clubId && last.minute == m.minute) return
   m.tacticChanges += TacticChangeEvent(m.minute, clubId, label, stats.xg, stats.shots, stats.possessionTicks)
  }
- fun xgTimeline(m: LiveMatch, clubId: Int): List<Pair<Int, Double>> {
-  val maxMinute = max(m.minute, max(m.shotEvents.maxOfOrNull { it.minute } ?: 0, 1))
-  val checkpoints = (15..maxMinute step 15).toMutableList().also { if (it.lastOrNull() != maxMinute) it += maxMinute }
-  return checkpoints.distinct().map { minute -> minute to m.shotEvents.filter { it.clubId == clubId && it.minute <= minute }.sumOf { it.xg } }
- }
- fun passNetwork(m: LiveMatch, clubId: Int): Pair<List<PassNetworkNode>, List<PassNetworkEdge>> {
-  val events = m.passEvents.filter { it.clubId == clubId && it.completed && it.fromId != 0 && it.toId != 0 }
-  val touches = linkedMapOf<Int, MutableList<Pair<Float, Float>>>()
-  events.forEach { e ->
-   touches.getOrPut(e.fromId) { mutableListOf() } += e.startX to e.startY
-   touches.getOrPut(e.toId) { mutableListOf() } += e.endX to e.endY
-  }
-  val nodes = touches.map { (id, pts) -> PassNetworkNode(id, pts.map { it.first }.average().toFloat(), pts.map { it.second }.average().toFloat(), pts.size) }
-  val edges = events.groupBy { it.fromId to it.toId }.map { (ids, list) ->
-   PassNetworkEdge(ids.first, ids.second, list.size, list.map { it.startX }.average().toFloat(), list.map { it.startY }.average().toFloat(), list.map { it.endX }.average().toFloat(), list.map { it.endY }.average().toFloat())
-  }.sortedByDescending { it.count }
-  return nodes to edges
- }
-}
 
+ fun xgTimeline(m: LiveMatch, clubId: Int): List<Pair<Int, Double>> =
+  xgTimeline(m.minute, m.shotEvents, clubId)
+
+ fun xgTimeline(minute:Int, shots:List<ShotEvent>, clubId:Int): List<Pair<Int,Double>> {
+  val maxMinute = max(minute, max(shots.maxOfOrNull { it.minute } ?: 0, 1))
+  val checkpoints = (15..maxMinute step 15).toMutableList().also { if (it.lastOrNull() != maxMinute) it += maxMinute }
+  return checkpoints.distinct().map { checkpoint ->
+   checkpoint to shots.filter { it.clubId == clubId && it.minute <= checkpoint }.sumOf { it.xg }
+  }
+ }
+
+ private fun completedPasses(events:List<PassEvent>,clubId:Int)=events.filter {
+  it.clubId==clubId&&it.completed&&it.fromId!=0&&it.toId!=0
+ }
+
+ /** Original v0.5.18 pass-network edge aggregation recovered from the APK. */
+ fun passNetworkEdges(events:List<PassEvent>,clubId:Int):List<PassNetworkEdge> =
+  completedPasses(events,clubId)
+   .groupBy { it.fromId to it.toId }
+   .map { (ids,list) ->
+    PassNetworkEdge(
+     ids.first,ids.second,list.size,
+     list.map{it.startX}.average().toFloat(),list.map{it.startY}.average().toFloat(),
+     list.map{it.endX}.average().toFloat(),list.map{it.endY}.average().toFloat()
+    )
+   }
+   .sortedByDescending { it.count }
+   .take(22)
+
+ /** Original v0.5.18 node positions: average all real pass starts/receipts per player. */
+ fun passNetworkNodes(events:List<PassEvent>,clubId:Int):List<PassNetworkNode> {
+  val passes=completedPasses(events,clubId)
+  val points=linkedMapOf<Int,MutableList<Pair<Float,Float>>>()
+  passes.forEach { e ->
+   points.getOrPut(e.fromId){mutableListOf()} += e.startX to e.startY
+   points.getOrPut(e.toId){mutableListOf()} += e.endX to e.endY
+  }
+  return points.map { (id,pts) ->
+   PassNetworkNode(id,pts.map{it.first}.average().toFloat(),pts.map{it.second}.average().toFloat(),pts.size)
+  }.sortedByDescending { it.touches }.take(16)
+ }
+
+ fun passNetworkEdges(m:LiveMatch,clubId:Int)=passNetworkEdges(m.passEvents,clubId)
+ fun passNetworkNodes(m:LiveMatch,clubId:Int)=passNetworkNodes(m.passEvents,clubId)
+
+ /** Compatibility helper retained for recovery tests and callers. */
+ fun passNetwork(m: LiveMatch, clubId: Int): Pair<List<PassNetworkNode>, List<PassNetworkEdge>> =
+  passNetworkNodes(m,clubId) to passNetworkEdges(m,clubId)
+}
 object NotificationSystem {
  fun tiredPlayers(w: World): Set<Int> {
   val n = w.notifications
@@ -203,12 +233,12 @@ object YouthCompetitionSystem {
  fun assign(w:World,playerId:Int,squad:YouthSquad){
   require(w.live==null){"Kaderzuordnung erst außerhalb eines laufenden Spiels ändern."};val p=w.players.getValue(playerId);val age=w.calendar.season-p.birthYear
   require(!p.retired&&p.clubId==w.user.clubId&&p.loanParentClubId==0&&p.id!=w.user.playerId&&age<=22&&(squad==YouthSquad.U23||age<=19)){"Dieser Spieler ist für ${squad.label} nicht einsatzberechtigt."}
-  p.youth=true;p.youthSquad=squad;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false;WorldFactory.autoLineup(w,w.user.clubId);w.news("${p.name} in ${squad.label}","Der Spieler gehört jetzt fest zum ${squad.label}-Kader und erhält dort Nachwuchsspielpraxis.")
+  p.youth=true;p.youthSquad=squad;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false;p.youthProfile.confidence=(p.youthProfile.confidence+2).coerceAtMost(100);w.training.extra.removeAll{it.playerId==p.id};WorldFactory.autoLineup(w,w.user.clubId);w.news("${p.name} in ${squad.label}","Der Spieler gehört jetzt fest zum ${squad.label}-Kader und erhält dort Nachwuchsspielpraxis und den Academy-Entwicklungsweg.")
  }
  fun move(w:World,playerId:Int,squad:YouthSquad){require(w.players.getValue(playerId).youth){"Nur Jugendspieler können zwischen U19 und U23 verschoben werden."};assign(w,playerId,squad)}
  fun callUp(w:World,playerId:Int){
-  require(w.live==null){"Nominierung erst außerhalb eines laufenden Spiels."};val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.youth&&!p.retired){"Nur eigene Jugendspieler können vorübergehend hochgezogen werden."}
-  p.temporarySeniorCallUp=true;p.temporaryReturnSquad=p.youthSquad;p.youth=false;p.youthProfile.seniorTraining=true;p.morale=(p.morale+2).coerceAtMost(100);WorldFactory.rebuildBench(w,w.club());w.news("${p.name} bei den Profis","Vorübergehende Nominierung aus ${p.temporaryReturnSquad?.label ?: "der Jugend"}.","good")
+  require(w.live==null){"Notfall-Nominierung erst außerhalb eines laufenden Spiels."};val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.youth&&!p.retired&&p.loanParentClubId==0){"Nur eigene Jugendspieler können vorübergehend hochgezogen werden."}
+  p.temporarySeniorCallUp=true;p.temporaryReturnSquad=p.youthSquad;p.youth=false;p.youthProfile.seniorTraining=true;p.morale=(p.morale+2).coerceAtMost(100);WorldFactory.rebuildBench(w,w.club());val target=p.temporaryReturnSquad?.label?:p.youthSquad.label;w.news("Notfall-Nominierung","${p.name} steht für das nächste Profispiel zur Verfügung und kehrt danach automatisch in $target zurück.")
  }
  fun returnToYouth(w:World,playerId:Int){
   val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.temporarySeniorCallUp){"Keine vorübergehende Jugend-Nominierung aktiv."};val target=p.temporaryReturnSquad?:if(w.calendar.season-p.birthYear<=19)YouthSquad.U19 else YouthSquad.U23
@@ -240,12 +270,86 @@ object OutboundTransferSystem {
   w.negotiations[o.id]=o;w.news("Transferangebot für ${p.name}","${buyer.name}: ${type.label} · ${fee} €${if(o.buyOption>0)" · Option ${o.buyOption} €" else ""}.","normal")
  }
  fun isOutbound(w:World,o:TransferOffer)=o.sellerClubId==w.user.clubId&&o.buyerClubId!=w.user.clubId
- fun maxBuyOffer(w:World,buyer:Club,p:Player):Long{val need=positionNeed(w,buyer,p);val age=w.calendar.season-p.birthYear;val upside=(p.hidden.potential-p.ca).coerceAtLeast(0);val repGap=(buyer.reputation-(w.clubs[p.clubId]?.reputation?:buyer.reputation)).coerceIn(-30,30);return (TransferEngine.marketValue(w,p)*(0.72+need*.09+upside*.008+repGap*.006+(if(age<=23).08 else 0.0))).toLong().coerceAtMost((buyer.budget*.8).toLong()).coerceAtLeast(0)}
- private fun positionNeed(w:World,buyer:Club,p:Player):Int{val count=w.squad(buyer.id).count{!it.youth&&!it.retired&&it.position==p.position};return when(count){0->4;1->3;2->2;else->1}}
- fun reject(w:World,offerId:Int){val o=w.negotiations.getValue(offerId);require(isOutbound(w,o));o.status=NegotiationStatus.REJECTED;o.message="Angebot abgelehnt."}
+ fun maxBuyOffer(w:World,buyer:Club,p:Player):Long{
+  val value=TransferEngine.marketValue(w,p);val need=positionNeed(w,buyer,p);val age=w.calendar.season-p.birthYear
+  val upside=(p.hidden.potential-p.ca).coerceAtLeast(0)
+  val repGap=(buyer.reputation-w.club().reputation).coerceIn(-20,25)
+  val factor=(.78+need*.075+(if(age<=23)upside.coerceAtMost(20)*.008 else 0.0)+repGap*.003).coerceIn(.72,1.30)
+  return minOf((buyer.budget*.78).toLong().coerceAtLeast(0L),(value*factor).toLong()).coerceAtLeast(1_000L)
+ }
+ private fun positionNeed(w:World,buyer:Club,p:Player):Int{
+  val same=w.squad(buyer.id).filter{!it.youth&&!it.retired&&it.position==p.position}
+  val strongest=same.maxOfOrNull{it.ca}?:0
+  return when{same.isEmpty()||strongest+5<=p.ca->4;strongest<p.ca->3;same.size<=2->2;else->1}
+ }
+ fun loanFeeLimit(w:World,buyer:Club,p:Player):Long{
+  val value=TransferEngine.marketValue(w,p)
+  val need=positionNeed(w,buyer,p)
+  return minOf((buyer.budget*.18).toLong().coerceAtLeast(0L),(value*(.045+need*.018)).toLong()).coerceAtLeast(500L)
+ }
+ fun buyOptionLimit(w:World,buyer:Club,p:Player):Long{
+  val value=TransferEngine.marketValue(w,p)
+  val need=positionNeed(w,buyer,p)
+  return minOf((buyer.budget*.80).toLong().coerceAtLeast(0L),(value*(.88+need*.055)).toLong()).coerceAtLeast(1_000L)
+ }
+ /** User-triggered multi-club offer round restored from the shipped v0.5.18 APK. */
+ fun solicitOffers(w:World,playerId:Int,type:DealType):List<TransferOffer>{
+  require(w.live==null){"Spieler erst außerhalb eines laufenden Spiels anbieten."}
+  require(type in listOf(DealType.BUY,DealType.LOAN,DealType.LOAN_OPTION)){"Nur Verkauf oder Leihe können angeboten werden."}
+  require(ScoutingTransferSystem.windowOpen(w)){"Das Transferfenster ist geschlossen."}
+  val p=w.players.getValue(playerId)
+  require(!p.retired&&p.clubId==w.user.clubId&&p.loanParentClubId==0&&p.id!=w.user.playerId){"Dieser Spieler kann aktuell nicht angeboten werden."}
+  w.negotiations.values.filter{it.playerId==p.id&&isOutbound(w,it)&&it.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED)}.forEach{
+   it.status=NegotiationStatus.REJECTED
+   it.message="Durch eine neue Angebotsrunde ersetzt."
+  }
+  val value=TransferEngine.marketValue(w,p)
+  val buyers=w.clubs.values.asSequence()
+   .filter{it.id!=w.user.clubId&&it.id!=p.clubId}
+   .map{it to TransferInterestSystem.score(w,p,it.id)}
+   .filter{(club,score)->score>=35&&club.budget>value/3}
+   .sortedWith(compareByDescending<Pair<Club,Int>>{it.second}.thenByDescending{it.first.reputation}.thenBy{it.first.id})
+   .take(4).toList()
+  require(buyers.size>=2){"Aktuell gibt es nicht genügend ernsthafte Interessenten."}
+  val created=buyers.mapIndexed{index,(buyer,interest)->
+   val senior=w.squad(buyer.id).filter{!it.youth&&!it.retired}
+   val average=senior.map{it.ca}.average().takeUnless{it.isNaN()}?:p.ca.toDouble()
+   val role=when{
+    p.ca>=average+8->SquadRole.STAR
+    p.ca>=average+3->SquadRole.STARTER
+    p.ca>=average-4->SquadRole.ROTATION
+    else->SquadRole.PROSPECT
+   }
+   val cap=if(type==DealType.BUY)maxBuyOffer(w,buyer,p) else loanFeeLimit(w,buyer,p)
+   val variance=.78+kotlin.math.abs((index*7+w.calendar.absoluteWeek*13+buyer.id*17+p.id*31)%15)/100.0
+   val fee=(cap*variance).toLong().coerceAtLeast(500L)
+   val wage=maxOf(p.wage,maxOf((value/50_000L).toInt(),5))
+   val option=if(type==DealType.LOAN_OPTION)(buyOptionLimit(w,buyer,p)*(.82+index*.035)).toLong() else 0L
+   val promise=when(role){SquadRole.STAR->95;SquadRole.STARTER->82;SquadRole.ROTATION->65;SquadRole.PROSPECT->58;SquadRole.BACKUP->42}
+   TransferOffer(
+    id=w.nextIds.negotiation++,buyerClubId=buyer.id,sellerClubId=w.user.clubId,playerId=p.id,
+    type=type,role=role,fee=fee,wage=wage,signingBonus=wage.toLong()*4,
+    sellOnPercent=if(type==DealType.BUY&&index%2==0)5 else 0,
+    buyOption=option,playingTimePromise=promise,status=NegotiationStatus.COUNTER,
+    stage=TransferStage.CLUB,loanWeeksRequested=if(type==DealType.BUY)24 else listOf(24,40,52)[index%3],
+    recallAllowed=type!=DealType.BUY&&index%2==0,
+    message="${buyer.name} bietet ${if(type==DealType.BUY)"einen Kauf" else type.label.lowercase()} an · Interesse $interest/100. Du kannst annehmen, ablehnen oder nachverhandeln."
+   ).also{w.negotiations[it.id]=it}
+  }
+  w.news("Angebote für ${p.name}","${created.size} Vereine haben auf die ${if(type==DealType.BUY)"Verkaufsliste" else "Leihanfrage"} reagiert.","normal")
+  return created
+ }
+
+ fun reject(w:World,offerId:Int){val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status!=NegotiationStatus.COMPLETED);o.status=NegotiationStatus.REJECTED;o.message="Angebot von dir abgelehnt."}
  fun accept(w:World,offerId:Int){
-  val o=w.negotiations.getValue(offerId);require(isOutbound(w,o));val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId);require(buyer.budget>=o.fee){"Käufer kann den Transfer nicht finanzieren."};require(TransferInterestSystem.score(w,p,buyer.id)>=35){"Der Spieler lehnt den Wechsel ab."}
-  o.status=NegotiationStatus.AGREED;o.stage=TransferStage.REGISTRATION;o.registrationReady=true;TransferEngine.complete(w,o.id);w.negotiations.values.filter{it.id!=o.id&&it.playerId==p.id&&isOutbound(w,it)&&it.status!=NegotiationStatus.COMPLETED}.forEach{it.status=NegotiationStatus.REJECTED}
+  require(w.live==null){"Transfer erst außerhalb eines laufenden Spiels bestätigen."}
+  val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status in listOf(NegotiationStatus.COUNTER,NegotiationStatus.AGREED)){"Dieses Angebot kann nicht angenommen werden."}
+  val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId)
+  if(TransferInterestSystem.score(w,p,buyer.id)<28&&!p.wantsMove){o.status=NegotiationStatus.REJECTED;o.message="${p.name} lehnt den Wechsel zu ${buyer.name} ab.";return}
+  if(buyer.budget<o.fee+o.signingBonus){o.status=NegotiationStatus.REJECTED;o.message="${buyer.name} kann das Angebot finanziell nicht mehr hinterlegen.";return}
+  o.status=NegotiationStatus.AGREED;o.stage=TransferStage.REGISTRATION;o.medicalPassed=true;o.medicalNote="Medizincheck vom aufnehmenden Verein bestanden";o.registrationReady=true
+  TransferEngine.complete(w,o.id)
+  w.negotiations.values.filter{it.id!=o.id&&it.playerId==p.id&&isOutbound(w,it)&&it.status !in listOf(NegotiationStatus.COMPLETED,NegotiationStatus.REJECTED)}.forEach{it.status=NegotiationStatus.REJECTED;it.message="Spieler hat sich für ein anderes Angebot entschieden."}
  }
  fun negotiate(w:World,offerId:Int,kind:String){
   val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED));val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId);o.round++

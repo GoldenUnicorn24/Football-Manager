@@ -37,4 +37,19 @@ class RecoveryV0518Test {
   val w=WorldFactory.createWorld(51806L);val tired=w.squad().first{!it.youth};tired.fitness=50.0;tired.contractYears=1;assertTrue(tired.id in NotificationSystem.unreadTired(w));assertTrue(tired.id in NotificationSystem.unreadExpiring(w));NotificationSystem.markTiredSeen(w);NotificationSystem.markContractsSeen(w);assertFalse(tired.id in NotificationSystem.unreadTired(w));assertFalse(tired.id in NotificationSystem.unreadExpiring(w))
   val m=MatchEngine.start(w);m.minute=31;m.shotEvents+=ShotEvent(10,w.user.clubId,tired.id,xg=.25);m.shotEvents+=ShotEvent(30,w.user.clubId,tired.id,xg=.40);m.passEvents+=PassEvent(12,w.user.clubId,tired.id,w.user.playerId,true,.2f,.3f,.4f,.5f);MatchAnalysisSystem.recordTacticChange(w,m,w.user.clubId,"Pressing erhöht");val timeline=MatchAnalysisSystem.xgTimeline(m,w.user.clubId);assertTrue(timeline.last().second>=.65);val network=MatchAnalysisSystem.passNetwork(m,w.user.clubId);assertTrue(network.first.isNotEmpty());assertTrue(network.second.single().count==1);assertEquals(1,m.tacticChanges.size)
  }
+ @Test fun recoveredPassNetworkUsesOnlyCompletedRealPassesAndRanksConnections(){
+  val w=WorldFactory.createWorld(51807L);val m=MatchEngine.start(w);val ids=w.squad().filter{!it.youth}.take(3).map{it.id};assertTrue(ids.size>=3)
+  repeat(4){m.passEvents+=PassEvent(10+it,w.user.clubId,ids[0],ids[1],true,.2f,.3f,.5f,.55f)}
+  repeat(2){m.passEvents+=PassEvent(20+it,w.user.clubId,ids[1],ids[2],true,.5f,.55f,.7f,.45f)}
+  m.passEvents+=PassEvent(25,w.user.clubId,ids[2],ids[0],false,.7f,.45f,.2f,.3f)
+  val edges=MatchAnalysisSystem.passNetworkEdges(m,w.user.clubId);val nodes=MatchAnalysisSystem.passNetworkNodes(m,w.user.clubId)
+  assertEquals(4,edges.first().count);assertEquals(ids[0],edges.first().fromId);assertTrue(nodes.first().touches>=nodes.last().touches);assertTrue(edges.none{it.fromId==ids[2]&&it.toId==ids[0]})
+ }
+
+ @Test fun recoveredFastForwardStopsAtBreakAndCanFinishSameLiveMatch(){
+  val w=WorldFactory.createWorld(51808L);val m=MatchEngine.start(w);MatchEngine.fastForward(w,m,true);assertTrue(m.halfTime||m.finished)
+  if(m.halfTime)MatchEngine.secondHalf(m)
+  MatchEngine.fastForward(w,m,false);assertTrue(m.finished);assertTrue(m.minute>=90);assertTrue(m.ticker.isNotEmpty())
+ }
+
 }

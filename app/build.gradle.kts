@@ -14,7 +14,7 @@ android {
  buildToolsVersion="36.0.0"
  defaultConfig {
   applicationId="de.gruenderelf.app"; minSdk=26; targetSdk=36
-  versionCode=51; versionName="0.5.20"
+  versionCode=52; versionName="0.5.21"
   testInstrumentationRunner="androidx.test.runner.AndroidJUnitRunner"
  }
  signingConfigs {

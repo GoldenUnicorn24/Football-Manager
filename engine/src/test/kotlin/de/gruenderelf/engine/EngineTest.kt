@@ -231,6 +231,41 @@ class EngineTest {
   assertTrue(Position.ZM in p.secondaryOptions(),"ZM sollte als natürliche Nebenposition eines DM angeboten werden")
   assertTrue(p.fit(Position.ZM)>=.95,"Positionsnähe DM/ZM zu niedrig: ${p.fit(Position.ZM)}")
  }
+ @Test fun fantasyCrownCanBeDisabledBeforeCareerCreation(){
+  val selected=RealModeDatabase.leagues.first().clubs.first()
+  val me=PlayerDraft(firstName="Cup",lastName="Probe",number=77,position=Position.ZM)
+  val disabled=WorldFactory.createRealModeWorld(250521L,selected.key,me,false)
+  assertFalse(disabled.fantasyCupEnabled)
+  assertTrue(disabled.fixtures.none{it.competition==CompetitionType.ETERNAL_CROWN})
+ }
+
+ @Test fun realRosterSeedsHaveNoPlaceholderNamesOrInvalidCoreFields(){
+  val seeded=RealModeDatabase.options.filter{it.players.isNotEmpty()}
+  assertTrue(seeded.isNotEmpty())
+  for(club in seeded){
+   assertTrue(club.players.size>=20,"${club.name}: verifizierter Kader hat nur ${club.players.size} Spieler")
+   assertEquals(club.players.size,club.players.map{it.name.trim().lowercase()}.toSet().size,"${club.name}: doppelte Spielernamen")
+   assertEquals(club.players.size,club.players.map{it.number}.toSet().size,"${club.name}: doppelte Rückennummern")
+   for(p in club.players){
+    assertTrue(p.name.isNotBlank()&&!p.name.startsWith("Spieler ",ignoreCase=true)&&!p.name.equals("Spieler",ignoreCase=true),"${club.name}: Platzhaltername ${p.name}")
+    assertTrue(p.born in 1980..2010,"${club.name}: unplausibles Geburtsjahr bei ${p.name}: ${p.born}")
+    assertTrue(p.number in 1..99,"${club.name}: ungültige Nummer bei ${p.name}: ${p.number}")
+    assertTrue(p.rating in 45..94,"${club.name}: ungültiges Rating bei ${p.name}: ${p.rating}")
+   }
+  }
+ }
+
+ @Test fun compressedRealModeSaveStaysBelowLegacy32MbLimit(){
+  val selected=RealModeDatabase.leagues.first().clubs.first()
+  val w=WorldFactory.createRealModeWorld(250522L,selected.key,PlayerDraft(firstName="Save",lastName="Probe",number=76))
+  val raw=SaveCodec.encode(w)
+  val out=java.io.ByteArrayOutputStream()
+  java.util.zip.GZIPOutputStream(out).bufferedWriter(Charsets.UTF_8).use{it.write(raw)}
+  val storedBytes=4+java.util.Base64.getEncoder().encode(out.toByteArray()).size
+  println("COMPACT_REAL_SAVE_RAW_BYTES=${raw.toByteArray(Charsets.UTF_8).size}; STORED_GZIP_BASE64_BYTES=$storedBytes")
+  assertTrue(storedBytes<32*1024*1024,"Komprimierter Real-Modus-Spielstand ist noch zu groß: $storedBytes Bytes")
+ }
+
 }
 object SaveProcessProbe {
  @JvmStatic fun main(args: Array<String>){

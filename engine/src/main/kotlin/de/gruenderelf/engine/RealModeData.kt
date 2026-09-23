@@ -29,16 +29,16 @@ object RealModeDatabase {
   RealModePlayerSeed("Josip Juranovic","Croatia",1995,Position.RV,18,75),
   RealModePlayerSeed("Christopher Trimmel","Austria",1987,Position.RV,28,75),
   RealModePlayerSeed("Rani Khedira","Tunisia",1994,Position.DM,8,75),
-  RealModePlayerSeed("Kastriot Imeri","Switzerland",2000,Position.ZM,6,67),
-  RealModePlayerSeed("Aljoscha Kemlein","Germany",2004,Position.ZM,7,70),
+  RealModePlayerSeed("Kastriot Imeri","Switzerland",2000,Position.ZM,30,67),
+  RealModePlayerSeed("Aljoscha Kemlein","Germany",2004,Position.ZM,6,70),
   RealModePlayerSeed("András Schäfer","Hungary",1999,Position.ZM,13,74),
   RealModePlayerSeed("Janik Haberer","Germany",1994,Position.ZM,19,74),
   RealModePlayerSeed("Michel Aebischer","Switzerland",1997,Position.ZM,20,74),
   RealModePlayerSeed("Julien Piet Friedrich","Deutschland",2000,Position.ZM,38,70),
   RealModePlayerSeed("Duje Sliskovic","Croatia",2008,Position.ZM,43,64),
   RealModePlayerSeed("Jeong Woo-Yeong","South Korea",1999,Position.OM,11,73),
-  RealModePlayerSeed("Livan Burcu","Türkiye",2004,Position.LA,10,70),
-  RealModePlayerSeed("Oliver Burke","Scotland",1997,Position.ST,9,73),
+  RealModePlayerSeed("Livan Burcu","Türkiye",2004,Position.LA,9,70),
+  RealModePlayerSeed("Oliver Burke","Scotland",1997,Position.ST,7,73),
   RealModePlayerSeed("Tim Skarke","Germany",1996,Position.ST,21,73),
   RealModePlayerSeed("Andrej Ilic","Serbia",2000,Position.ST,23,72),
   RealModePlayerSeed("Marin Ljubicic","Croatia",2002,Position.ST,27,71),
@@ -102,7 +102,8 @@ object RealModeDatabase {
   RealModePlayerSeed("Serge Gnabry","Germany",1995,Position.LA,7,82),
   RealModePlayerSeed("Luis Díaz","Colombia",1997,Position.LA,14,85),
   RealModePlayerSeed("Michael Olise","France",2001,Position.RA,17,86),
-  RealModePlayerSeed("Harry Kane","England",1993,Position.ST,9,89)
+  RealModePlayerSeed("Harry Kane","England",1993,Position.ST,9,89),
+  RealModePlayerSeed("Bastian Assomo","Germany",2010,Position.ST,33,64)
  ))
  private fun club1_4()=RealModeClubSeed("bundesliga-124-borussia-dortmund","Borussia Dortmund","BVB",
 "Bundesliga","Deutschland",0xFFFFEE00,0xFF272726,listOf(
@@ -786,7 +787,7 @@ object RealModeDatabase {
 "Premier League","England",0xFF87CCED,0xFFFFFFFF,listOf(
   RealModePlayerSeed("Ben Wilson","England",1992,Position.TW,13,68),
   RealModePlayerSeed("Carl Rushworth","England",2001,Position.TW,19,72),
-  RealModePlayerSeed("Daniel Bentley","England",1993,Position.TW,25,71),
+  RealModePlayerSeed("Dan Bentley","England",1993,Position.TW,25,71),
   RealModePlayerSeed("Ethan Pinnock","Jamaica",1993,Position.IV,2,77),
   RealModePlayerSeed("Bobby Thomas","England",2001,Position.IV,4,71),
   RealModePlayerSeed("Stephen Mfuni","England",2008,Position.IV,12,64),
@@ -801,12 +802,12 @@ object RealModeDatabase {
   RealModePlayerSeed("Caleb Yirenkyi","Ghana",2006,Position.ZM,8,67),
   RealModePlayerSeed("Frank Onyeka","Nigeria",1998,Position.ZM,16,74),
   RealModePlayerSeed("Victor Torp","Denmark",1999,Position.ZM,29,70),
-  RealModePlayerSeed("Yann Gboho","France",2001,Position.OM,1,75),
+  RealModePlayerSeed("Yann Gboho","France",2001,Position.OM,34,75),
   RealModePlayerSeed("Jack Rudoni","England",2001,Position.OM,5,74),
   RealModePlayerSeed("Ephron Mason-Clark","Jamaica",1999,Position.LA,10,71),
   RealModePlayerSeed("Gustavo Hamer","Netherlands",1997,Position.LA,38,77),
   RealModePlayerSeed("Sidiki Cherif","France",2006,Position.LA,49,67),
-  RealModePlayerSeed("Jay Da Silva","Wales",1998,Position.RA,3,75),
+  RealModePlayerSeed("Jay Dasilva","Wales",1998,Position.RA,3,75),
   RealModePlayerSeed("Tatsuhiro Sakamoto","Japan",1996,Position.RA,7,72),
   RealModePlayerSeed("Loum Tchaouna","France",2003,Position.RA,18,69),
   RealModePlayerSeed("Ellis Simms","England",2001,Position.ST,9,70),
@@ -908,7 +909,6 @@ object RealModeDatabase {
   RealModePlayerSeed("Jack Butland","England",1993,Position.TW,1,75),
   RealModePlayerSeed("Dillon Phillips","England",1995,Position.TW,12,66),
   RealModePlayerSeed("Konstantinos Tzolakis","Greece",2002,Position.TW,19,79),
-  RealModePlayerSeed("Archie Howard","England",2006,Position.TW,55,67),
   RealModePlayerSeed("Charlie Hughes","England",2008,Position.IV,4,71),
   RealModePlayerSeed("Semi Ajayi","Nigeria",1993,Position.IV,6,70),
   RealModePlayerSeed("John Egan","Republic of Ireland",1992,Position.IV,15,72),
@@ -919,26 +919,21 @@ object RealModeDatabase {
   RealModePlayerSeed("Elliot Stroud","Sweden",2002,Position.LV,21,71),
   RealModePlayerSeed("Matt Targett","England",1995,Position.LV,23,71),
   RealModePlayerSeed("Lewie Coyle","England",1995,Position.RV,2,70),
-  RealModePlayerSeed("Tim Iroegbunam","England",2003,Position.DM,7,74),
+  RealModePlayerSeed("Tim Iroegbunam","England",2003,Position.DM,42,74),
   RealModePlayerSeed("Eliot Matazo","Belgium",2002,Position.DM,8,71),
   RealModePlayerSeed("Lucas Gourna-Douath","France",2003,Position.DM,29,71),
   RealModePlayerSeed("Hidemasa Morita","Japan",1995,Position.ZM,5,79),
   RealModePlayerSeed("Jens Hjerto Dahl","Norway",2005,Position.ZM,14,64),
-  RealModePlayerSeed("Óscar Zambrano","Ecuador",2004,Position.ZM,20,70),
-  RealModePlayerSeed("Darko Gyabi","England",2004,Position.ZM,24,66),
   RealModePlayerSeed("Regan Slater","England",1999,Position.ZM,27,70),
-  RealModePlayerSeed("Christos Mouzakitis","Greece",2006,Position.ZM,36,71),
   RealModePlayerSeed("Matt Crooks","England",1994,Position.OM,25,69),
   RealModePlayerSeed("Mohamed-Ali Cho","France",2004,Position.LA,50,76),
-  RealModePlayerSeed("Sorba Thomas","Wales",1999,Position.RA,10,71),
-  RealModePlayerSeed("Mohamed Belloumi","Algeria",2002,Position.RA,13,73),
+  RealModePlayerSeed("Sorba Thomas","Wales",1999,Position.RA,7,71),
+  RealModePlayerSeed("Mohamed Belloumi","Algeria",2002,Position.RA,10,73),
   RealModePlayerSeed("Brooke Norton-Cuffy","England",2004,Position.RA,18,68),
-  RealModePlayerSeed("Kieran Dowell","England",1997,Position.RA,26,70),
   RealModePlayerSeed("Abdülkadir Ömür","Türkiye",1999,Position.RA,33,73),
   RealModePlayerSeed("Oliver McBurnie","Scotland",1996,Position.ST,9,74),
   RealModePlayerSeed("Joe Gelhardt","England",2002,Position.ST,11,70),
-  RealModePlayerSeed("Ilyas Ansah","Germany",2004,Position.ST,16,69),
-  RealModePlayerSeed("Robinio Vaz","France",2007,Position.ST,47,64)
+  RealModePlayerSeed("Ilyas Ansah","Germany",2004,Position.ST,28,69),
  ))
  private fun club2_12()=RealModeClubSeed("premier-league-373-ipswich-town","Ipswich Town","IPS",
 "Premier League","England",0xFF0000FA,0xFFF5F2DC,listOf(
@@ -1164,9 +1159,8 @@ object RealModeDatabase {
   RealModePlayerSeed("Simon Moore","England",1990,Position.TW,21,66),
   RealModePlayerSeed("Robin Roefs","Netherlands",2003,Position.TW,22,74),
   RealModePlayerSeed("Melker Ellborg","Sweden",2003,Position.TW,31,62),
-  RealModePlayerSeed("Jenson Arron Jones","England",2006,Position.IV,1,67),
   RealModePlayerSeed("Kevin Danso","Austria",1998,Position.IV,4,79),
-  RealModePlayerSeed("Danny Ballard","Northern Ireland",1999,Position.IV,5,73),
+  RealModePlayerSeed("Dan Ballard","Northern Ireland",1999,Position.IV,5,73),
   RealModePlayerSeed("Luke O'Nien","England",1994,Position.IV,13,72),
   RealModePlayerSeed("Omar Alderete","Paraguay",1996,Position.IV,15,78),
   RealModePlayerSeed("Dayann Methalie","France",2006,Position.LV,6,64),
@@ -1175,21 +1169,18 @@ object RealModeDatabase {
   RealModePlayerSeed("Nordi Mukiele","France",1997,Position.RV,20,79),
   RealModePlayerSeed("Trai Hume","Northern Ireland",2002,Position.RV,32,74),
   RealModePlayerSeed("Granit Xhaka","Switzerland",1992,Position.DM,34,85),
-  RealModePlayerSeed("Tymur Tutierov","Ukraine",2005,Position.ZM,3,70),
-  RealModePlayerSeed("Tom Proctor","England",2000,Position.ZM,7,70),
+  RealModePlayerSeed("Tymur Tutierov","Ukraine",2005,Position.ZM,57,70),
   RealModePlayerSeed("Alan Browne","Republic of Ireland",1995,Position.ZM,8,72),
   RealModePlayerSeed("Habib Diarra","Senegal",2004,Position.ZM,19,77),
   RealModePlayerSeed("Noah Sadiki","Congo DR",2004,Position.ZM,27,74),
   RealModePlayerSeed("Enzo Le Fée","France",2000,Position.ZM,28,76),
   RealModePlayerSeed("Jules Ahoka","England",2005,Position.ZM,29,67),
   RealModePlayerSeed("Chris Rigg","England",2007,Position.OM,11,70),
-  RealModePlayerSeed("Nilson Angulo","Ecuador",2003,Position.LA,14,67),
-  RealModePlayerSeed("Romaine Mundle","England",2003,Position.LA,16,71),
+  RealModePlayerSeed("Nilson Angulo","Ecuador",2003,Position.LA,10,67),
+  RealModePlayerSeed("Romaine Mundle","England",2003,Position.LA,14,71),
   RealModePlayerSeed("Malick Fofana","Belgium",2005,Position.LA,39,78),
-  RealModePlayerSeed("Jack Whittaker","England",2006,Position.RA,2,73),
-  RealModePlayerSeed("Chemsdine Talbi","Morocco",2005,Position.RA,23,73),
-  RealModePlayerSeed("Juan Angulo","Ecuador",2008,Position.ST,9,64),
-  RealModePlayerSeed("Brian Brobbey","Netherlands",2002,Position.ST,10,77),
+  RealModePlayerSeed("Chemsdine Talbi","Morocco",2005,Position.RA,7,73),
+  RealModePlayerSeed("Brian Brobbey","Netherlands",2002,Position.ST,9,77),
   RealModePlayerSeed("Wilson Isidor","Haiti",2000,Position.ST,18,72),
   RealModePlayerSeed("Jocelin Ta Bi","Ivory Coast",2005,Position.ST,37,70)
  ))
@@ -3111,12 +3102,18 @@ object RealModeDatabase {
   RealModePlayerSeed("Enisio Carneiro","Uruguay",1995,Position.ST,41,70)
  ))
  val leagues:List<RealModeLeagueSeed> by lazy(LazyThreadSafetyMode.PUBLICATION){listOf(league1())+GermanLeagueData.leagues+listOf(league2(),league3(),league4(),league5())+InternationalLeagueData.leagues+EuropeanLeagueData.leagues}
- val countries:List<String> get()=leagues.map{it.country}.distinct()
- fun leaguesForCountry(country:String)=leagues.filter{it.country==country}
- fun leagueForTier(tier:Int)=leagues.first{it.tier==tier}
- fun countryForLeague(name:String)=leagues.firstOrNull{it.name==name}?.country
- fun levelForTier(tier:Int)=leagues.firstOrNull{it.tier==tier}?.level?:tier.coerceIn(1,5)
- val options:List<RealModeClubSeed> get()=leagues.flatMap{it.clubs}
- fun requireClub(key:String)=options.firstOrNull{it.key==key}?:error("Real-Modus-Verein nicht gefunden: $key")
- fun leagueForClub(key:String)=leagues.first{league->league.clubs.any{it.key==key}}
+ private val byTier by lazy(LazyThreadSafetyMode.PUBLICATION){leagues.associateBy{it.tier}}
+ private val countryByLeague by lazy(LazyThreadSafetyMode.PUBLICATION){leagues.associate{it.name to it.country}}
+ private val levelByTier by lazy(LazyThreadSafetyMode.PUBLICATION){leagues.associate{it.tier to it.level}}
+ val countries:List<String> by lazy(LazyThreadSafetyMode.PUBLICATION){leagues.map{it.country}.distinct()}
+ private val leaguesByCountry by lazy(LazyThreadSafetyMode.PUBLICATION){leagues.groupBy{it.country}}
+ val options:List<RealModeClubSeed> by lazy(LazyThreadSafetyMode.PUBLICATION){leagues.flatMap{it.clubs}}
+ private val clubByKey by lazy(LazyThreadSafetyMode.PUBLICATION){options.associateBy{it.key}}
+ private val leagueByClubKey by lazy(LazyThreadSafetyMode.PUBLICATION){buildMap{for(league in leagues)for(club in league.clubs)put(club.key,league)}}
+ fun leaguesForCountry(country:String)=leaguesByCountry[country].orEmpty()
+ fun leagueForTier(tier:Int)=byTier[tier]?:error("Liga nicht gefunden: $tier")
+ fun countryForLeague(name:String)=countryByLeague[name]
+ fun levelForTier(tier:Int)=levelByTier[tier]?:tier.coerceIn(1,5)
+ fun requireClub(key:String)=clubByKey[key]?:error("Real-Modus-Verein nicht gefunden: $key")
+ fun leagueForClub(key:String)=leagueByClubKey[key]?:error("Real-Modus-Verein nicht gefunden: $key")
 }

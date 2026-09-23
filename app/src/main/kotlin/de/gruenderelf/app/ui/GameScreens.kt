@@ -79,7 +79,7 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
  val ownLeague=w.leagues.first{w.user.clubId in it.clubIds};val ownCountry=WorldFactory.leagueCountry(w,ownLeague.tier)
  val cups=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP}.map{CompetitionEngine.cupGroup(w,it)}.distinct().sortedWith(compareBy<String>{if(it==ownCountry)0 else 1}.thenBy{it})
  val cupOptions=cups.map{"Pokal · $it"}
- val competitionOptions=if(real)listOf("Liga")+cupOptions+listOf(CompetitionType.CHAMPIONS_LEAGUE.label,CompetitionType.EUROPA_LEAGUE.label,CompetitionType.CLUB_WORLD_CUP.label,CompetitionType.ETERNAL_CROWN.label) else listOf("Liga")+cupOptions+CompetitionType.EURO_ELITE.label
+ val competitionOptions=if(real)listOf("Liga")+cupOptions+listOf(CompetitionType.CHAMPIONS_LEAGUE.label,CompetitionType.EUROPA_LEAGUE.label,CompetitionType.CLUB_WORLD_CUP.label)+(if(w.fantasyCupEnabled)listOf(CompetitionType.ETERNAL_CROWN.label)else emptyList()) else listOf("Liga")+cupOptions+CompetitionType.EURO_ELITE.label
  var competition by rememberSaveable{mutableStateOf("Liga")};var country by rememberSaveable(w.user.clubId,w.calendar.season){mutableStateOf(ownCountry)};var tier by rememberSaveable(w.user.clubId,w.calendar.season){mutableIntStateOf(ownLeague.tier)};var day by rememberSaveable(w.calendar.season){mutableIntStateOf(w.calendar.matchday)};var fullTable by rememberSaveable{mutableStateOf(false)};var group by rememberSaveable{mutableStateOf("A")};var euroRound by rememberSaveable(w.calendar.season){mutableIntStateOf(1)}
  if(competition !in competitionOptions)competition="Liga"
  val eyebrow=if(real)"EUROPÄISCHE LIGEN · POKALE · WELTPOKAL" else "LIGA · GRÜNDERPOKAL · EUROPA-ELITELIGA"
@@ -107,7 +107,7 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
     val type=when(competition){CompetitionType.CHAMPIONS_LEAGUE.label->CompetitionType.CHAMPIONS_LEAGUE;CompetitionType.EUROPA_LEAGUE.label->CompetitionType.EUROPA_LEAGUE;CompetitionType.CLUB_WORLD_CUP.label->CompetitionType.CLUB_WORLD_CUP;CompetitionType.ETERNAL_CROWN.label->CompetitionType.ETERNAL_CROWN;else->CompetitionType.EURO_ELITE}
     val leaguePhase=w.fixtures.filter{it.competition==type&&it.stage=="Ligaphase"};val modern=real&&type in listOf(CompetitionType.CHAMPIONS_LEAGUE,CompetitionType.EUROPA_LEAGUE)&&leaguePhase.isNotEmpty()&&leaguePhase.all{it.group.isBlank()}
     if(type in listOf(CompetitionType.CLUB_WORLD_CUP,CompetitionType.ETERNAL_CROWN)){
-     val matches=w.fixtures.filter{it.competition==type};Section(type.label){TrophyIllustration(Modifier.size(86.dp),true);Text(if(type==CompetitionType.ETERNAL_CROWN)"Aus jeder enthaltenen Liga qualifizieren sich die Plätze 1–6. Optional für die nächste Saison abschaltbar. Siegerprämie: 50 Mio. €." else "32 Clubs · acht Vierergruppen · die besten zwei erreichen das Achtelfinale. Siegerprämie: 40 Mio. €.",color=Muted);if(type==CompetitionType.ETERNAL_CROWN&&w.user.clubId in w.fantasyCupByes)Text("Dein Club hat ein Freilos für die erste Runde.",color=Grass)else if(matches.none{it.homeId==w.user.clubId||it.awayId==w.user.clubId})Text("Dein Verein nimmt derzeit nicht teil.",color=Muted)}
+     val matches=w.fixtures.filter{it.competition==type};Section(type.label){TrophyIllustration(Modifier.size(86.dp),true);Text(if(type==CompetitionType.ETERNAL_CROWN)"Aus jeder enthaltenen Liga qualifizieren sich die Plätze 1–6. Beim Karrierestart optional aktivierbar. Siegerprämie: 50 Mio. €." else "32 Clubs · acht Vierergruppen · die besten zwei erreichen das Achtelfinale. Siegerprämie: 40 Mio. €.",color=Muted);if(type==CompetitionType.ETERNAL_CROWN&&w.user.clubId in w.fantasyCupByes)Text("Dein Club hat ein Freilos für die erste Runde.",color=Grass)else if(matches.none{it.homeId==w.user.clubId||it.awayId==w.user.clubId})Text("Dein Verein nimmt derzeit nicht teil.",color=Muted)}
      if(type==CompetitionType.CLUB_WORLD_CUP){Pick("Gruppe",group,('A'..'H').map{it.toString()},{"Gruppe $it"}){group=it};Section("Gruppe $group"){CompetitionEngine.worldCupGroupTable(w,group).forEachIndexed{i,row->val c=w.clubs.getValue(row.clubId);Text("${i+1}. ${c.name} · ${row.points} P · ${row.goalsFor}:${row.goalsAgainst}",color=if(i<2)Grass else Muted)}}}
      matches.groupBy{it.round}.toSortedMap().forEach{(_,round)->Section(round.first().stage){round.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}}
     }else if(modern){
@@ -153,10 +153,9 @@ private fun liveDelayMs(phase: LivePhase,speed: MatchSpeed): Long {
 
 @Composable fun MatchScreen(state: GameState,vm: GameViewModel,speed: MatchSpeed){
  val w=state.world?:return;val m=w.live;var running by rememberSaveable{mutableStateOf(true)};var liveTab by rememberSaveable(m?.fixtureId){mutableIntStateOf(0)};var showLiveGraphic by rememberSaveable(m?.fixtureId){mutableStateOf(true)};val lifecycle=LocalLifecycleOwner.current.lifecycle
- DisposableEffect(lifecycle){val observer=LifecycleEventObserver{_,e->if(e==Lifecycle.Event.ON_PAUSE||e==Lifecycle.Event.ON_STOP)running=false};lifecycle.addObserver(observer);onDispose{lifecycle.removeObserver(observer)}}
+ DisposableEffect(lifecycle,m?.fixtureId){val observer=LifecycleEventObserver{_,e->if(e==Lifecycle.Event.ON_PAUSE||e==Lifecycle.Event.ON_STOP){running=false;vm.stopLiveRunner()}};lifecycle.addObserver(observer);onDispose{lifecycle.removeObserver(observer);vm.stopLiveRunner()}}
  LaunchedEffect(m?.incidentPause,m?.assistantSubPending){if(m?.incidentPause==true||m?.assistantSubPending==true)running=false}
- // Der Match-Timer setzt absichtlich keinen globalen busy/loading-Zustand.
- LaunchedEffect(state.revision,running,speed,m?.fixtureId,m?.liveEventSerial){if(m!=null&&running&&!m.finished&&!m.halfTime&&!m.pendingDecision&&!m.incidentPause&&!m.assistantSubPending){delay(liveDelayMs(m.livePhase,speed));vm.liveStep()}}
+ LaunchedEffect(running,m?.fixtureId,m?.finished){if(m!=null&&running&&!m.finished)vm.startLiveRunner() else vm.stopLiveRunner()}
  if(m==null){
   Page("${w.nextFixture()?.let{CompetitionEngine.displayName(w,it.competition)}?:"Spieltag"} ${w.calendar.matchday}","KREIDE AN DEN SCHUHEN"){
    w.nextFixture()?.let{NextGame(w,it,"Anpfiff"){vm.startMatch();running=true}}
@@ -164,7 +163,7 @@ private fun liveDelayMs(phase: LivePhase,speed: MatchSpeed): Long {
    Section("Vor dem Anpfiff"){
     Text("Formation ${w.club().tactics.formation} · Mentalität ${w.club().tactics.mentality}")
     val missing=w.squad().filter{!it.available&&!it.youth};if(missing.isEmpty())Text("Alle Spieler sind verfügbar.",color=Grass)else missing.forEach{Text("${it.name}: ${if(it.injuryWeeks>0)it.injury else it.unavailableReason?.label}",color=Clay)}
-    Text("Live-Match v0.4.67: realistischere Match-KI, nachvollziehbare Angriffsketten und kontextabhängige Stadionkulisse. Beim Wechsel in den Hintergrund pausieren Match und Audio sofort.",color=Muted)
+    Text("Live-Match v0.5.9: eine zentrale Match-Engine liefert Zustand, Takt, Ballposition, Statistik und Analyse. Die Grafik rendert nur noch diesen Zustand; beim Wechsel in den Hintergrund pausieren Match und Audio sofort.",color=Muted)
    }
   };return
  }
@@ -182,20 +181,46 @@ private fun liveDelayMs(phase: LivePhase,speed: MatchSpeed): Long {
    if(!m.finished){
     if(m.halfTime)Action(MatchEngine.breakActionLabel(m),true){vm.secondHalf();running=true}
     else if(!m.incidentPause)Action(if(running)"Pause" else "Live fortsetzen",true){running=!running}
+    if(!m.halfTime&&!m.incidentPause){
+     if(m.period==1)Action("Bis Halbzeit",!state.busy,true){running=false;vm.simulateToHalf()}
+     Action("Spiel simulieren",!state.busy,true){running=false;vm.simulateMatch()}
+     Text("Schnellsimulation verwendet dieselbe Match-KI, Taktik, Fitness-, Karten- und Verletzungslogik wie das Live-Spiel.",color=Muted,style=MaterialTheme.typography.bodySmall)
+    }
     Pick("Spieltempo",speed,MatchSpeed.entries.toList(),{it.label}){vm.setMatchSpeed(it)}
     Text(when(speed){MatchSpeed.SLOW->"Langsam: mehr Zeit für jede Ballbewegung und Szene.";MatchSpeed.NORMAL->"Normal: ungefähr 2–2,5 Sekunden pro gewöhnlicher Spielminute.";MatchSpeed.FAST->"Schnell: kürzere Abläufe, wichtige Ereignisse bleiben vollständig sichtbar."},color=Muted,style=MaterialTheme.typography.bodySmall)
    }else Action(if(w.fixtures.firstOrNull{it.id==m.fixtureId}?.competition==CompetitionType.LEAGUE)"Spieltag bestätigen & weiter" else "Pokalpartie bestätigen & weiter",!state.busy){running=false;vm.finishWeek()}
   }
 
   if(!m.finished){
-   Section{PrimaryTabRow(selectedTabIndex=liveTab,containerColor=Color.Transparent,contentColor=Grass){Tab(selected=liveTab==0,onClick={liveTab=0},text={Text("Live-Animation")});Tab(selected=liveTab==1,onClick={liveTab=1},text={Text("Live-Statistiken")})}}
-   if(liveTab==0)Section("Live-Animation"){
-    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Text("Spielfeld-Grafik anzeigen");Switch(showLiveGraphic,{showLiveGraphic=it})}
-    if(showLiveGraphic)LiveMatchAnimation(w,m) else Text("Die Spielfeld-Grafik ist ausgeblendet. Das Match läuft normal weiter.",color=Muted)
-    Text("Nur der Ball bewegt sich. Die letzten Bewegungen bleiben als verblassende Spur sichtbar; Konter, Schüsse und Ecken werden in zusammenhängenden Sequenzen animiert.",color=Muted,style=MaterialTheme.typography.bodySmall)
-   }else LiveStatistics(w,m,h,a)
+   Section{PrimaryTabRow(selectedTabIndex=liveTab,containerColor=Color.Transparent,contentColor=Grass){Tab(selected=liveTab==0,onClick={liveTab=0},text={Text("Live")});Tab(selected=liveTab==1,onClick={liveTab=1},text={Text("Taktik")});Tab(selected=liveTab==2,onClick={liveTab=2},text={Text("Statistik")});Tab(selected=liveTab==3,onClick={liveTab=3},text={Text("Analyse")})}}
+   when(liveTab){
+    0->Section("Live-Animation"){
+     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Text("Spielfeld-Grafik anzeigen");Switch(showLiveGraphic,{showLiveGraphic=it})}
+     if(showLiveGraphic)LiveMatchAnimation(w,m) else Text("Die Spielfeld-Grafik ist ausgeblendet. Das Match läuft normal weiter.",color=Muted)
+     Text("Nur der Ball bewegt sich. Die letzten Bewegungen bleiben als verblassende Spur sichtbar; Konter, Schüsse und Ecken werden in zusammenhängenden Sequenzen animiert.",color=Muted,style=MaterialTheme.typography.bodySmall)
+    }
+    1->Section("Taktik-Zentrale"){
+   Pick("Formation",ownFormation,Formations.all.keys.toList(),{it}){vm.changeFormation(it)}
+   Pick("Taktik-Vorlage",livePreset,tacticPresets,{it}){v->livePreset=v;if(v!="Individuell")vm.updateLiveTactic{world->applyTacticPreset(world.club().tactics,v);world.live?.let{live->if(ownHome)live.homeMentality=world.club().tactics.mentality else live.awayMentality=world.club().tactics.mentality}}}
+   StepSlider("Mentalität · defensiv bis offensiv",if(ownHome)m.homeMentality else m.awayMentality,true){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.mentality=v;it.live?.let{live->if(ownHome)live.homeMentality=v else live.awayMentality=v}}}
+   StepSlider("Pressing",ownClub.tactics.pressing,true){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.pressing=v}}
+   StepSlider("Tempo",ownClub.tactics.tempo,true){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.tempo=v}}
+   StepSlider("Breite",ownClub.tactics.width,true){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.width=v}}
+   StepSlider("Defensivlinie",ownClub.tactics.line,true){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.line=v}}
+   Pick("Spielaufbau",ownClub.tactics.buildUp,BuildUp.entries.toList(),{it.label}){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.buildUp=v}}
+   Text(tacticSummary(ownClub.tactics),color=Muted,style=MaterialTheme.typography.bodySmall)
+   Text("Sofort-Anweisungen",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Kräfte schonen",fontWeight=FontWeight.Bold);Text("Haramball-Modus: tiefer Block, fast alle hinter dem Ball und nach Ballgewinn schnell kontern. Spart Kraft und gibt Ballbesitz ab, ohne die Konter künstlich abzuwürgen.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(conserve,{vm.setConserveEnergy(it)})}
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Alles nach vorn",fontWeight=FontWeight.Bold);Text("Volles Risiko: hohe Linie, mehr Vorwärtsdrang und mehr Abschlüsse. Kann einen Rückstand drehen, kostet aber Kraft und öffnet große Räume für gegnerische Konter.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(allOut,{vm.setAllOutAttack(it)})}
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Spiel kontrollieren",fontWeight=FontWeight.Bold);Text("Ball halten, Tempo herausnehmen und Risiken reduzieren. Gut zum Verwalten einer Führung, dafür entstehen weniger direkte Abschlüsse.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(controlGame,{vm.setControlGame(it)})}
+
+    }
+    2->LiveStatistics(w,m,h,a)
+    else->MatchAnalysisPanel(w,m,"Analyse")
+   }
   }else{
    LiveStatistics(w,m,h,a,"Endstand & Statistik")
+   MatchAnalysisPanel(w,m,"Analyse & Taktik-Impact")
    Section("Spielerbewertungen"){
     for((club,lineup) in listOf(h to m.participation.filter{w.players[it]?.clubId==h.id},a to m.participation.filter{w.players[it]?.clubId==a.id})){
      Text(club.name,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
@@ -215,21 +240,6 @@ private fun liveDelayMs(phase: LivePhase,speed: MatchSpeed): Long {
    }
   }
 
-  if(!m.finished)Section("Live-Taktik"){
-   Pick("Formation",ownFormation,Formations.all.keys.toList(),{it}){vm.changeFormation(it)}
-   Pick("Taktik-Vorlage",livePreset,tacticPresets,{it}){v->livePreset=v;if(v!="Individuell")vm.updateLiveTactic{world->applyTacticPreset(world.club().tactics,v);world.live?.let{live->if(ownHome)live.homeMentality=world.club().tactics.mentality else live.awayMentality=world.club().tactics.mentality}}}
-   StepSlider("Mentalität · defensiv bis offensiv",if(ownHome)m.homeMentality else m.awayMentality,true){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.mentality=v;it.live?.let{live->if(ownHome)live.homeMentality=v else live.awayMentality=v}}}
-   StepSlider("Pressing",ownClub.tactics.pressing,true){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.pressing=v}}
-   StepSlider("Tempo",ownClub.tactics.tempo,true){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.tempo=v}}
-   StepSlider("Breite",ownClub.tactics.width,true){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.width=v}}
-   StepSlider("Defensivlinie",ownClub.tactics.line,true){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.line=v}}
-   Pick("Spielaufbau",ownClub.tactics.buildUp,BuildUp.entries.toList(),{it.label}){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.buildUp=v}}
-   Text(tacticSummary(ownClub.tactics),color=Muted,style=MaterialTheme.typography.bodySmall)
-   Text("Sofort-Anweisungen",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
-   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Kräfte schonen",fontWeight=FontWeight.Bold);Text("Haramball-Modus: tiefer Block, fast alle hinter dem Ball und nach Ballgewinn schnell kontern. Spart Kraft und gibt Ballbesitz ab, ohne die Konter künstlich abzuwürgen.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(conserve,{vm.setConserveEnergy(it)})}
-   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Alles nach vorn",fontWeight=FontWeight.Bold);Text("Volles Risiko: hohe Linie, mehr Vorwärtsdrang und mehr Abschlüsse. Kann einen Rückstand drehen, kostet aber Kraft und öffnet große Räume für gegnerische Konter.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(allOut,{vm.setAllOutAttack(it)})}
-   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Spiel kontrollieren",fontWeight=FontWeight.Bold);Text("Ball halten, Tempo herausnehmen und Risiken reduzieren. Gut zum Verwalten einer Führung, dafür entstehen weniger direkte Abschlüsse.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(controlGame,{vm.setControlGame(it)})}
-  }
 
   if(!m.finished)Section("Wechsel & Co-Trainer"){
    val incidentOut=if(m.incidentPause&&m.incidentReason==MatchPauseReason.INJURY&&m.incidentPlayerId in xi)m.incidentPlayerId else 0;var out by remember(m.fixtureId,m.incidentPause,m.incidentPlayerId){mutableIntStateOf(incidentOut.takeIf{it!=0}?:xi.lastOrNull()?:0)};var incoming by remember(m.fixtureId,m.incidentPause,m.incidentPlayerId){mutableIntStateOf(bench.firstOrNull()?:0)}

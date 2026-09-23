@@ -13,7 +13,7 @@ import de.gruenderelf.engine.*
  var scoutId by rememberSaveable{mutableIntStateOf(w.watchlist.firstOrNull()?:w.players.values.firstOrNull{!it.retired&&it.clubId!=w.user.clubId}?.id?:0)}
  var scoutRegion by rememberSaveable{mutableStateOf(ScoutRegion.DOMESTIC)}
  var tacticName by rememberSaveable{mutableStateOf("Mein Matchplan")}
- Page("Manager-Zentrale","GRÜNDERELF · v0.5.18"){
+ Page("Manager-Zentrale","GRÜNDERELF · v0.5.21"){
   Section("Changelog & erneuertes Tutorial"){
    Text("v0.5.18 stellt die in der aktuellen APK enthaltenen Manager-Systeme wieder her.",color=Grass)
    Text("Neu bzw. wiederhergestellt: U19/U23-Spielbetrieb, Potenzialtraining, Scouting-Zentrale und Watchlist, Verkauf/Verleih eigener Spieler, Medizincheck & Registrierung, Transferhistorie, Konkurrenzangebote, Co-Trainer-Profile, Benachrichtigungen, Taktik-Zentrale sowie Matchanalyse mit Passdaten.",color=Muted)
@@ -75,9 +75,8 @@ import de.gruenderelf.engine.*
    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button({vm.action{it.savedTactics[tacticName.ifBlank{"Matchplan"}]=SavedTactic(it.club().tactics.formation,it.club().tactics.mentality,it.club().tactics.pressing,it.club().tactics.line,it.club().tactics.tempo,it.club().tactics.width,it.club().tactics.buildUp)}}){Text("Speichern")};w.savedTactics.keys.firstOrNull()?.let{name->TextButton({vm.action{world->world.savedTactics[name]?.let{t->with(world.club().tactics){formation=t.formation;mentality=t.mentality;pressing=t.pressing;line=t.line;tempo=t.tempo;width=t.width;buildUp=t.buildUp}}}}){Text("$name laden")}}}
    Text("Spieleranweisungen für ${w.self().lastName}",style=MaterialTheme.typography.titleMedium);PlayerInstruction.entries.forEach{i->Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(i.label);Checkbox(TacticalInstructionSystem.has(w.club(),w.user.playerId,i),{vm.action{world->TacticalInstructionSystem.toggle(world.club(),world.user.playerId,i)}})}}
   }
-  Section("Analyse & Taktik-Impact"){
-   val last=w.matches.values.filter{it.homeId==w.user.clubId||it.awayId==w.user.clubId}.maxByOrNull{it.fixtureId}
-   if(last==null)Text("Nach dem nächsten Spiel stehen Passnetz und Taktik-Impact bereit.",color=Muted) else {val clubId=w.user.clubId;val timeline=last.shotEvents.filter{it.clubId==clubId}.sumOf{it.xg};val completed=last.passEvents.count{it.clubId==clubId&&it.completed};val total=last.passEvents.count{it.clubId==clubId};Metric("xG",String.format("%.2f",timeline));Metric("Erfasste Pässe","$completed / $total");Text("Taktikänderungen: ${last.tacticChanges.count{it.clubId==clubId}}",color=Muted)}
-  }
+  val lastAnalysis=w.matches.values.filter{it.homeId==w.user.clubId||it.awayId==w.user.clubId}.maxByOrNull{it.fixtureId}
+  if(lastAnalysis==null)Section("Analyse & Taktik-Impact"){Text("Nach dem nächsten Spiel stehen xG-Verlauf, Schusskarte, Passnetz und Taktik-Impact bereit.",color=Muted)}
+  else MatchAnalysisPanel(w,lastAnalysis,"Analyse & Taktik-Impact")
  }
 }
