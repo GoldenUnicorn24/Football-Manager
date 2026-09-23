@@ -18,7 +18,7 @@ object CompetitionEngine {
  )
  private val fantasyNationalDays=listOf(1,4,7,10,14,17)
  private val fantasyNationalNames=listOf("1. Runde","2. Runde","Achtelfinale","Viertelfinale","Halbfinale","Finale")
- private val realNationalDays=listOf(1,4,10,16,25,33)
+ private val realNationalDays=listOf(1,4,8,12,18,25,33)
  private val realNationalNames=listOf("1. Runde","2. Runde","Achtelfinale","Viertelfinale","Halbfinale","Finale")
  private val fantasyEuroGroupDays=listOf(2,5,8,11,15,18)
  private val fantasyEuroKoDays=listOf(19,20,21,22)
