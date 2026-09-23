@@ -5,6 +5,10 @@ on:
     branches: [ "recover-v0.5.*" ]
   workflow_dispatch:
 
+concurrency:
+  group: gruenderelf-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
