@@ -75,4 +75,14 @@ class RecoveryV0518Test {
   assertTrue(timeline.last().second>=.75);assertTrue(network.first.isNotEmpty());assertEquals(1,network.second.single().count)
  }
 
+
+ @Test fun blockedRegistrationKeepsAgreementAndCanBeRetried(){
+  val w=WorldFactory.createWorld(51811L);val p=w.players.values.first{!it.retired&&!it.youth&&it.clubId!=0&&it.clubId!=w.user.clubId};p.hidden.injuryProneness=5;p.injuryWeeks=0
+  val previous=p.clubId;w.club().budget=500L
+  val o=TransferOffer(id=w.nextIds.negotiation++,buyerClubId=w.user.clubId,sellerClubId=previous,playerId=p.id,type=DealType.BUY,role=SquadRole.ROTATION,fee=10_000L,wage=maxOf(5,p.wage),status=NegotiationStatus.AGREED,stage=TransferStage.MEDICAL);w.negotiations[o.id]=o
+  assertFalse(TransferV0518System.medicalAndRegistration(w,o));assertEquals(TransferStage.REGISTRATION,o.stage);assertEquals(NegotiationStatus.AGREED,o.status);assertFalse(o.registrationReady);assertTrue(o.message.contains("Registrierung wartet"))
+  w.club().budget=100_000_000L;assertTrue(TransferV0518System.medicalAndRegistration(w,o));assertTrue(o.registrationReady);TransferEngine.complete(w,o.id)
+  assertEquals(NegotiationStatus.COMPLETED,o.status);assertEquals(w.user.clubId,p.clubId)
+ }
+
 }
