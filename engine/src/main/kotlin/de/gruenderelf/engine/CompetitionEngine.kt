@@ -591,6 +591,10 @@ object CompetitionEngine {
  }
 
  private fun storeWithoutCareerSideEffects(w: World,f: Fixture,m: LiveMatch){
-  f.played=true;w.matches[f.id]=MatchRecord(f.id,m.homeId,m.awayId,m.home.copy(),m.away.copy(),m.minute,m.goals.toList(),m.attendance,m.shotEvents.toList(),m.homePens,m.awayPens,m.extraTimePlayed)
+  f.played=true;w.matches[f.id]=MatchRecord(
+    fixtureId=f.id,homeId=m.homeId,awayId=m.awayId,home=m.home.copy(),away=m.away.copy(),minute=m.minute,
+    goals=m.goals.toList(),attendance=m.attendance,shotEvents=m.shotEvents.toList(),passEvents=m.passEvents.toList(),
+    tacticChanges=m.tacticChanges.toList(),homePens=m.homePens,awayPens=m.awayPens,extraTimePlayed=m.extraTimePlayed
+   )
  }
 }
