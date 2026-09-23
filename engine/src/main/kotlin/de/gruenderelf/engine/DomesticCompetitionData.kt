@@ -11,7 +11,7 @@ data class DomesticCupSpec(
  val secondary:Boolean=false
 ) {
  init {
-  require(targetSize>1 && targetSize and (targetSize-1)==0){"Cup-Größe muss Zweierpotenz sein: $name"}
+  require(targetSize>1 && (targetSize and (targetSize-1))==0){"Cup-Größe muss Zweierpotenz sein: $name"}
   require(roundDays.size==roundNames.size){"Runden/Termine passen nicht: $name"}
  }
 }
