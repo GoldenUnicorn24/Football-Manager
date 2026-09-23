@@ -107,6 +107,19 @@ object SeasonEngine {
    }
    if(c.budget<0){w.squad(c.id).forEach{it.morale=(it.morale-3).coerceAtLeast(5)};if(c.id==w.user.clubId)w.news("Kasse im Minus","Neue Ausbauten sind gesperrt. Fehlende Mittel drücken die Moral.","bad")}
   }
+  if(w.calendar.absoluteWeek%4==3){
+   val played=w.fixtures.count{it.season==w.calendar.season&&it.played&&(it.homeId==w.user.clubId||it.awayId==w.user.clubId)}.coerceAtLeast(1)
+   val club=w.club()
+   for(p in w.squad().filter{!it.youth&&it.id!=w.user.playerId}){
+    val target=when(p.promisedRole){SquadRole.STAR->.80;SquadRole.STARTER->.65;SquadRole.ROTATION->.35;SquadRole.PROSPECT->.20;SquadRole.BACKUP->.10}
+    val share=p.stats.appearances.toDouble()/played
+    when{
+     share+0.20<target->{p.morale=(p.morale-4).coerceAtLeast(5);w.relationships[p.id]=((w.relationships[p.id]?:50)-3).coerceAtLeast(0);club.dynamics.hierarchyStability=(club.dynamics.hierarchyStability-1).coerceAtLeast(0);if(target>=.35&&share+0.35<target&&p.hidden.ambition>55)p.wantsMove=true}
+     share+0.05<target->p.morale=(p.morale-1).coerceAtLeast(5)
+     else->{p.morale=(p.morale+1).coerceAtMost(100);w.relationships[p.id]=((w.relationships[p.id]?:50)+1).coerceAtMost(100)}
+    }
+   }
+  }
   w.calendar.absoluteWeek++;EventsEngine.apply(w)
   val own=if(live.homeId==w.user.clubId)live.home.goals else live.away.goals;val other=if(live.homeId==w.user.clubId)live.away.goals else live.home.goals
   w.news("Spieltag ${w.calendar.matchday}: $own:$other","${live.attendance} Zuschauer. Wochenzuflüsse: ${w.club().lastIncome} €. Kosten: ${w.club().lastCosts} €.",if(own>other)"good" else if(own<other)"bad" else "normal")
@@ -136,7 +149,9 @@ object SeasonEngine {
    rank>=11&&tier<10->"Abstieg"
    else->"Verbleib"
   };val awards=mutableListOf<String>()
+  val titlePrizes=CompetitionPrizeSystem.awardSeasonTitles(w,tables)
   if(rank==1)awards.add("Meister der ${WorldFactory.leagueName(w,tier)}")
+  titlePrizes.userAwards.filter{it !in awards}.forEach{awards.add(it)}
   val top=w.players.values.filter{it.clubId in w.leagues.first{l->l.tier==tier}.clubIds}.sortedWith(compareByDescending<Player>{it.stats.goals}.thenBy{it.id}).firstOrNull()
   if(top?.id==w.user.playerId&&w.self().stats.goals>0)awards.add("Torjäger: ${w.self().stats.goals} Tore")
   w.history.add(SeasonHistory(w.calendar.season,w.user.clubId,WorldFactory.leagueName(w,tier),rank,row.points,row.goalsFor,outcome,awards))
@@ -169,15 +184,15 @@ object SeasonEngine {
     if(age>=35){p.attributes.pace=(p.attributes.pace-1).coerceAtLeast(1);p.attributes.stamina=(p.attributes.stamina-1).coerceAtLeast(1)}
     if(p.id!=w.user.playerId&&age>=36&&rng.chance(.15+(age-36)*.12)){p.retired=true;p.clubId=0;continue}
     if(age<=23&&rng.chance(.7))p.attributes.improve(rng.pick(Focus.entries),p.hidden.potential)
-    if(p.youth&&age>=19)p.youth=false
+    if(p.youth&&age>=23)p.youth=false else if(p.youth)p.youthSquad=if(age<=18)YouthSquad.U19 else YouthSquad.U23
     p.fitness=95.0;p.sharpness=55;p.injuryWeeks=(p.injuryWeeks-4).coerceAtLeast(0);p.unavailableWeeks=0;p.unavailableReason=null;if(p.injuryWeeks==0)p.injury=""
     w.clubs[p.clubId]?.let{club->p.wage=if(club.tier==0)p.wage.coerceAtLeast(1500) else if(w.privateTopClubMode)p.wage.coerceAtLeast(120) else if(club.tier>=7)p.wage.coerceAtMost(15) else (11-club.tier)*rng.int(150,350)}
    }
    w.calendar.season++
-   YouthEngine.newSeason(w,rng)
+   YouthEngine.newSeason(w,rng);YouthCompetitionSystem.newSeason(w);ScoutingTransferSystem.newSeason(w)
    for(c in w.clubs.values){
     if(c.tier in 1..10)repeat((if(c.stadium.youth>=28)4 else 2)+(if(c.youthPhilosophy=="Breitensport")1 else 0)){WorldFactory.spawnYouth(w,c,rng)}
-    if(c.id!=w.user.clubId){w.squad(c.id).filter{it.youth&&w.calendar.season-it.birthYear>=17}.sortedByDescending{it.ca}.take(2).forEach{it.youth=false};val level=if(w.privateTopClubMode)RealModeDatabase.levelForTier(c.tier) else c.tier;while(w.squad(c.id).count{!it.youth}<20){val p=WorldFactory.generatePlayer(w.nextIds.player++,c.id,level,rng.pick(Position.entries),rng,w.calendar.season);w.players[p.id]=p}}
+    if(c.id!=w.user.clubId){w.squad(c.id).filter{it.youth&&w.calendar.season-it.birthYear>=19}.sortedByDescending{it.ca}.take(2).forEach{it.youth=false};val level=if(w.privateTopClubMode)RealModeDatabase.levelForTier(c.tier) else c.tier;while(w.squad(c.id).count{!it.youth}<20){val p=WorldFactory.generatePlayer(w.nextIds.player++,c.id,level,rng.pick(Position.entries),rng,w.calendar.season);w.players[p.id]=p}}
     WorldFactory.autoLineup(w,c.id)
    }
    repeat(12){val level=if(w.privateTopClubMode)RealModeDatabase.levelForTier(w.club().tier) else w.club().tier;val p=WorldFactory.generatePlayer(w.nextIds.player++,0,level,rng.pick(Position.entries),rng,w.calendar.season);w.players[p.id]=p}
@@ -187,7 +202,7 @@ object SeasonEngine {
  }
 }
 object ClubActions {
- fun promote(w: World,id: Int){require(w.live==null){"Jugendspieler nach dem Spiel hochziehen."};val p=w.players.getValue(id);require(p.clubId==w.user.clubId&&p.youth);val ready=YouthEngine.readiness(w,p);p.youth=false;p.wage=maxOf(0,p.wage);p.morale=(p.morale+if(ready>=65)10 else if(ready>=45)4 else -6).coerceIn(5,100);if(ready<45){p.fitness=(p.fitness-8).coerceAtLeast(35.0);p.youthProfile.confidence=(p.youthProfile.confidence-12).coerceAtLeast(5);w.club().dynamics.chemistry=(w.club().dynamics.chemistry-2).coerceAtLeast(0)}else{p.youthProfile.confidence=(p.youthProfile.confidence+6).coerceAtMost(100)};WorldFactory.rebuildBench(w,w.club());w.news("Jugend rückt auf","${p.name} wird in den Profikader hochgezogen. Bereitschaft $ready/100 – ${YouthEngine.riskLabel(w,p)}.",if(ready>=60)"good" else "normal")}
+ fun promote(w: World,id: Int){require(w.live==null){"Jugendspieler nach dem Spiel hochziehen."};val p=w.players.getValue(id);require(p.clubId==w.user.clubId&&p.youth);val ready=YouthEngine.readiness(w,p);p.youth=false;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false;p.wage=maxOf(0,p.wage);p.morale=(p.morale+if(ready>=65)10 else if(ready>=45)4 else -6).coerceIn(5,100);if(ready<45){p.fitness=(p.fitness-8).coerceAtLeast(35.0);p.youthProfile.confidence=(p.youthProfile.confidence-12).coerceAtLeast(5);w.club().dynamics.chemistry=(w.club().dynamics.chemistry-2).coerceAtLeast(0)}else{p.youthProfile.confidence=(p.youthProfile.confidence+6).coerceAtMost(100)};WorldFactory.rebuildBench(w,w.club());w.news("Jugend rückt auf","${p.name} wird in den Profikader hochgezogen. Bereitschaft $ready/100 – ${YouthEngine.riskLabel(w,p)}.",if(ready>=60)"good" else "normal")}
  fun sign(w: World,id: Int){
   require(w.live==null){"Transfers nach dem Spiel abschließen."};val p=w.players.getValue(id);val o=TransferEngine.createOffer(w,w.user.clubId,id,DealType.BUY,if(p.ca>=w.squad().filter{!it.youth}.map{it.ca}.average())SquadRole.STARTER else SquadRole.ROTATION)
   repeat(5){if(o.status!=NegotiationStatus.AGREED&&o.status!=NegotiationStatus.REJECTED)TransferEngine.improve(w,o.id,when{ o.sellerScore<62->"fee";o.playerScore<62->"role";else->"wage"})}

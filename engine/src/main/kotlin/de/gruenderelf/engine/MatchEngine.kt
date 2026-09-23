@@ -7,9 +7,41 @@ import kotlin.math.pow
 
 
 data class SubSuggestion(val outId: Int,val inId: Int,val target: Position,val score: Double,val reason: String)
+data class PlayerDecisionContext(val distanceMeters:Int,val nearbyOpponents:Int,val pressureLabel:String)
 
 object MatchEngine {
  private val ballPhases=setOf(LivePhase.POSSESSION,LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK,LivePhase.COUNTER,LivePhase.CORNER,LivePhase.FREE_KICK,LivePhase.DANGEROUS_FREE_KICK,LivePhase.PENALTY,LivePhase.SHOOTOUT,LivePhase.SHOT_OFF_TARGET,LivePhase.SHOT_ON_TARGET,LivePhase.WOODWORK,LivePhase.GOAL)
+
+ /** Eine einzige Zeitquelle für Runner und Darstellung. Die UI besitzt keinen eigenen Match-Takt mehr. */
+ fun liveFrameDurationMs(phase:LivePhase,speed:MatchSpeed):Long{
+  val normal=when(phase){
+   LivePhase.GOAL->4200L
+   LivePhase.SHOT_ON_TARGET,LivePhase.SHOT_OFF_TARGET,LivePhase.WOODWORK->2800L
+   LivePhase.VAR->1600L
+   LivePhase.OFFSIDE,LivePhase.THROW_IN->1800L
+   LivePhase.CORNER->3000L
+   LivePhase.FREE_KICK,LivePhase.DANGEROUS_FREE_KICK,LivePhase.PENALTY->2900L
+   LivePhase.YELLOW_CARD,LivePhase.YELLOW_RED_CARD,LivePhase.RED_CARD,LivePhase.INJURY->2500L
+   LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK->2000L
+   LivePhase.COUNTER->1450L
+   else->2250L
+  }
+  return when(speed){
+   MatchSpeed.SLOW->if(phase==LivePhase.VAR)1900L else (normal*1.45).toLong()
+   MatchSpeed.NORMAL->normal
+   MatchSpeed.FAST->when(phase){LivePhase.GOAL->2300L;LivePhase.SHOT_ON_TARGET,LivePhase.SHOT_OFF_TARGET,LivePhase.WOODWORK->1550L;LivePhase.VAR->1200L;LivePhase.OFFSIDE,LivePhase.THROW_IN->950L;LivePhase.CORNER->1700L;LivePhase.FREE_KICK,LivePhase.DANGEROUS_FREE_KICK,LivePhase.PENALTY->1650L;LivePhase.YELLOW_CARD,LivePhase.YELLOW_RED_CARD,LivePhase.RED_CARD,LivePhase.INJURY->1450L;LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK->1100L;LivePhase.COUNTER->720L;else->850L}
+  }
+ }
+
+ /** Persistiert ausschließlich echte Engine-Ballzustände; Analyse-Pässe dürfen die Grafik nie steuern. */
+ fun captureBallFrame(m:LiveMatch){
+  val frame=BallFrame(m.liveEventSerial,m.minute,m.ballX.coerceIn(.04f,.96f),m.ballY.coerceIn(.03f,.97f),m.liveClubId,m.livePhase,m.liveDetail)
+  val last=m.ballTrace.lastOrNull()
+  if(last==null||last.serial!=frame.serial||last.x!=frame.x||last.y!=frame.y||last.phase!=frame.phase){
+   m.ballTrace.add(frame)
+   if(m.ballTrace.size>64)m.ballTrace.subList(0,m.ballTrace.size-64).clear()
+  }
+ }
 
  fun start(w: World,f: Fixture=w.nextFixture()?:error("Kein Spiel vorhanden.")): LiveMatch {
   require(!f.played){"Dieses Spiel wurde schon gewertet."}
@@ -40,6 +72,7 @@ object MatchEngine {
   MatchIntelligence.install(w,m)
   val kickoffHome=rng.chance(.5);m.kickoffHomeFirst=kickoffHome;m.extraKickoffHome=rng.chance(.5)
   m.homeInPossession=kickoffHome;m.chainOwnerClubId=if(kickoffHome)h.id else a.id;m.liveClubId=m.chainOwnerClubId;m.livePhase=LivePhase.POSSESSION;m.liveDetail="Anstoß";m.liveEventSerial=1;m.lastPossessionChangeEventSerial=1
+  captureBallFrame(m)
   (m.homeXi+m.awayXi).filter{it!=0}.forEach{ensurePerformance(w,m,it)}
   m.rngState=rng.state
   log(m,"${h.stadium.name}: $fans Zuschauer. $weather. ${h.stadium.surface.label}.")
@@ -55,8 +88,38 @@ object MatchEngine {
  private fun conserve(m: LiveMatch,home: Boolean)=if(home)m.homeConserveEnergy else m.awayConserveEnergy
  private fun allOut(m: LiveMatch,home: Boolean)=if(home)m.homeAllOutAttack else m.awayAllOutAttack
  private fun controlGame(m: LiveMatch,home: Boolean)=if(home)m.homeControlGame else m.awayControlGame
+ private data class EffectiveTactics(val mentality:Int,val pressing:Int,val tempo:Int,val width:Int,val line:Int,val buildUp:BuildUp)
+ private fun effectiveTactics(w:World,m:LiveMatch,home:Boolean):EffectiveTactics{
+  val c=w.clubs.getValue(clubId(m,home));val selected=if(home)m.homeMentality else m.awayMentality
+  return when{
+   conserve(m,home)->EffectiveTactics(1,1,4,c.tactics.width.coerceAtMost(3),1,BuildUp.COUNTER)
+   allOut(m,home)->EffectiveTactics(5,5,5,c.tactics.width.coerceAtLeast(4),5,c.tactics.buildUp)
+   controlGame(m,home)->EffectiveTactics(2,2,1,3,2,if(c.tactics.buildUp==BuildUp.TIKI_TAKA)BuildUp.TIKI_TAKA else BuildUp.SHORT)
+   else->EffectiveTactics(selected,c.tactics.pressing,c.tactics.tempo,c.tactics.width,c.tactics.line,c.tactics.buildUp)
+  }
+ }
  private fun stats(m: LiveMatch,home: Boolean)=if(home)m.home else m.away
  private fun xi(m: LiveMatch,home: Boolean)=if(home)m.homeXi else m.awayXi
+
+ /** Näherung für die Spielerentscheidungs-Einblendung. Das Match besitzt bewusst keine
+  * sichtbaren Spielerpunkte; der Gegnerdruck wird deshalb aus Zone, Formation und Pressing
+  * abgeleitet statt erfundene exakte Positionen vorzutäuschen. */
+ fun playerDecisionContext(w:World,m:LiveMatch):PlayerDecisionContext{
+  val self=w.players[w.user.playerId]?:return PlayerDecisionContext(0,0,"unbekannt")
+  val home=when(self.clubId){m.homeId->true;m.awayId->false;else->return PlayerDecisionContext(0,0,"unbekannt")}
+  val distance=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home)).distanceMeters.roundToInt().coerceIn(1,105)
+  val activeOpponents=xi(m,!home).filter{it!=0&&it !in m.sentOff&&it !in m.injured&&it in w.players}
+  val defensiveCount=activeOpponents.count{w.players[it]?.position in setOf(Position.IV,Position.LV,Position.RV,Position.DM)}
+  val opp=effectiveTactics(w,m,!home)
+  val zone=when{distance<=10->4;distance<=18->3;distance<=28->2;else->1}
+  val central=if(m.ballX in .32f.. .68f)1 else 0
+  val pressing=when{opp.pressing>=4->1;opp.pressing<=2->-1;else->0}
+  val highLine=if(opp.line>=4&&distance>18)1 else 0
+  val maxPlausible=minOf(6,maxOf(1,defensiveCount+2),maxOf(1,activeOpponents.size-1))
+  val nearby=(zone+central+pressing+highLine).coerceIn(1,maxPlausible)
+  val label=when(nearby){1->"sehr wenige";2->"wenige";3->"mehrere";else->"viele"}
+  return PlayerDecisionContext(distance,nearby,label)
+ }
 
  fun clockLabel(m: LiveMatch): String {
   val base=when(m.period){1->45;2->90;3->105;4->120;else->m.minute}
@@ -189,8 +252,7 @@ object MatchEngine {
    role*p.fit(slot)*(.70+p.fitness*.003).coerceIn(.72,1.0)
   }}.sum()
   if(count==0)return 4.0
-  val pressLevel=when{conserve(m,home)->1;allOut(m,home)->5;controlGame(m,home)->2;else->c.tactics.pressing}
-  val lineLevel=when{conserve(m,home)->1;allOut(m,home)->5;controlGame(m,home)->2;else->c.tactics.line}
+  val effective=effectiveTactics(w,m,home);val pressLevel=effective.pressing;val lineLevel=effective.line
   val pressFactor=.88+pressLevel*.035
   val lineFactor=.97+(lineLevel-3)*.018
   return total/11.0*pressFactor*lineFactor
@@ -206,8 +268,8 @@ object MatchEngine {
  private fun teamChanceQuality(w: World,m: LiveMatch,home: Boolean): Double {
   val ids=xi(m,home).filter{it!=0&&it !in m.injured};if(ids.isEmpty())return .35
   val technical=ids.map{pId->val p=w.players.getValue(pId);p.attributes.passing*.36+p.attributes.vision*.34+p.attributes.technique*.30}.average()/100.0
-  val c=w.clubs.getValue(clubId(m,home));val style=when(c.tactics.buildUp){BuildUp.TIKI_TAKA->.07;BuildUp.SHORT->.045;BuildUp.WIDE->.025;BuildUp.MIXED->0.0;BuildUp.DIRECT->-.02;BuildUp.COUNTER->-.01}
-  val tempoPenalty=kotlin.math.abs(c.tactics.tempo-3)*.012
+  val c=w.clubs.getValue(clubId(m,home));val effective=effectiveTactics(w,m,home);val style=when(effective.buildUp){BuildUp.TIKI_TAKA->.07;BuildUp.SHORT->.045;BuildUp.WIDE->.025;BuildUp.MIXED->0.0;BuildUp.DIRECT->-.02;BuildUp.COUNTER->-.01}
+  val tempoPenalty=kotlin.math.abs(effective.tempo-3)*.012
   return (technical+style-tempoPenalty).coerceIn(.18,.94)
  }
 
@@ -218,17 +280,17 @@ object MatchEngine {
 
  /** Final pass/dribble creates a real pitch position before the shot is evaluated. */
  private fun prepareShotLocation(w: World,m: LiveMatch,home: Boolean,rng: SeededRandom): ShotType {
-  val c=w.clubs.getValue(clubId(m,home));val opp=w.clubs.getValue(clubId(m,!home))
+  val c=w.clubs.getValue(clubId(m,home));val opp=w.clubs.getValue(clubId(m,!home));val effective=effectiveTactics(w,m,home);val oppEffective=effectiveTactics(w,m,!home)
   val probe=ShotContext(m.ballX,m.ballY,home);val current=ShotModel.geometry(probe)
   val edge=((controlStrength(w,m,home)-pressureStrength(w,m,!home))/32.0).coerceIn(-1.5,1.5)
   val chanceQuality=teamChanceQuality(w,m,home)
   val wide=m.ballX !in .23f.. .77f
   val counter=m.liveDetail.contains("Konter",true)||m.liveDetail.contains("Gegenstoß",true)||m.counterTicksRemaining>0
-  val create=(.34+edge*.13+(chanceQuality-.5)*.24+(c.tactics.mentality-3)*.025-(opp.tactics.pressing-3)*.018).coerceIn(.07,.70)
+  val create=(.34+edge*.13+(chanceQuality-.5)*.24+(effective.mentality-3)*.025-(oppEffective.pressing-3)*.018).coerceIn(.07,.70)
 
   // Flügelangriffe enden entweder mit echter Flanke oder Cutback in eine zentrale Zone.
-  if(wide&&rng.chance((.28+(if(c.tactics.buildUp==BuildUp.WIDE).18 else 0.0)+(chanceQuality-.5)*.18).coerceIn(.16,.62))){
-   val cutback=rng.chance((.36+(if(c.tactics.buildUp==BuildUp.TIKI_TAKA||c.tactics.buildUp==BuildUp.SHORT).20 else 0.0)+edge*.08).coerceIn(.18,.68))
+  if(wide&&rng.chance((.28+(if(effective.buildUp==BuildUp.WIDE).18 else 0.0)+(chanceQuality-.5)*.18).coerceIn(.16,.62))){
+   val cutback=rng.chance((.36+(if(effective.buildUp==BuildUp.TIKI_TAKA||effective.buildUp==BuildUp.SHORT).20 else 0.0)+edge*.08).coerceIn(.18,.68))
    if(cutback){
     val d=(7.0+rng.nextDouble()*7.5).coerceIn(6.0,15.0);setDistanceFromGoal(m,home,d,(.38+rng.nextDouble()*.24).toFloat());m.liveDetail="Rückpass von der Grundlinie"
     return ShotType.CUTBACK
@@ -261,13 +323,14 @@ object MatchEngine {
  }
 
  private fun buildShotContext(w: World,m: LiveMatch,home: Boolean,shooter: Player,type: ShotType,rng: SeededRandom,assistId: Int=0): ShotContext {
-  val opp=w.clubs.getValue(clubId(m,!home));val edge=((controlStrength(w,m,home)-pressureStrength(w,m,!home))/34.0).coerceIn(-1.5,1.5)
-  val teamPassQuality=(teamChanceQuality(w,m,home)-((opp.tactics.pressing-3)*.018)).coerceIn(.15,.96)
+  val opp=w.clubs.getValue(clubId(m,!home));val oppEffective=effectiveTactics(w,m,!home);val edge=((controlStrength(w,m,home)-pressureStrength(w,m,!home))/34.0).coerceIn(-1.5,1.5)
+  val teamPassQuality=(teamChanceQuality(w,m,home)-((oppEffective.pressing-3)*.018)).coerceIn(.15,.96)
   val passer=w.players[assistId]
   val individualPassQuality=passer?.let{((it.attributes.passing*.46+it.attributes.vision*.34+it.attributes.technique*.20)/100.0).coerceIn(.15,.98)}
   val primePass=passer?.messiMentored==true
-  val passQuality=((if(individualPassQuality!=null)teamPassQuality*.42+individualPassQuality*.58 else teamPassQuality)+(if(primePass).055 else 0.0)).coerceIn(.15,.995)
-  var pressure=(.46-edge*.16+(opp.tactics.pressing-3)*.035+(rng.nextDouble()-.5)*.15-(if(shooter.messiMentored).11 else 0.0)).coerceIn(.03,.92)
+  val chainQuality=(m.chainPasses.coerceAtMost(8)*.008)+(m.chainZone*.008)
+  val passQuality=((if(individualPassQuality!=null)teamPassQuality*.42+individualPassQuality*.58 else teamPassQuality)+(if(primePass).055 else 0.0)+chainQuality).coerceIn(.15,.995)
+  var pressure=(.46-edge*.16+(oppEffective.pressing-3)*.035+(rng.nextDouble()-.5)*.15-(if(shooter.messiMentored).11 else 0.0)).coerceIn(.03,.92)
   if(type==ShotType.ONE_ON_ONE)pressure=(pressure-.24).coerceAtLeast(.04)
   if(type==ShotType.CUTBACK||type==ShotType.REBOUND)pressure=(pressure-.10).coerceAtLeast(.04)
   if(type==ShotType.PENALTY)pressure=.05
@@ -323,7 +386,11 @@ object MatchEngine {
   if(old!=0&&old!=id){
    require(reason!=PossessionChangeReason.NONE){"Teamwechsel ohne nachvollziehbaren Ballbesitzwechsel: $old -> $id (${phase.label})"}
    m.possessionChangeReason=reason;m.lastPossessionChangeEventSerial=m.liveEventSerial+1
+   m.chainPasses=0;m.chainZone=0;m.chainNarrative="Ballgewinn · ${reason.label}"
   }else if(reason!=PossessionChangeReason.NONE)m.possessionChangeReason=reason
+  if(old==id&&playerId!=0&&phase in setOf(LivePhase.POSSESSION,LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK,LivePhase.COUNTER))m.chainPasses=(m.chainPasses+1).coerceAtMost(20)
+  m.chainZone=when(phase){LivePhase.POSSESSION->0;LivePhase.ATTACK,LivePhase.COUNTER->1;LivePhase.DANGEROUS_ATTACK->2;LivePhase.SHOT_ON_TARGET,LivePhase.SHOT_OFF_TARGET,LivePhase.WOODWORK,LivePhase.GOAL->3;else->m.chainZone}
+  if(detail.isNotBlank())m.chainNarrative=detail
   m.chainOwnerClubId=id;m.homeInPossession=home;m.livePhase=phase;m.liveClubId=id;m.livePlayerId=playerId;m.liveDetail=detail;m.liveEventSerial++
  }
 
@@ -332,22 +399,21 @@ object MatchEngine {
  }
 
  private fun strength(w: World,m: LiveMatch,home: Boolean,attack: Boolean): Double {
-  val c=w.clubs.getValue(clubId(m,home));val ids=xi(m,home);val slots=Formations.positions(formation(m,home))
+  val c=w.clubs.getValue(clubId(m,home));val effective=effectiveTactics(w,m,home);val ids=xi(m,home);val slots=Formations.positions(formation(m,home))
   val value=ids.mapIndexed{i,id->val p=w.players[id];if(p==null||id in m.injured)0.0 else{
    val slot=slots.getOrElse(i){p.position}
    val skill=if(attack)p.attributes.overall(slot)*.58+p.attributes.passing*.20+p.attributes.finishing*.22 else p.attributes.overall(slot)*.64+p.attributes.tackling*.25+p.attributes.vision*.11
-   val fatigue=(.62+p.fitness*.0038).coerceIn(.65,1.0);val mental=MatchIntelligence.playerMentalFactor(w,m,p);val roleFit=when(p.effectiveRole()){PlayerRole.BALL_PLAYING_CB,PlayerRole.DEEP_PLAYMAKER,PlayerRole.PLAYMAKER->if(attack)1.025 else 1.0;PlayerRole.STOPPER,PlayerRole.ANCHOR,PlayerRole.INVERTED_FULLBACK->if(attack).99 else 1.03;PlayerRole.PRESSING_FORWARD->if(attack)1.02 else 1.015;PlayerRole.TARGET_FORWARD->if(attack&&c.tactics.buildUp in listOf(BuildUp.DIRECT,BuildUp.WIDE))1.035 else 1.0;else->1.0}
+   val fatigue=(.62+p.fitness*.0038).coerceIn(.65,1.0);val mental=MatchIntelligence.playerMentalFactor(w,m,p);val roleFit=when(p.effectiveRole()){PlayerRole.BALL_PLAYING_CB,PlayerRole.DEEP_PLAYMAKER,PlayerRole.PLAYMAKER->if(attack)1.025 else 1.0;PlayerRole.STOPPER,PlayerRole.ANCHOR,PlayerRole.INVERTED_FULLBACK->if(attack).99 else 1.03;PlayerRole.PRESSING_FORWARD->if(attack)1.02 else 1.015;PlayerRole.TARGET_FORWARD->if(attack&&effective.buildUp in listOf(BuildUp.DIRECT,BuildUp.WIDE))1.035 else 1.0;else->1.0}
    skill*p.fit(slot)*(.86+p.form*.02)*fatigue*(.88+p.morale*.002)*(.9+p.sharpness*.001)*mental*roleFit
   }}.sum()/11
-  val selectedMentality=if(home)m.homeMentality else m.awayMentality
-  val mentality=when{conserve(m,home)->minOf(selectedMentality,1);allOut(m,home)->maxOf(selectedMentality,5);controlGame(m,home)->3;else->selectedMentality}
+  val mentality=effective.mentality
   val modeFactor=when{
-   conserve(m,home)->if(attack).98 else 1.04
-   allOut(m,home)->if(attack)1.08 else .92
-   controlGame(m,home)->if(attack).96 else 1.03
+   conserve(m,home)->if(attack).94 else 1.10
+   allOut(m,home)->if(attack)1.15 else .92
+   controlGame(m,home)->if(attack).91 else 1.07
    else->1.0
   }
-  return (value*(if(attack)1+(mentality-3)*.055+(c.tactics.tempo-3)*.02 else 1-(mentality-3)*.04+(c.tactics.pressing-3)*.02)*modeFactor*MatchIntelligence.teamFactor(c,attack)).coerceAtLeast(4.0)
+  return (value*(if(attack)1+(mentality-3)*.055+(effective.tempo-3)*.02 else 1-(mentality-3)*.04+(effective.pressing-3)*.02)*modeFactor*MatchIntelligence.teamFactor(c,attack)*TacticalInstructionSystem.teamFactor(c,ids,attack)).coerceAtLeast(4.0)
  }
 
  private fun averageFitness(w: World,m: LiveMatch,home: Boolean): Double = xi(m,home).filter{it!=0&&it !in m.injured}.map{w.players.getValue(it).fitness}.average().takeIf{!it.isNaN()}?:70.0
@@ -355,14 +421,14 @@ object MatchEngine {
  private fun applyMinuteFitness(w: World,m: LiveMatch){
   val phaseOwner=m.chainOwnerClubId
   for(home in listOf(true,false)){
-   val c=w.clubs.getValue(clubId(m,home));val under=(11-xi(m,home).count{it!=0}).coerceAtLeast(0)
+   val c=w.clubs.getValue(clubId(m,home));val effective=effectiveTactics(w,m,home);val under=(11-xi(m,home).count{it!=0}).coerceAtLeast(0)
    for(id in xi(m,home))if(id!=0&&id !in m.injured){
     val p=w.players.getValue(id);val perf=ensurePerformance(w,m,id)
-    var cost=.022+c.tactics.pressing*.0045+c.tactics.tempo*.0035+under*.0035
-    when{conserve(m,home)->cost*=.67;allOut(m,home)->cost*=1.28;controlGame(m,home)->cost*=.84}
+    var cost=.022+effective.pressing*.0045+effective.tempo*.0035+under*.0035
+    when{conserve(m,home)->cost*=.60;allOut(m,home)->cost*=1.28;controlGame(m,home)->cost*=.78}
     if(phaseOwner==c.id){cost+=when(m.livePhase){LivePhase.COUNTER->.045;LivePhase.DANGEROUS_ATTACK->.024;LivePhase.ATTACK->.014;else->0.0}}
-    if(c.tactics.pressing>=4&&phaseOwner!=c.id)cost+=.008
-    cost*=(1.20-p.attributes.stamina*.0048).coerceIn(.68,1.12)
+    if(effective.pressing>=4&&phaseOwner!=c.id)cost+=.008
+    cost*=(1.20-p.attributes.stamina*.0048).coerceIn(.68,1.12);cost*=TacticalInstructionSystem.fitnessFactor(c,id)
     p.fitness=(p.fitness-cost).coerceAtLeast(5.0)
     m.minutesPlayed[id]=(m.minutesPlayed[id]?:0)+1;perf.minutes=m.minutesPlayed[id]?:perf.minutes
     if(id !in m.participation)m.participation.add(id)
@@ -381,10 +447,10 @@ object MatchEngine {
   val awayControl=controlStrength(w,m,false)
   val qualityShare=(1.0/(1.0+exp(-((homeControl-awayControl)/18.0).coerceIn(-3.2,3.2))))
   val ownerShare=if(ownerHome).72 else .28
-  val homeStyle=possessionStyleBonus(w.clubs.getValue(m.homeId).tactics.buildUp)
-  val awayStyle=possessionStyleBonus(w.clubs.getValue(m.awayId).tactics.buildUp)
+  val homeStyle=possessionStyleBonus(effectiveTactics(w,m,true).buildUp)
+  val awayStyle=possessionStyleBonus(effectiveTactics(w,m,false).buildUp)
   val styleDelta=(homeStyle-awayStyle)
-  fun modePossession(home: Boolean)=when{conserve(m,home)->-.065;allOut(m,home)->.018;controlGame(m,home)->.055;else->0.0}
+  fun modePossession(home: Boolean)=when{conserve(m,home)->-.085;allOut(m,home)->.025;controlGame(m,home)->.080;else->0.0}
   val modeDelta=modePossession(true)-modePossession(false)
   val jitter=(rng.nextDouble()-.5)*.035
   val homeShare=(qualityShare*.55+ownerShare*.45+styleDelta+modeDelta+jitter).coerceIn(.12,.88)
@@ -393,25 +459,58 @@ object MatchEngine {
   m.away.possessionTicks+=60-homeSeconds
  }
 
+ private fun analysisPassPoint(w:World,m:LiveMatch,home:Boolean,playerId:Int,salt:Int):Pair<Float,Float>{
+  val p=w.players[playerId]?:return m.ballX to m.ballY
+  val baseLateral=when(p.position){
+   Position.LV,Position.LA->.18f;Position.RV,Position.RA->.82f;Position.IV->if((p.id and 1)==0).42f else .58f;Position.DM->.50f;Position.ZM->if((p.id and 1)==0).42f else .58f;Position.OM,Position.ST,Position.TW->.50f
+  }
+  val baseProgress=when(p.position){Position.TW->.07f;Position.IV->.22f;Position.LV,Position.RV->.28f;Position.DM->.38f;Position.ZM->.50f;Position.OM->.64f;Position.LA,Position.RA->.69f;Position.ST->.82f}
+  val phaseBoost=when(m.livePhase){LivePhase.ATTACK->.06f;LivePhase.DANGEROUS_ATTACK->.12f;LivePhase.COUNTER->.10f;LivePhase.CORNER,LivePhase.DANGEROUS_FREE_KICK->.14f;else->0f}
+  val progress=(baseProgress+phaseBoost).coerceIn(.04f,.95f)
+  val nominalY=if(home)1f-progress else progress
+  val h=(playerId*1103515245 + m.minute*12345 + salt*265443576).ushr(1)
+  val lateralJitter=((h%101)/100f-.5f)*.055f
+  val lengthJitter=(((h/101)%101)/100f-.5f)*.045f
+  val x=(baseLateral*.72f+m.ballX*.28f+lateralJitter).coerceIn(.04f,.96f)
+  val y=(nominalY*.72f+m.ballY*.28f+lengthJitter).coerceIn(.035f,.965f)
+  return x to y
+ }
+
+ private fun analysisReceiver(team:List<Int>,passer:Int,minute:Int,index:Int):Int{
+  if(team.size<2)return 0
+  val candidates=team.filter{it!=passer};if(candidates.isEmpty())return 0
+  val h=(passer*31+minute*17+index*13).ushr(1)
+  return candidates[h%candidates.size]
+ }
+
+ private fun recordPassEvent(m:LiveMatch,event:PassEvent){
+  m.passEvents.add(event)
+  // Genug Rohdaten für ein vollständiges Netz, aber ohne Savegames im langen Match aufzublähen.
+  if(m.passEvents.size>1400)m.passEvents.subList(0,200).clear()
+ }
+
  private fun recordPossession(w: World,m: LiveMatch,home: Boolean,rng: SeededRandom){
   val team=xi(m,home).filter{it!=0&&it !in m.injured};if(team.isEmpty())return
-  val c=w.clubs.getValue(clubId(m,home));val opponent=w.clubs.getValue(clubId(m,!home))
-  val passes=(when(c.tactics.buildUp){
+  val c=w.clubs.getValue(clubId(m,home));val opponent=w.clubs.getValue(clubId(m,!home));val effective=effectiveTactics(w,m,home);val oppEffective=effectiveTactics(w,m,!home)
+  val passes=(when(effective.buildUp){
    BuildUp.TIKI_TAKA->rng.int(6,10);BuildUp.SHORT->rng.int(5,9);BuildUp.MIXED->rng.int(3,7);BuildUp.WIDE->rng.int(3,7);BuildUp.DIRECT->rng.int(2,5);BuildUp.COUNTER->rng.int(2,5)
   }+when{controlGame(m,home)->2;conserve(m,home)->-1;else->0}).coerceAtLeast(1)
-  repeat(passes){
+  repeat(passes){index->
    val id=rng.pick(team);val p=w.players.getValue(id);val perf=ensurePerformance(w,m,id);perf.passesAttempted++
+   val receiver=analysisReceiver(team,id,m.minute,index);val start=analysisPassPoint(w,m,home,id,index*2);val end=if(receiver!=0)analysisPassPoint(w,m,home,receiver,index*2+1) else start
    val fatigue=((p.fitness-45)/100.0).coerceIn(-.12,.45)
-   val style=when(c.tactics.buildUp){BuildUp.TIKI_TAKA->.055;BuildUp.SHORT->.035;BuildUp.MIXED->0.0;BuildUp.WIDE->-.005;BuildUp.DIRECT->-.035;BuildUp.COUNTER->-.045}
-   val safe=when{controlGame(m,home)->.065;conserve(m,home)->-.012;allOut(m,home)->-.022;else->0.0}
+   val style=when(effective.buildUp){BuildUp.TIKI_TAKA->.055;BuildUp.SHORT->.035;BuildUp.MIXED->0.0;BuildUp.WIDE->-.005;BuildUp.DIRECT->-.035;BuildUp.COUNTER->-.045}
+   val safe=when{controlGame(m,home)->.085;conserve(m,home)->-.020;allOut(m,home)->-.022;else->0.0}
    val automatism=(c.dynamics.patterns["AUFBAU"]?:30)*.00045+c.dynamics.tacticalUnderstanding*.00035+c.dynamics.chemistry*.00020-(opponent.dynamics.pressingCoordination-50)*.00025
-   val success=(.515+p.attributes.passing*.0032+p.attributes.vision*.00155+p.attributes.technique*.00085+fatigue+style+safe+automatism-(opponent.tactics.pressing-3)*.021).coerceIn(.40,.982)
-   if(rng.chance(success))perf.passesCompleted++ else perf.turnovers++
+   val risky=TacticalInstructionSystem.riskyPass(c,id);val success=(.515+p.attributes.passing*.0032+p.attributes.vision*.00155+p.attributes.technique*.00085+fatigue+style+safe+automatism-(oppEffective.pressing-3)*.021-(if(risky).022 else 0.0)).coerceIn(.40,.982)
+   val completed=rng.chance(success)
+   if(completed){perf.passesCompleted++;if(risky&&rng.chance(.16))perf.chancesCreated++} else perf.turnovers++
+   if(receiver!=0)recordPassEvent(m,PassEvent(m.minute,c.id,id,receiver,completed,start.first,start.second,end.first,end.second))
   }
  }
 
  private fun moverFor(w: World,m: LiveMatch,home: Boolean,rng: SeededRandom): Int {
-  val team=xi(m,home).filter{it!=0&&it !in m.injured}
+  val c=w.clubs.getValue(clubId(m,home));val team=xi(m,home).filter{it!=0&&it !in m.injured}
   if(team.isEmpty())return 0
   val progress=if(home)1f-m.ballY else m.ballY
   val target=targetPlayerFor(w,m,home)
@@ -419,20 +518,20 @@ object MatchEngine {
    progress<.24f->when(p.position){Position.TW->4;Position.IV->6;Position.LV,Position.RV,Position.DM->5;Position.ZM->3;else->1}
    progress<.63f->when(p.position){Position.DM,Position.ZM->6;Position.LV,Position.RV,Position.LA,Position.RA->4;Position.OM->5;Position.IV->3;Position.ST->2;Position.TW->1}
    else->when(p.position){Position.ST->7;Position.LA,Position.RA,Position.OM->6;Position.ZM->4;Position.LV,Position.RV,Position.DM->2;Position.IV->1;Position.TW->0}
-  };val targetBonus=if(id==target)when{progress>=.63f->9;progress>=.35f->4;else->1}else 0;val primeBonus=if(p.messiMentored)when{progress>=.63f->16;progress>=.35f->10;else->5}else 0;List((base+targetBonus+primeBonus).coerceAtLeast(0)){id}}
+  };val targetBonus=if(id==target)when{progress>=.63f->9;progress>=.35f->4;else->1}else 0;val primeBonus=if(p.messiMentored)when{progress>=.63f->16;progress>=.35f->10;else->5}else 0;val individual=when{TacticalInstructionSystem.has(c,id,PlayerInstruction.RUN_IN_BEHIND)&&progress>=.48f->5;TacticalInstructionSystem.has(c,id,PlayerInstruction.OVERLAP)&&p.position in listOf(Position.LV,Position.RV)->4;TacticalInstructionSystem.has(c,id,PlayerInstruction.CUT_INSIDE)&&p.position in listOf(Position.LA,Position.RA)->4;TacticalInstructionSystem.has(c,id,PlayerInstruction.HOLD_POSITION)&&progress>=.55f->-2;else->0};List((base+targetBonus+primeBonus+individual).coerceAtLeast(0)){id}}
   return if(weighted.isNotEmpty())rng.pick(weighted) else team.first()
  }
 
  private fun moveBallToward(w: World,m: LiveMatch,home: Boolean,phase: LivePhase,rng: SeededRandom){
-  val c=w.clubs.getValue(clubId(m,home));val opp=w.clubs.getValue(clubId(m,!home));val build=c.tactics.buildUp
+  val c=w.clubs.getValue(clubId(m,home));val opp=w.clubs.getValue(clubId(m,!home));val effective=effectiveTactics(w,m,home);val oppEffective=effectiveTactics(w,m,!home);val build=effective.buildUp
   val dir=if(home)-1f else 1f
   val ownKeeperY=if(home).91f else .09f
-  val widthLevel=(c.tactics.width-1)/4f
-  val pressureDanger=(.055+opp.tactics.pressing*.028+(if(phase==LivePhase.ATTACK).025 else 0.0)).coerceIn(.08,.23)
+  val widthLevel=(effective.width-1)/4f
+  val pressureDanger=(.055+oppEffective.pressing*.028+(if(phase==LivePhase.ATTACK).025 else 0.0)).coerceIn(.08,.23)
 
   // Unter Druck darf eine Mannschaft wirklich abbrechen und bis zum eigenen Keeper zurückspielen.
   if(phase in setOf(LivePhase.POSSESSION,LivePhase.ATTACK)&&rng.chance(recycleChance(build)+(if(rng.chance(pressureDanger)).08 else 0.0))){
-   val keeperBack=phase==LivePhase.POSSESSION&&rng.chance((.28+opp.tactics.pressing*.055+(if(build==BuildUp.TIKI_TAKA||build==BuildUp.SHORT).12 else 0.0)).coerceAtMost(.72))
+   val keeperBack=phase==LivePhase.POSSESSION&&rng.chance((.28+oppEffective.pressing*.055+(if(build==BuildUp.TIKI_TAKA||build==BuildUp.SHORT).12 else 0.0)).coerceAtMost(.72))
    if(keeperBack){
     m.ballY=(ownKeeperY+(rng.nextDouble().toFloat()-.5f)*.035f).coerceIn(.04f,.96f);m.ballX=(.5f+(rng.nextDouble().toFloat()-.5f)*.10f).coerceIn(.05f,.95f)
     m.livePlayerId=xi(m,home).firstOrNull{it!=0&&w.players[it]?.position==Position.TW}?:m.livePlayerId;m.liveDetail="Rückpass zum Torwart"
@@ -458,7 +557,7 @@ object MatchEngine {
   if(phase!=LivePhase.DANGEROUS_ATTACK&&rng.chance(longChance)){
    val step=when(phase){LivePhase.COUNTER->.24f+rng.nextDouble().toFloat()*.16f;LivePhase.ATTACK->.19f+rng.nextDouble().toFloat()*.15f;else->.16f+rng.nextDouble().toFloat()*.16f}
    m.ballY=(m.ballY+dir*step).coerceIn(.035f,.965f)
-   val lanes=if(c.tactics.width>=4)listOf(.06f,.16f,.84f,.94f)else listOf(.22f,.38f,.62f,.78f)
+   val lanes=if(effective.width>=4)listOf(.06f,.16f,.84f,.94f)else listOf(.22f,.38f,.62f,.78f)
    m.ballX=(lanes[rng.int(0,lanes.lastIndex)]+(rng.nextDouble().toFloat()-.5f)*.035f).coerceIn(.035f,.965f)
    m.liveDetail=when{phase==LivePhase.COUNTER->"Steilpass in den freien Raum";build==BuildUp.DIRECT->"Langer Ball hinter die Kette";else->"Langer Diagonalball"}
    return
@@ -471,21 +570,22 @@ object MatchEngine {
    LivePhase.COUNTER->if(home).24f else .76f
    else->m.ballY
   }
-  val maxStep=when(phase){LivePhase.COUNTER->(.17f+c.tactics.tempo*.014f);LivePhase.DANGEROUS_ATTACK->.15f;LivePhase.ATTACK->.125f;else->.09f}
+  val maxStep=when(phase){LivePhase.COUNTER->(.17f+effective.tempo*.014f);LivePhase.DANGEROUS_ATTACK->.15f;LivePhase.ATTACK->.125f;else->.09f}
   val styleStep=when(build){BuildUp.TIKI_TAKA->.70f;BuildUp.SHORT->.80f;BuildUp.DIRECT->1.18f;BuildUp.COUNTER->1.15f;else->1f}
   val modeStep=when{conserve(m,home)&&phase!=LivePhase.COUNTER->.70f;allOut(m,home)->1.12f;controlGame(m,home)->.80f;else->1f}
   val delta=(target-m.ballY).coerceIn(-maxStep*modeStep*styleStep,maxStep*modeStep*styleStep)
   m.ballY=(m.ballY+delta+(rng.nextDouble().toFloat()-.5f)*.020f).coerceIn(.035f,.965f)
 
   val lanePool=when{
-   build==BuildUp.WIDE||c.tactics.width==5->listOf(.045f,.10f,.20f,.80f,.90f,.955f)
-   c.tactics.width>=4->listOf(.08f,.18f,.32f,.68f,.82f,.92f)
-   c.tactics.width<=2->listOf(.30f,.40f,.50f,.60f,.70f)
+   build==BuildUp.WIDE||effective.width==5->listOf(.045f,.10f,.20f,.80f,.90f,.955f)
+   effective.width>=4->listOf(.08f,.18f,.32f,.68f,.82f,.92f)
+   effective.width<=2->listOf(.30f,.40f,.50f,.60f,.70f)
    else->listOf(.16f,.29f,.42f,.58f,.71f,.84f)
   }
   val lane=lanePool[rng.int(0,lanePool.lastIndex)]
   val lateral=.18f+widthLevel*.30f+(if(build==BuildUp.TIKI_TAKA).08f else 0f)
   m.ballX=(m.ballX+(lane-m.ballX)*lateral+(rng.nextDouble().toFloat()-.5f)*.018f).coerceIn(.035f,.965f)
+  val mover=w.players[m.livePlayerId];if(mover!=null){when{TacticalInstructionSystem.has(c,mover.id,PlayerInstruction.CUT_INSIDE)->m.ballX=(m.ballX+(.5f-m.ballX)*.38f).coerceIn(.035f,.965f);TacticalInstructionSystem.has(c,mover.id,PlayerInstruction.OVERLAP)&&mover.position==Position.LV->m.ballX=(m.ballX+(.08f-m.ballX)*.45f).coerceIn(.035f,.965f);TacticalInstructionSystem.has(c,mover.id,PlayerInstruction.OVERLAP)&&mover.position==Position.RV->m.ballX=(m.ballX+(.92f-m.ballX)*.45f).coerceIn(.035f,.965f)}}
   m.liveDetail=when{
    build==BuildUp.TIKI_TAKA&&phase==LivePhase.POSSESSION->"Tiki-Taka – kurze Dreiecke"
    build==BuildUp.SHORT&&phase==LivePhase.POSSESSION->"Kurzpassspiel"
@@ -498,14 +598,14 @@ object MatchEngine {
  }
 
  private fun counterProbability(w: World,m: LiveMatch,newHome: Boolean): Double {
-  val c=w.clubs.getValue(clubId(m,newHome));val opp=w.clubs.getValue(clubId(m,!newHome));val mentality=if(newHome)m.homeMentality else m.awayMentality
+  val c=w.clubs.getValue(clubId(m,newHome));val effective=effectiveTactics(w,m,newHome);val oppEffective=effectiveTactics(w,m,!newHome);val mentality=effective.mentality
   val fitness=((averageFitness(w,m,newHome)-55)/100.0).coerceIn(0.0,.35)
   val zone=kotlin.math.abs(m.ballY-.5f).toDouble()*.16
-  val lowBlockBoost=if(conserve(m,newHome)).18 else 0.0
-  val pressingBoost=if(allOut(m,newHome)).055 else 0.0
+  val lowBlockBoost=if(conserve(m,newHome)).23 else 0.0
+  val pressingBoost=if(allOut(m,newHome)).075 else 0.0
   val exposedOpponent=if(allOut(m,!newHome)).17 else 0.0
-  val controlPenalty=if(controlGame(m,newHome)).055 else 0.0
-  val p=.10+(mentality-3)*.035+(c.tactics.tempo-3)*.028+(opp.tactics.line-3)*.035+fitness+zone+lowBlockBoost+pressingBoost+exposedOpponent-controlPenalty
+  val controlPenalty=if(controlGame(m,newHome)).085 else 0.0
+  val p=.10+(mentality-3)*.035+(effective.tempo-3)*.028+(oppEffective.line-3)*.035+fitness+zone+lowBlockBoost+pressingBoost+exposedOpponent-controlPenalty
   return p.coerceIn(.04,.78)
  }
 
@@ -543,12 +643,12 @@ object MatchEngine {
 
  private fun maybeOffside(w: World,m: LiveMatch,home: Boolean,runnerId: Int,type: ShotType,rng: SeededRandom): Boolean {
   if(type in setOf(ShotType.PENALTY,ShotType.FREE_KICK,ShotType.REBOUND)||runnerId==0)return false
-  val attack=w.clubs.getValue(clubId(m,home));val defending=w.clubs.getValue(clubId(m,!home))
+  val attack=w.clubs.getValue(clubId(m,home));val defending=w.clubs.getValue(clubId(m,!home));val attackEffective=effectiveTactics(w,m,home);val defendEffective=effectiveTactics(w,m,!home)
   val vertical=when(type){ShotType.ONE_ON_ONE->.034;ShotType.CUTBACK->.006;ShotType.HEADER,ShotType.VOLLEY->.010;ShotType.LONG_RANGE->-.010;else->.016}
-  val direct=when(attack.tactics.buildUp){BuildUp.DIRECT->.018;BuildUp.COUNTER->.022;BuildUp.WIDE->.008;else->0.0}
-  val line=(defending.tactics.line-3)*.010
-  val tempo=(attack.tactics.tempo-3)*.004
-  val chance=(.020+vertical+direct+line+tempo).coerceIn(.006,.105)
+  val direct=when(attackEffective.buildUp){BuildUp.DIRECT->.018;BuildUp.COUNTER->.022;BuildUp.WIDE->.008;else->0.0}
+  val line=(defendEffective.line-3)*.010
+  val tempo=(attackEffective.tempo-3)*.004
+  val chance=(.020+vertical+direct+line+tempo+TacticalInstructionSystem.offsideExtra(attack,runnerId)).coerceIn(.006,.125)
   if(!rng.chance(chance))return false
   stats(m,home).offsides++
   val p=w.players[runnerId]
@@ -733,10 +833,10 @@ object MatchEngine {
 
  private fun handleVarReview(w: World,m: LiveMatch,rng: SeededRandom): Boolean {
   val index=m.pendingVarShotIndex;if(index !in m.shotEvents.indices)return false
-  val shot=m.shotEvents[index];val home=shot.clubId==m.homeId;val defender=w.clubs.getValue(clubId(m,!home))
+  val shot=m.shotEvents[index];val home=shot.clubId==m.homeId;val defender=w.clubs.getValue(clubId(m,!home));val defenderEffective=effectiveTactics(w,m,!home)
   if(m.varReviewStage==0){
    val offsideBias=when(shot.type){ShotType.ONE_ON_ONE->.07;ShotType.CUTBACK->.025;ShotType.HEADER,ShotType.VOLLEY->.03;else->.04}
-   val overturnChance=(.095+offsideBias+(defender.tactics.line-3)*.012).coerceIn(.07,.24)
+   val overturnChance=(.095+offsideBias+(defenderEffective.line-3)*.012).coerceIn(.07,.24)
    val reasonRoll=rng.nextDouble()
    m.varReviewReason=when{reasonRoll<.68->"Mögliche Abseitsstellung in der Entstehung";reasonRoll<.86->"Mögliches Angreiferfoul vor dem Treffer";else->"Mögliches Handspiel in der Entstehung"}
    m.varWillOverturn=rng.chance(overturnChance);m.varReviewResult="";m.varReviewStage=1;addStoppageTime(m,55)
@@ -821,7 +921,13 @@ object MatchEngine {
   if(shootoutShouldEnd(m)){m.shootoutActive=false;finish(w,m)}
  }
 
- fun step(w: World,m: LiveMatch){
+ fun step(w:World,m:LiveMatch){
+  val beforeSerial=m.liveEventSerial;val beforeX=m.ballX;val beforeY=m.ballY;val beforePhase=m.livePhase
+  stepInternal(w,m)
+  if(m.liveEventSerial!=beforeSerial||m.ballX!=beforeX||m.ballY!=beforeY||m.livePhase!=beforePhase)captureBallFrame(m)
+ }
+
+ private fun stepInternal(w: World,m: LiveMatch){
   if(m.finished||m.pendingDecision||m.halfTime||m.incidentPause||m.assistantSubPending)return
   val rng=SeededRandom(m.rngState)
   if(m.shootoutActive){resolveShootoutKick(w,m,rng);m.rngState=rng.state;return}
@@ -842,10 +948,10 @@ object MatchEngine {
 
   // Fouls hängen von Pressing, Spielsituation, Zweikampfstärke und Derby-Härte ab. Der Ort des
   // Fouls entscheidet anschließend zwischen Freistoß, gefährlichem Freistoß und Elfmeter.
-  val defenderHome=!ownerHome;val defendingClub=w.clubs.getValue(clubId(m,defenderHome))
+  val defenderHome=!ownerHome;val defendingClub=w.clubs.getValue(clubId(m,defenderHome));val defendingEffective=effectiveTactics(w,m,defenderHome)
   val phaseRisk=when(m.livePhase){LivePhase.COUNTER->.032;LivePhase.DANGEROUS_ATTACK->.042;LivePhase.ATTACK->.022;else->0.0}
   val defendingAi=if(defenderHome)m.homeAi else m.awayAi;val tacticalBias=if(m.livePhase in listOf(LivePhase.COUNTER,LivePhase.DANGEROUS_ATTACK))defendingAi.tacticalFoulBias*.0015 else 0.0
-  val foulChance=(.082+(defendingClub.tactics.pressing-1)*.015+phaseRisk+tacticalBias+(100-defendingClub.dynamics.mentalHardness)*.00025+(if(w.isDerby(m.homeId,m.awayId)).024 else 0.0)).coerceIn(.065,.245)
+  val foulChance=(.082+(defendingEffective.pressing-1)*.015+phaseRisk+tacticalBias+(100-defendingClub.dynamics.mentalHardness)*.00025+(if(w.isDerby(m.homeId,m.awayId)).024 else 0.0)).coerceIn(.065,.245)
   if(rng.chance(foulChance)){
    val id=selectFouler(w,m,defenderHome,rng)
    if(id!=0){
@@ -853,7 +959,7 @@ object MatchEngine {
     val setPiece=queueSetPiece(w,m,ownerHome,id,rng)
     val poorTackle=((58-fouler.attributes.tackling).coerceAtLeast(0))*.0022
     val tactical=if(m.livePhase==LivePhase.COUNTER).075 else if(m.livePhase==LivePhase.DANGEROUS_ATTACK).045 else 0.0
-    val yellowChance=(.16+(defendingClub.tactics.pressing-3)*.035+poorTackle+tactical+(if(w.isDerby(m.homeId,m.awayId)).055 else 0.0)+(if(setPiece==SetPieceType.PENALTY).055 else 0.0)).coerceIn(.12,.55)
+    val yellowChance=(.16+(defendingEffective.pressing-3)*.035+poorTackle+tactical+(if(w.isDerby(m.homeId,m.awayId)).055 else 0.0)+(if(setPiece==SetPieceType.PENALTY).055 else 0.0)).coerceIn(.12,.55)
     val redChance=(.004+(if(m.livePhase==LivePhase.COUNTER).009 else 0.0)+(if(setPiece==SetPieceType.PENALTY).010 else 0.0)+(if(fouler.attributes.tackling<35).006 else 0.0)).coerceAtMost(.035)
     if(rng.chance(redChance))card(w,m,id,true)
     else if(rng.chance(yellowChance))card(w,m,id,false)
@@ -882,17 +988,29 @@ object MatchEngine {
    if(m.assistantSubPending){m.rngState=rng.state;return}
   }
 
-  val home=ownerHome;val c=w.clubs.getValue(clubId(m,home));val opp=w.clubs.getValue(clubId(m,!home));val activeAi=if(home)m.homeAi else m.awayAi
+  val home=ownerHome;val c=w.clubs.getValue(clubId(m,home));val opp=w.clubs.getValue(clubId(m,!home));val effective=effectiveTactics(w,m,home);val activeAi=if(home)m.homeAi else m.awayAi
+  val calibration=LeagueCalibration.forMatch(w,m)
+  val keeperCarrier=w.players[m.livePlayerId]
+  if(keeperCarrier?.position==Position.TW&&keeperCarrier.clubId==clubId(m,home)&&(m.liveDetail.contains("Torwart",true)||m.possessionChangeReason==PossessionChangeReason.SAVE)){
+   m.keeperControlSeconds=if(rng.chance(.004))9 else rng.int(3,7)
+   if(CompetitionRulesEngine.goalkeeperViolation(m.keeperControlSeconds,CompetitionRulesEngine.forMatch(w,m))){
+    val taker=moverFor(w,m,!home,rng)
+    // Die Acht-Sekunden-Sanktion ist ein echter Besitzwechsel: erst Besitz sauber an den Gegner geben, dann die Ecke vormerken.
+    setBallPhase(m,LivePhase.POSSESSION,!home,taker,"Ecke nach Torwart-Zeitspiel",PossessionChangeReason.GOALKEEPER_DELAY)
+    queueCorner(w,m,!home,taker,rng);log(m,"Der Torwart hält den Ball länger als acht Sekunden – Ecke für ${opp.shortName}.","bad");m.keeperControlSeconds=0;m.rngState=rng.state;return
+   }
+  }else m.keeperControlSeconds=0
   if(activeAi.timeWaste>0&&m.minute>=78&&rng.chance(activeAi.timeWaste*.012)){addStoppageTime(m,18);m.chainTicks=(m.chainTicks+1).coerceAtMost(4);if(rng.chance(.35)){log(m,"${c.shortName} nimmt bewusst Tempo aus der Partie.");m.rngState=rng.state;return}}
   val fatigue=(averageFitness(w,m,home)/100.0).coerceIn(.45,1.0)
   val attackRatio=exp((strength(w,m,home,true)-strength(w,m,!home,false))/40).coerceIn(.48,2.15)
   val controlEdge=((controlStrength(w,m,home)-pressureStrength(w,m,!home))/45.0).coerceIn(-1.45,1.45)
-  val mentality=if(home)m.homeMentality else m.awayMentality
-  val modeRisk=when{allOut(m,home)->.036;controlGame(m,home)->-.025;conserve(m,home)->.008;else->0.0}
+  val mentality=effective.mentality
+  val modeRisk=when{allOut(m,home)->.036;controlGame(m,home)->-.038;conserve(m,home)->.012;else->0.0}
   val primeCarrier=w.players[m.livePlayerId]?.messiMentored==true
-  val patternKey=when(m.livePhase){LivePhase.POSSESSION->"AUFBAU";LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK->if(c.tactics.width>=4)"FLUEGEL" else "HALBRAUM";LivePhase.COUNTER->"DIAGONALE";else->"RESTVERTEIDIGUNG"};val automatismRisk=(1-MatchIntelligence.patternFactor(c,patternKey))*.055
-  val turnoverChance=(when(m.livePhase){LivePhase.POSSESSION->.034;LivePhase.ATTACK->.048;LivePhase.DANGEROUS_ATTACK->.068;LivePhase.COUNTER->.064;else->.075}
-   +buildRisk(c.tactics.buildUp)+(c.tactics.tempo-3)*.006+(mentality-3)*.004-controlEdge*.034+(1-fatigue)*.075+modeRisk+automatismRisk-(if(primeCarrier).040 else 0.0)).coerceIn(if(primeCarrier).006 else .016,.34)
+  val patternKey=when(m.livePhase){LivePhase.POSSESSION->"AUFBAU";LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK->if(effective.width>=4)"FLUEGEL" else "HALBRAUM";LivePhase.COUNTER->"DIAGONALE";else->"RESTVERTEIDIGUNG"};val automatismRisk=(1-MatchIntelligence.patternFactor(c,patternKey))*.055
+  val chainSecurity=when(effective.buildUp){BuildUp.TIKI_TAKA,BuildUp.SHORT->m.chainPasses.coerceAtMost(7)*.0028;BuildUp.MIXED,BuildUp.WIDE->m.chainPasses.coerceAtMost(5)*.0014;else->0.0}
+  val turnoverChance=((when(m.livePhase){LivePhase.POSSESSION->.034;LivePhase.ATTACK->.048;LivePhase.DANGEROUS_ATTACK->.068;LivePhase.COUNTER->.064;else->.075}
+   +buildRisk(effective.buildUp)+(effective.tempo-3)*.006+(mentality-3)*.004-controlEdge*.034+(1-fatigue)*.075+modeRisk+automatismRisk-(if(primeCarrier).040 else 0.0)-chainSecurity)*calibration.turnover).coerceIn(if(primeCarrier).006 else .016,.34)
   if(rng.chance(turnoverChance)){
    transferPossession(w,m,!home,if(rng.chance(.55))PossessionChangeReason.INTERCEPTION else PossessionChangeReason.TACKLE,rng,true);m.rngState=rng.state;return
   }
@@ -903,25 +1021,25 @@ object MatchEngine {
     val mover=moverFor(w,m,home,rng)
     if(m.counterTicksRemaining>0){setBallPhase(m,LivePhase.COUNTER,home,mover,"Schneller Gegenstoß");moveBallToward(w,m,home,LivePhase.COUNTER,rng)}
     else{
-     val direct=(.46+(c.tactics.tempo-3)*.04+(if(mentality>=4).07 else 0.0)+(if(c.tactics.buildUp==BuildUp.COUNTER).10 else 0.0)+(if(conserve(m,home)).18 else 0.0)+(if(allOut(m,home)).12 else 0.0)-(if(controlGame(m,home)).08 else 0.0)).coerceIn(.28,.90)
+     val direct=(.46+(effective.tempo-3)*.04+(if(mentality>=4).07 else 0.0)+(if(effective.buildUp==BuildUp.COUNTER).10 else 0.0)+(if(conserve(m,home)).24 else 0.0)+(if(allOut(m,home)).18 else 0.0)-(if(controlGame(m,home)).12 else 0.0)).coerceIn(.28,.94)
      if(rng.chance(direct)){m.chainStep=2;setBallPhase(m,LivePhase.DANGEROUS_ATTACK,home,mover,"Konter in den Strafraum");moveBallToward(w,m,home,LivePhase.DANGEROUS_ATTACK,rng)}
      else{m.chainStep=1;setBallPhase(m,LivePhase.ATTACK,home,mover,"Konter läuft weiter");moveBallToward(w,m,home,LivePhase.ATTACK,rng)}
     }
    }
    LivePhase.POSSESSION->{
     m.chainTicks++
-    val modeProgress=when{conserve(m,home)->.62;allOut(m,home)->1.22;controlGame(m,home)->.72;else->1.0}
-    val progress=(.82*attackRatio.coerceIn(.72,1.55)*buildProgress(c.tactics.buildUp)*(.91+c.tactics.tempo*.03)*modeProgress*fatigue).coerceIn(.20,.97)
+    val modeProgress=when{conserve(m,home)->.54;allOut(m,home)->1.32;controlGame(m,home)->.62;else->1.0}
+    val progress=(.82*attackRatio.coerceIn(.72,1.55)*buildProgress(effective.buildUp)*(.91+effective.tempo*.03)*modeProgress*fatigue*calibration.chanceCreation*calibration.tempo).coerceIn(.20,.97)
     if(rng.chance(progress)){
      val mover=moverFor(w,m,home,rng);m.chainStep=1;m.chainTicks=0;setBallPhase(m,LivePhase.ATTACK,home,mover,"Aufbau nach vorn");moveBallToward(w,m,home,LivePhase.ATTACK,rng)
     }else{setBallPhase(m,LivePhase.POSSESSION,home,detail=when{conserve(m,home)->"Tiefer Block – auf den Konter warten";controlGame(m,home)->"Ball sichern und Spiel beruhigen";allOut(m,home)->"Sofort wieder nach vorn";else->"Ball zirkuliert"});moveBallToward(w,m,home,LivePhase.POSSESSION,rng)}
    }
    LivePhase.ATTACK->{
     m.chainTicks++
-    val flankBonus=if((c.tactics.buildUp==BuildUp.WIDE||c.tactics.width>=4)&&m.ballX !in .24f.. .76f).06 else 0.0
-    val modeProgress=when{conserve(m,home)->.78;allOut(m,home)->1.16;controlGame(m,home)->.86;else->1.0}
+    val flankBonus=if((effective.buildUp==BuildUp.WIDE||effective.width>=4)&&m.ballX !in .24f.. .76f).06 else 0.0
+    val modeProgress=when{conserve(m,home)->.72;allOut(m,home)->1.24;controlGame(m,home)->.78;else->1.0}
     val primeProgress=if(w.players[m.livePlayerId]?.messiMentored==true).11 else 0.0
-    val progress=(1.02*attackRatio.coerceIn(.72,1.48)*buildProgress(c.tactics.buildUp)*(.92+c.tactics.tempo*.024)*fatigue*modeProgress+flankBonus+primeProgress).coerceIn(.34,.995)
+    val progress=(1.02*attackRatio.coerceIn(.72,1.48)*buildProgress(effective.buildUp)*(.92+effective.tempo*.024)*fatigue*modeProgress*calibration.chanceCreation+flankBonus+primeProgress).coerceIn(.34,.995)
     if(rng.chance(progress)){
      val mover=moverFor(w,m,home,rng);ensurePerformance(w,m,mover).chancesCreated++;m.chainStep=2;m.chainTicks=0;setBallPhase(m,LivePhase.DANGEROUS_ATTACK,home,mover,if(m.ballX !in .24f.. .76f)"Über außen in Tornähe" else "In Tornähe");moveBallToward(w,m,home,LivePhase.DANGEROUS_ATTACK,rng)
     }else if(m.chainTicks>=3){m.chainStep=0;m.chainTicks=0;setBallPhase(m,LivePhase.POSSESSION,home,detail="Angriff neu aufgebaut");moveBallToward(w,m,home,LivePhase.POSSESSION,rng)}
@@ -929,8 +1047,9 @@ object MatchEngine {
    }
    LivePhase.DANGEROUS_ATTACK->{
     m.chainTicks++;moveBallToward(w,m,home,LivePhase.DANGEROUS_ATTACK,rng)
-    val modeShot=when{conserve(m,home)->.96;allOut(m,home)->1.16;controlGame(m,home)->.78;else->1.0}
-    val shotChance=(1.04*attackRatio.coerceIn(.74,1.42)*buildShotIntent(c.tactics.buildUp)*fatigue*modeShot).coerceIn(.48,.995)
+    val modeShot=when{conserve(m,home)->.92;allOut(m,home)->1.24;controlGame(m,home)->.68;else->1.0}
+    val chainFinish=1.0+m.chainPasses.coerceAtMost(8)*.012
+    val shotChance=(1.04*attackRatio.coerceIn(.74,1.42)*buildShotIntent(effective.buildUp)*fatigue*modeShot*calibration.chanceCreation*chainFinish).coerceIn(.48,.995)
     if(rng.chance(shotChance)){
      val type=prepareShotLocation(w,m,home,rng);val shooter=selectShooter(w,m,home,rng)
      if(maybeOffside(w,m,home,shooter,type,rng)){m.rngState=rng.state;return}
@@ -960,7 +1079,7 @@ object MatchEngine {
  private fun selectShooter(w: World,m: LiveMatch,home: Boolean,rng: SeededRandom): Int {
   val team=xi(m,home).filter{it!=0&&it !in m.injured}
   val target=targetPlayerFor(w,m,home)
-  val choices=team.flatMap{id->val player=w.players.getValue(id);val base=when(player.position){Position.ST->7;Position.LA,Position.RA,Position.OM->5;Position.ZM->3;Position.DM,Position.LV,Position.RV->2;Position.IV->1;Position.TW->0};val bonus=if(id==target)9 else 0;val primeBonus=if(player.messiMentored)14 else 0;List(base+bonus+primeBonus){id}}
+  val c=w.clubs.getValue(clubId(m,home));val choices=team.flatMap{id->val player=w.players.getValue(id);val base=when(player.position){Position.ST->7;Position.LA,Position.RA,Position.OM->5;Position.ZM->3;Position.DM,Position.LV,Position.RV->2;Position.IV->1;Position.TW->0};val bonus=if(id==target)9 else 0;val primeBonus=if(player.messiMentored)14 else 0;List((base+bonus+primeBonus+TacticalInstructionSystem.shooterWeight(c,player)).coerceAtLeast(1)){id}}
   return if(choices.isNotEmpty())rng.pick(choices) else team.firstOrNull()?:0
  }
 
@@ -976,7 +1095,7 @@ object MatchEngine {
   val weighted=candidates.flatMap{id->
    val p=w.players.getValue(id);val creator=(p.attributes.passing*.45+p.attributes.vision*.37+p.attributes.technique*.18).roundToInt()
    val role=when(p.position){Position.OM->8;Position.LA,Position.RA->7;Position.ZM->6;Position.DM,Position.LV,Position.RV->4;Position.ST->3;Position.IV->2;Position.TW->0}
-   val lastBonus=if(id==last)14 else 0;val primeBonus=if(p.messiMentored)12 else 0;List(((creator-45)/6+role+lastBonus+primeBonus).coerceAtLeast(1)){id}
+   val lastBonus=if(id==last)14 else 0;val primeBonus=if(p.messiMentored)12 else 0;val instructionBonus=TacticalInstructionSystem.creatorWeight(w.clubs.getValue(clubId(m,home)),p);List(((creator-45)/6+role+lastBonus+primeBonus+instructionBonus).coerceAtLeast(1)){id}
   }
   return rng.pick(weighted)
  }
@@ -987,25 +1106,57 @@ object MatchEngine {
  }
 
  fun decide(w: World,m: LiveMatch,decision: Decision){
-  require(m.pendingDecision){"Gerade steht keine Entscheidung an."};val rng=SeededRandom(m.rngState);val p=w.self();val home=p.clubId==m.homeId
-  val mates=xi(m,home).filter{it!=0&&it!=p.id&&it !in m.injured&&w.players[it]?.position!=Position.TW}
+  require(m.pendingDecision){"Gerade steht keine Entscheidung an."};SaveCodec.requireRuntimeIntegrity(w)
+  val rng=SeededRandom(m.rngState);val p=w.self();val home=p.clubId==m.homeId
+  require(p.id in xi(m,home)){"Dein Spieler ist für diese Entscheidung nicht mehr auf dem Feld."}
+  // Eine offene Spielerentscheidung bedeutet semantisch: der eigene Spieler hat gerade den Ball.
+  // Alte/inkonsistente Live-Snapshots konnten jedoch noch einen gegnerischen chainOwner tragen.
+  // Statt beim folgenden Abschluss mit einer Engine-Exception abzustürzen, synchronisieren wir
+  // diesen seltenen Altzustand einmalig über einen nachvollziehbaren Ballgewinn.
+  if(m.chainOwnerClubId!=p.clubId||m.liveClubId!=p.clubId){
+   val recoveryReason=if(m.chainOwnerClubId!=0&&m.chainOwnerClubId!=p.clubId)PossessionChangeReason.INTERCEPTION else PossessionChangeReason.NONE
+   setBallPhase(m,LivePhase.DANGEROUS_ATTACK,home,p.id,"Spielerentscheidung – Ballbesitz synchronisiert",recoveryReason)
+  }
+  val mates=xi(m,home).filter{it!=0&&it!=p.id&&it !in m.injured&&it !in m.sentOff&&w.players[it]?.position!=Position.TW}
   when(decision){
    Decision.SHOOT->resolveShot(w,m,home,p.id,rng,m.decisionAssistId,m.decisionShotType)
    Decision.DRIBBLE->{
     val perf=ensurePerformance(w,m,p.id);val prime=p.messiMentored
-    val dribbleChance=(.31+p.attributes.technique*.005+p.fitness*.0015+(if(prime).16 else 0.0)).coerceAtMost(if(prime).965 else .82)
+    val context=playerDecisionContext(w,m);val pressurePenalty=(context.nearbyOpponents-1)*.035
+    val dribbleChance=(.33+p.attributes.technique*.005+p.attributes.pace*.0012+p.fitness*.0012+(if(prime).16 else 0.0)-pressurePenalty).coerceIn(.18,if(prime).965 else .84)
     if(rng.chance(dribbleChance)){
      val g=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home));val gain=if(prime)7.0+rng.nextDouble()*7.5 else 3.5+rng.nextDouble()*4.0;setDistanceFromGoal(m,home,(g.distanceMeters-gain).coerceAtLeast(if(prime)3.8 else 4.5),(m.ballX+(0.5f-m.ballX)*(if(prime).62f else .35f)).coerceIn(.12f,.88f));log(m,if(prime)"Du ziehst im Messi-Stil zwischen den Gegenspielern durch." else "Du gehst am Gegenspieler vorbei.")
      val type=when{ShotModel.geometry(ShotContext(m.ballX,m.ballY,home)).distanceMeters<8.5->ShotType.CLOSE_RANGE;else->ShotType.BOX_SHOT};resolveShot(w,m,home,p.id,rng,m.decisionAssistId,type)
     }else{perf.turnovers++;log(m,"Beim Dribbling ist der Ball weg.");transferPossession(w,m,!home,PossessionChangeReason.TACKLE,rng,true)}
    }
-   Decision.PASS,Decision.CROSS->{
-    val perf=ensurePerformance(w,m,p.id);perf.passesAttempted++;val skill=if(decision==Decision.PASS)p.attributes.passing else (p.attributes.passing+p.attributes.technique)/2
-    if(mates.isNotEmpty()&&rng.chance((.45+skill*.004+p.fitness*.001+(if(p.messiMentored).06 else 0.0)).coerceAtMost(if(p.messiMentored).97 else .9))){
-     perf.passesCompleted++;perf.chancesCreated++;val target=targetPlayerFor(w,m,home);val id=if(target in mates&&rng.chance(if(decision==Decision.CROSS).76 else .62))target else mates.maxBy{w.players.getValue(it).attributes.finishing}
-     if(decision==Decision.CROSS){val d=6.5+rng.nextDouble()*8.0;val type=if(rng.chance(.72))ShotType.HEADER else ShotType.VOLLEY;setDistanceFromGoal(m,home,d,(.32+rng.nextDouble()*.36).toFloat());log(m,"Deine Flanke sucht ${w.players.getValue(id).lastName} im Strafraum.");if(!maybeOffside(w,m,home,id,type,rng))resolveShot(w,m,home,id,rng,p.id,type)}
-     else{val d=6.0+rng.nextDouble()*10.0;val type=if(d<10.5)ShotType.CUTBACK else ShotType.BOX_SHOT;setDistanceFromGoal(m,home,d,(.37+rng.nextDouble()*.26).toFloat());log(m,"Du legst quer auf ${w.players.getValue(id).lastName}.");if(!maybeOffside(w,m,home,id,type,rng))resolveShot(w,m,home,id,rng,p.id,type)}
-    }else{perf.turnovers++;log(m,"Die Hereingabe wird abgefangen.");transferPossession(w,m,!home,PossessionChangeReason.INTERCEPTION,rng,true)}
+   Decision.CROSS->{
+    val perf=ensurePerformance(w,m,p.id);val start=analysisPassPoint(w,m,home,p.id,997);perf.passesAttempted++
+    val skill=(p.attributes.passing+p.attributes.technique)/2;val pressure=playerDecisionContext(w,m).nearbyOpponents
+    val chance=(.49+skill*.0037+p.fitness*.001-(pressure-2)*.018+(if(p.messiMentored).055 else 0.0)).coerceIn(.42,if(p.messiMentored).96 else .88)
+    if(mates.isNotEmpty()&&rng.chance(chance)){
+     perf.passesCompleted++;perf.chancesCreated++;val target=targetPlayerFor(w,m,home);val id=if(target in mates&&rng.chance(.76))target else mates.maxBy{w.players.getValue(it).attributes.finishing}
+     val d=6.5+rng.nextDouble()*8.0;val type=if(rng.chance(.72))ShotType.HEADER else ShotType.VOLLEY;setDistanceFromGoal(m,home,d,(.32+rng.nextDouble()*.36).toFloat());recordPassEvent(m,PassEvent(m.minute,p.clubId,p.id,id,true,start.first,start.second,m.ballX,m.ballY));log(m,"Deine Flanke sucht ${w.players.getValue(id).lastName} im Strafraum.");if(!maybeOffside(w,m,home,id,type,rng))resolveShot(w,m,home,id,rng,p.id,type)
+    }else{perf.turnovers++;log(m,"Die Flanke wird abgefangen.");transferPossession(w,m,!home,PossessionChangeReason.INTERCEPTION,rng,true)}
+   }
+   Decision.THROUGH_PASS->{
+    val perf=ensurePerformance(w,m,p.id);val start=analysisPassPoint(w,m,home,p.id,1199);perf.passesAttempted++
+    val pressure=playerDecisionContext(w,m).nearbyOpponents;val skill=p.attributes.passing*.55+p.attributes.vision*.30+p.attributes.technique*.15
+    val chance=(.43+skill*.0041+p.fitness*.0008-(pressure-2)*.025+(if(p.messiMentored).07 else 0.0)).coerceIn(.34,if(p.messiMentored).94 else .84)
+    if(mates.isNotEmpty()&&rng.chance(chance)){
+     perf.passesCompleted++;perf.chancesCreated+=2;val target=targetPlayerFor(w,m,home);val id=if(target in mates&&rng.chance(.72))target else mates.maxBy{val q=w.players.getValue(it);q.attributes.pace+q.attributes.finishing+q.attributes.technique/2}
+     val before=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home)).distanceMeters;val d=(before-(6.0+rng.nextDouble()*10.0)).coerceIn(5.5,16.5);setDistanceFromGoal(m,home,d,(.38+rng.nextDouble()*.24).toFloat());recordPassEvent(m,PassEvent(m.minute,p.clubId,p.id,id,true,start.first,start.second,m.ballX,m.ballY));log(m,"Dein Steilpass schickt ${w.players.getValue(id).lastName} hinter die Kette.")
+     val type=if(d<=10.5)ShotType.ONE_ON_ONE else ShotType.BOX_SHOT;if(!maybeOffside(w,m,home,id,type,rng))resolveShot(w,m,home,id,rng,p.id,type)
+    }else{perf.turnovers++;log(m,"Der Steilpass wird gelesen und abgefangen.");transferPossession(w,m,!home,PossessionChangeReason.INTERCEPTION,rng,true)}
+   }
+   Decision.PASS->{
+    val perf=ensurePerformance(w,m,p.id);val start=analysisPassPoint(w,m,home,p.id,1301);perf.passesAttempted++
+    val oppPress=effectiveTactics(w,m,!home).pressing;val pressure=playerDecisionContext(w,m).nearbyOpponents
+    val skill=p.attributes.passing*.55+p.attributes.vision*.25+p.attributes.technique*.20
+    val chance=(.73+skill*.0024+p.fitness*.0007-(oppPress-3)*.012-(pressure-2)*.008+(if(p.messiMentored).03 else 0.0)).coerceIn(.72,.985)
+    if(mates.isNotEmpty()&&rng.chance(chance)){
+     perf.passesCompleted++;val id=mates.maxBy{val q=w.players.getValue(it);q.attributes.passing+q.attributes.vision+q.attributes.technique+q.fitness.roundToInt()}
+     setBallPhase(m,LivePhase.ATTACK,home,id,"Sicherungspass – Ball bleibt in den eigenen Reihen");moveBallToward(w,m,home,LivePhase.ATTACK,rng);recordPassEvent(m,PassEvent(m.minute,p.clubId,p.id,id,true,start.first,start.second,m.ballX,m.ballY));stats(m,home).possessionTicks+=2;log(m,"Du spielst den sicheren Pass auf ${w.players.getValue(id).lastName}.")
+    }else{perf.turnovers++;log(m,"Auch der Sicherungspass wird unter Druck abgefangen.");transferPossession(w,m,!home,PossessionChangeReason.INTERCEPTION,rng,true)}
    }
    Decision.HOLD->{p.fitness=(p.fitness+.18).coerceAtMost(100.0);stats(m,home).possessionTicks+=2;m.chainStep=0;m.chainTicks=0;setBallPhase(m,LivePhase.POSSESSION,home,p.id,"Ball gesichert");moveBallToward(w,m,home,LivePhase.POSSESSION,rng);log(m,"Du sicherst den Ball. Dein Team kann nachrücken.")}
    Decision.FOUL->{
@@ -1014,25 +1165,26 @@ object MatchEngine {
    }
   }
   m.pendingDecision=false;m.decisionAssistId=0;m.decisionCooldown=m.minute+8;m.rngState=rng.state
+  SaveCodec.requireRuntimeIntegrity(w)
   if(!m.incidentPause&&m.pendingSetPieceClubId==0&&m.pendingCornerClubId==0&&m.pendingPossessionClubId==0&&m.pendingVarShotIndex<0&&periodComplete(m))endCurrentPeriod(w,m,rng)
  }
 
  fun setConserveEnergy(w: World,m: LiveMatch,clubId: Int=w.user.clubId,enabled: Boolean){
   require(!m.finished){"Das Spiel ist beendet."};val home=clubId==m.homeId;require(home||clubId==m.awayId)
   if(home){m.homeConserveEnergy=enabled;if(enabled){m.homeAllOutAttack=false;m.homeControlGame=false}}else{m.awayConserveEnergy=enabled;if(enabled){m.awayAllOutAttack=false;m.awayControlGame=false}}
-  log(m,"${w.clubs.getValue(clubId).shortName}: ${if(enabled)"Kräfte schonen – tiefer Block und Konter" else "Kräfte schonen beendet"}.")
+  MatchAnalysisSystem.recordTacticChange(w,m,clubId,if(enabled)"Kräfte schonen" else "Kräfte schonen beendet");log(m,"${w.clubs.getValue(clubId).shortName}: ${if(enabled)"Kräfte schonen – tiefer Block und Konter" else "Kräfte schonen beendet"}.")
  }
 
  fun setAllOutAttack(w: World,m: LiveMatch,clubId: Int=w.user.clubId,enabled: Boolean){
   require(!m.finished){"Das Spiel ist beendet."};val home=clubId==m.homeId;require(home||clubId==m.awayId)
   if(home){m.homeAllOutAttack=enabled;if(enabled){m.homeConserveEnergy=false;m.homeControlGame=false}}else{m.awayAllOutAttack=enabled;if(enabled){m.awayConserveEnergy=false;m.awayControlGame=false}}
-  log(m,"${w.clubs.getValue(clubId).shortName}: ${if(enabled)"Alles nach vorn – volles Risiko" else "Alles nach vorn beendet"}.")
+  MatchAnalysisSystem.recordTacticChange(w,m,clubId,if(enabled)"Alles nach vorn" else "Alles nach vorn beendet");log(m,"${w.clubs.getValue(clubId).shortName}: ${if(enabled)"Alles nach vorn – volles Risiko" else "Alles nach vorn beendet"}.")
  }
 
  fun setControlGame(w: World,m: LiveMatch,clubId: Int=w.user.clubId,enabled: Boolean){
   require(!m.finished){"Das Spiel ist beendet."};val home=clubId==m.homeId;require(home||clubId==m.awayId)
   if(home){m.homeControlGame=enabled;if(enabled){m.homeConserveEnergy=false;m.homeAllOutAttack=false}}else{m.awayControlGame=enabled;if(enabled){m.awayConserveEnergy=false;m.awayAllOutAttack=false}}
-  log(m,"${w.clubs.getValue(clubId).shortName}: ${if(enabled)"Spiel kontrollieren – Ball und Rhythmus sichern" else "Spielkontrolle beendet"}.")
+  MatchAnalysisSystem.recordTacticChange(w,m,clubId,if(enabled)"Spiel kontrollieren" else "Spielkontrolle beendet");log(m,"${w.clubs.getValue(clubId).shortName}: ${if(enabled)"Spiel kontrollieren – Ball und Rhythmus sichern" else "Spielkontrolle beendet"}.")
  }
 
  fun changeFormation(w: World,m: LiveMatch,clubId: Int=w.user.clubId,newFormation: String){
@@ -1040,7 +1192,7 @@ object MatchEngine {
   val home=clubId==m.homeId;require(home||clubId==m.awayId){"Verein spielt nicht in dieser Partie."}
   val current=xi(m,home);val reordered=reorderLineup(w,current,newFormation)
   if(home){m.homeXi=reordered;m.homeFormation=newFormation}else{m.awayXi=reordered;m.awayFormation=newFormation}
-  w.clubs.getValue(clubId).tactics.formation=newFormation;log(m,"Taktik: ${w.clubs.getValue(clubId).shortName} stellt auf $newFormation um.")
+  w.clubs.getValue(clubId).tactics.formation=newFormation;w.clubs.getValue(clubId).tactics.xi=reordered.toMutableList();MatchAnalysisSystem.recordTacticChange(w,m,clubId,"Formation $newFormation");log(m,"Taktik: ${w.clubs.getValue(clubId).shortName} stellt auf $newFormation um.")
  }
 
  private fun reorderLineup(w: World,current: List<Int>,newFormation: String): MutableList<Int>{
@@ -1056,8 +1208,8 @@ object MatchEngine {
  fun substitute(w: World,m: LiveMatch,out: Int,incoming: Int,clubId: Int=w.user.clubId){
   require(!m.finished&&!m.pendingDecision){"Wechsel gerade nicht möglich."};val home=clubId==m.homeId;require(home||clubId==m.awayId)
   val lineup=xi(m,home);val bench=if(home)m.homeBench else m.awayBench
-  require((if(home)m.homeSubs else m.awaySubs)<5){"Fünf Wechsel sind bereits erfolgt."};require(out!=0&&out in lineup&&incoming in bench&&w.players.getValue(incoming).available){"Dieser Wechsel ist nicht möglich."}
-  lineup[lineup.indexOf(out)]=incoming;bench.remove(incoming);if(home)m.homeSubs++ else m.awaySubs++;addStoppageTime(m,20)
+  val issue=CompetitionRulesEngine.substitutionIssue(w,m,home);require(issue==null){issue?:"Wechsel nicht möglich."};require(out!=0&&out in lineup&&incoming in bench&&w.players.getValue(incoming).available){"Dieser Wechsel ist nicht möglich."}
+  lineup[lineup.indexOf(out)]=incoming;bench.remove(incoming);CompetitionRulesEngine.registerSubstitution(m,home);if(home)m.homeSubs++ else m.awaySubs++;addStoppageTime(m,20)
   ensurePerformance(w,m,incoming);if(incoming !in m.participation)m.participation.add(incoming)
   log(m,"Wechsel: ${w.players.getValue(incoming).name} für ${w.players.getValue(out).name}.")
  }
@@ -1105,7 +1257,7 @@ object MatchEngine {
  fun resumeIncident(w: World,m: LiveMatch){
   require(m.incidentPause){"Das Spiel ist nicht unterbrochen."}
   if(m.incidentReason==MatchPauseReason.INJURY&&m.incidentClubId==w.user.clubId){
-   val home=w.user.clubId==m.homeId;val lineup=xi(m,home);val bench=if(home)m.homeBench else m.awayBench;val subs=if(home)m.homeSubs else m.awaySubs;val canReplace=subs<5&&bench.any{w.players[it]?.available==true}
+   val home=w.user.clubId==m.homeId;val lineup=xi(m,home);val bench=if(home)m.homeBench else m.awayBench;val canReplace=CompetitionRulesEngine.substitutionIssue(w,m,home)==null&&bench.any{w.players[it]?.available==true}
    require(!canReplace||m.incidentPlayerId !in lineup){"Verletzten Spieler zuerst wechseln."}
   }
   val reason=m.incidentReason;m.incidentPause=false;m.incidentReason=MatchPauseReason.NONE;m.incidentPlayerId=0;m.incidentClubId=0
@@ -1115,49 +1267,50 @@ object MatchEngine {
 
  private fun pauseForIncident(m: LiveMatch,reason: MatchPauseReason,playerId: Int,clubId: Int){m.incidentPause=true;m.incidentReason=reason;m.incidentPlayerId=playerId;m.incidentClubId=clubId}
 
- private fun clearAssistantSubProposal(m:LiveMatch){m.assistantSubPending=false;m.assistantSubOutId=0;m.assistantSubInId=0;m.assistantSubReason="";m.assistantSubSuggestedMinute=-1}
+ private fun clearAssistantSubProposal(m:LiveMatch){m.assistantSubPending=false;m.assistantSubOutId=0;m.assistantSubInId=0;m.assistantSubReason="";m.assistantSubOutIds.clear();m.assistantSubInIds.clear();m.assistantSubReasons.clear();m.assistantSubSuggestedMinute=-1}
 
  fun acceptAssistantSubstitution(w:World,m:LiveMatch){
   require(m.assistantSubPending){"Es liegt kein Co-Trainer-Wechselvorschlag vor."}
-  val out=m.assistantSubOutId;val incoming=m.assistantSubInId;val reason=m.assistantSubReason
-  clearAssistantSubProposal(m)
-  substitute(w,m,out,incoming,w.user.clubId)
-  w.assistantCoach.lastSubReason="${m.minute}. Minute: angenommen · $reason"
+  val outs=(m.assistantSubOutIds.ifEmpty{mutableListOf(m.assistantSubOutId)}).toList();val ins=(m.assistantSubInIds.ifEmpty{mutableListOf(m.assistantSubInId)}).toList();val reasons=m.assistantSubReasons.toList();val summary=m.assistantSubReason
+  clearAssistantSubProposal(m);var completed=0
+  for(i in outs.indices){val out=outs[i];val incoming=ins.getOrNull(i)?:continue;val home=w.user.clubId==m.homeId;if(out in xi(m,home)&&incoming in (if(home)m.homeBench else m.awayBench)&&CompetitionRulesEngine.substitutionIssue(w,m,home)==null){substitute(w,m,out,incoming,w.user.clubId);completed++}}
+  m.assistantNextSuggestionMinute=m.minute+if(completed>=3)10 else 7
+  w.assistantCoach.lastSubReason="${m.minute}. Minute: $completed Wechsel angenommen · ${reasons.firstOrNull()?:summary}"
  }
 
  fun rejectAssistantSubstitution(w:World,m:LiveMatch){
   require(m.assistantSubPending){"Es liegt kein Co-Trainer-Wechselvorschlag vor."}
-  val out=m.assistantSubOutId;val incoming=m.assistantSubInId;val reason=m.assistantSubReason;val forced=out in m.injured
-  m.assistantSubRejectedOutId=out;m.assistantSubRejectedInId=incoming;m.assistantSubRejectedUntilMinute=m.minute+if(forced)1 else 8
-  clearAssistantSubProposal(m)
-  w.assistantCoach.lastSubReason="${m.minute}. Minute: abgelehnt · $reason"
-  if(forced&&out in xi(m,w.user.clubId==m.homeId))pauseForIncident(m,MatchPauseReason.INJURY,out,w.user.clubId)
+  val outs=(m.assistantSubOutIds.ifEmpty{mutableListOf(m.assistantSubOutId)}).toList();val ins=(m.assistantSubInIds.ifEmpty{mutableListOf(m.assistantSubInId)}).toList();val reason=m.assistantSubReason
+  var forcedOut=0
+  for(i in outs.indices){val out=outs[i];val incoming=ins.getOrNull(i)?:0;val forced=out in m.injured;if(forced)forcedOut=out;val until=m.minute+if(forced)2 else 18;m.assistantSubRejectedPairs["$out:$incoming"]=until;m.assistantSubRejectedPlayers[out]=m.minute+if(forced)2 else 10}
+  m.assistantSubRejectedOutId=outs.firstOrNull()?:0;m.assistantSubRejectedInId=ins.firstOrNull()?:0;m.assistantSubRejectedUntilMinute=m.minute+12;m.assistantNextSuggestionMinute=m.minute+if(forcedOut!=0)2 else 7
+  clearAssistantSubProposal(m);w.assistantCoach.lastSubReason="${m.minute}. Minute: Batch abgelehnt · $reason"
+  if(forcedOut!=0&&forcedOut in xi(m,w.user.clubId==m.homeId))pauseForIncident(m,MatchPauseReason.INJURY,forcedOut,w.user.clubId)
  }
 
  private fun aiSub(w: World,m: LiveMatch,home: Boolean){
-  if((if(home)m.homeSubs else m.awaySubs)>=5||m.pendingDecision||m.assistantSubPending)return
-  val club=clubId(m,home);val suggestions=substitutionSuggestions(w,m,club)
-  val userAssistant=club==w.user.clubId&&w.assistantCoach.autoSubstitutions
-  val suggestion=suggestions.firstOrNull{candidate->
-   !userAssistant||m.minute>=m.assistantSubRejectedUntilMinute||candidate.outId!=m.assistantSubRejectedOutId||candidate.inId!=m.assistantSubRejectedInId
-  }?:return
-  val forced=suggestion.outId in m.injured
-  val current=w.players[suggestion.outId]?:return
-  val yellow=m.yellows[suggestion.outId]?:0
-  val aggression=if(userAssistant)w.assistantCoach.substitutionAggression.coerceIn(1,5) else 3
-  val urgent=forced||current.fitness<(64+(aggression-3)*2)||yellow>0||calculatePlayerRating(w,m,suggestion.outId)<(6.0+(aggression-3)*.08)
-  val earliest=(62-(aggression-3)*4).coerceIn(52,70)
-  val normalMinute=(74-(aggression-3)*3).coerceIn(64,80)
-  val threshold=17.0-(aggression-3)*3.5
-  if(!urgent&&m.minute<earliest)return
-  if(!urgent&&m.minute<normalMinute&&suggestion.score<threshold)return
-  if(userAssistant){
-   m.assistantSubPending=true;m.assistantSubOutId=suggestion.outId;m.assistantSubInId=suggestion.inId;m.assistantSubReason=suggestion.reason;m.assistantSubSuggestedMinute=m.minute
-   w.assistantCoach.lastSubReason="${m.minute}. Minute: Vorschlag · ${suggestion.reason}"
-   log(m,"Co-Trainer empfiehlt: ${w.players.getValue(suggestion.outId).lastName} raus, ${w.players.getValue(suggestion.inId).lastName} rein.","decision")
-   return
-  }
-  substitute(w,m,suggestion.outId,suggestion.inId,club)
+  if(CompetitionRulesEngine.substitutionIssue(w,m,home)!=null||m.pendingDecision||m.assistantSubPending)return
+  val club=clubId(m,home);val suggestions=substitutionSuggestions(w,m,club);val userAssistant=club==w.user.clubId&&w.assistantCoach.autoSubstitutions
+  if(userAssistant&&m.minute<m.assistantNextSuggestionMinute)return
+  m.assistantSubRejectedPairs.entries.removeAll{it.value<=m.minute};m.assistantSubRejectedPlayers.entries.removeAll{it.value<=m.minute}
+  val available=suggestions.filter{candidate->!userAssistant||((m.assistantSubRejectedPairs["${candidate.outId}:${candidate.inId}"]?:0)<=m.minute&&(m.assistantSubRejectedPlayers[candidate.outId]?:0)<=m.minute)}
+  if(available.isEmpty())return
+  val aggression=if(userAssistant)(w.assistantCoach.substitutionAggression+AssistantCoachSystem.substitutionAggressionBonus(w.assistantCoach)).coerceIn(1,5) else 3
+  val earliest=(62-(aggression-3)*4).coerceIn(52,70);if(m.minute<earliest&&available.none{it.outId in m.injured})return
+  val maxSubs=CompetitionRulesEngine.maxSubs(w,m);val used=if(home)m.homeSubs else m.awaySubs;val remaining=(maxSubs-used).coerceAtLeast(0);if(remaining==0)return
+  fun urgent(s:SubSuggestion):Boolean{val p=w.players[s.outId]?:return false;val yellow=m.yellows[s.outId]?:0;return s.outId in m.injured||p.fitness<(62+(aggression-3)*2)||yellow>0||calculatePlayerRating(w,m,s.outId)<(5.95+(aggression-3)*.06)}
+  val baseThreshold=17.0-(aggression-3)*3.5+if(m.minute>=84)8.0 else if(m.minute>=78)3.0 else 0.0
+  val eligible=available.filter{urgent(it)||it.score>=baseThreshold};if(eligible.isEmpty())return
+  if(!userAssistant){substitute(w,m,eligible.first().outId,eligible.first().inId,club);return}
+  val rng=SeededRandom(m.rngState xor (m.minute.toLong()*7919L) xor club.toLong());val strong=eligible.count{urgent(it)||it.score>=baseThreshold+7}
+  val maxBatch=minOf(remaining,eligible.size,when{eligible.count{it.outId in m.injured}>=2->5;m.minute in 58..78&&aggression>=4&&strong>=4->5;m.minute in 64..82&&strong>=3->4;strong>=2->3;else->1})
+  val desired=if(maxBatch<=1)1 else rng.int(1,maxBatch);val batch=eligible.take(desired)
+  // In den Schlussminuten nicht zwanghaft das Kontingent leeren: ohne echten Grund höchstens zwei.
+  val finalBatch=if(m.minute>=84&&batch.none{urgent(it)})batch.take(2) else batch
+  if(finalBatch.isEmpty())return
+  m.assistantSubPending=true;m.assistantSubOutIds=finalBatch.map{it.outId}.toMutableList();m.assistantSubInIds=finalBatch.map{it.inId}.toMutableList();m.assistantSubReasons=finalBatch.map{it.reason}.toMutableList();m.assistantSubOutId=finalBatch.first().outId;m.assistantSubInId=finalBatch.first().inId;m.assistantSubReason=if(finalBatch.size==1)finalBatch.first().reason else "${finalBatch.size} Wechsel als gemeinsames Paket";m.assistantSubSuggestedMinute=m.minute;m.assistantLastBatchSize=finalBatch.size;m.assistantNextSuggestionMinute=m.minute+6
+  w.assistantCoach.lastSubReason="${m.minute}. Minute: ${finalBatch.size} Wechsel vorgeschlagen · ${finalBatch.first().reason}"
+  log(m,"Co-Trainer empfiehlt ${finalBatch.size} Wechsel${if(finalBatch.size==1)":" else " als Paket:"} "+finalBatch.joinToString(", "){"${w.players.getValue(it.outId).lastName} → ${w.players.getValue(it.inId).lastName}"},"decision")
  }
 
  private fun resolveShot(w: World,m: LiveMatch,home: Boolean,id: Int,rng: SeededRandom,assist: Int=0,typeHint: ShotType?=null,allowRebound: Boolean=true){
@@ -1168,7 +1321,7 @@ object MatchEngine {
   val baseGeometry=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home))
   val type=typeHint?:when{baseGeometry.distanceMeters>=23.5->ShotType.LONG_RANGE;baseGeometry.distanceMeters<=8.5->ShotType.CLOSE_RANGE;else->ShotType.BOX_SHOT}
   val context=buildShotContext(w,m,home,p,type,rng,assist);val geometry=ShotModel.geometry(context)
-  val shotXg=ShotModel.xg(context);val goalProbability=ShotModel.goalProbability(shotXg,p,keeper,context)
+  val shotXg=ShotModel.xg(context);val baseGoalProbability=ShotModel.goalProbability(shotXg,p,keeper,context);val goalProbability=(baseGoalProbability*LeagueCalibration.forMatch(w,m).conversion).coerceIn(.002,.92)
   val blockProbability=ShotModel.blockProbability(context);val onTargetProbability=ShotModel.onTargetProbability(goalProbability,p,context)
   val savedOnTarget=(onTargetProbability-goalProbability).coerceAtLeast(0.0)
   val woodworkProbability=(.012+shotXg*.060+(if(type in setOf(ShotType.CLOSE_RANGE,ShotType.ONE_ON_ONE)).006 else 0.0)).coerceIn(.010,.052)
@@ -1202,7 +1355,7 @@ object MatchEngine {
   when(outcome){
    ShotOutcome.GOAL->{
     addStoppageTime(m,25)
-    val reviewChance=when(type){ShotType.ONE_ON_ONE->.38;ShotType.CUTBACK->.32;ShotType.HEADER,ShotType.VOLLEY->.28;ShotType.PENALTY->.18;ShotType.FREE_KICK->.12;else->.24}
+    val reviewChance=if(!CompetitionRulesEngine.forMatch(w,m).varEnabled)0.0 else when(type){ShotType.ONE_ON_ONE->.38;ShotType.CUTBACK->.32;ShotType.HEADER,ShotType.VOLLEY->.28;ShotType.PENALTY->.18;ShotType.FREE_KICK->.12;else->.24}
     if(rng.chance(reviewChance)){
      s.varChecks++;m.pendingVarShotIndex=m.shotEvents.lastIndex;m.pendingVarKeeperId=keeperId;m.varReviewStage=0;m.varReviewReason="";m.varReviewResult="";m.varWillOverturn=false
      setBallPhase(m,LivePhase.GOAL,home,id,"TOR · ${target.third} · ${type.label}")
@@ -1303,16 +1456,43 @@ object MatchEngine {
   resumeIncident(w,m)
  }
 
- fun simulateFullMatch(w: World,f: Fixture): LiveMatch{val m=start(w,f);while(!m.finished){when{m.assistantSubPending->acceptAssistantSubstitution(w,m);m.incidentPause->autoResolveIncident(w,m);m.pendingDecision->decide(w,m,Decision.SHOOT);m.halfTime->secondHalf(m);else->step(w,m)}};return m}
+ private fun fastForwardStep(w:World,m:LiveMatch){
+  when{
+   m.assistantSubPending->acceptAssistantSubstitution(w,m)
+   m.incidentPause->autoResolveIncident(w,m)
+   m.pendingDecision->decide(w,m,Decision.SHOOT)
+   m.halfTime->secondHalf(m)
+   else->step(w,m)
+  }
+ }
+
+ /** Simuliert ausschließlich den Rest der ersten Halbzeit und hält am echten Pausenstand. */
+ fun simulateToHalfTime(w:World,m:LiveMatch){
+  require(!m.finished){"Das Spiel ist bereits beendet."}
+  require(m.period==1){"Die erste Halbzeit ist bereits vorbei."}
+  var guard=0
+  while(!m.finished&&!m.halfTime&&guard++<1000)fastForwardStep(w,m)
+  check(m.finished||m.halfTime){"Die Schnellsimulation hat keinen gültigen Haltepunkt erreicht."}
+ }
+
+ /** Simuliert eine bereits laufende Partie inklusive möglicher Verlängerung/Elfmeterschießen. */
+ fun simulateRemaining(w:World,m:LiveMatch){
+  var guard=0
+  while(!m.finished&&guard++<2500)fastForwardStep(w,m)
+  check(m.finished){"Die Schnellsimulation konnte die Partie nicht abschließen."}
+ }
+
+ fun simulateFullMatch(w: World,f: Fixture): LiveMatch{val m=start(w,f);simulateRemaining(w,m);return m}
 
  fun record(w: World,m: LiveMatch){
   require(m.finished){"Das Spiel läuft noch."};val f=w.fixtures.first{it.id==m.fixtureId};if(f.played)return;f.played=true
-  w.matches[f.id]=MatchRecord(f.id,m.homeId,m.awayId,m.home.copy(),m.away.copy(),m.minute,m.goals.toList(),m.attendance,m.shotEvents.toList(),m.homePens,m.awayPens,m.extraTimePlayed)
+  w.matches[f.id]=MatchRecord(f.id,m.homeId,m.awayId,m.home.copy(),m.away.copy(),m.minute,m.goals.toList(),m.attendance,homePens=m.homePens,awayPens=m.awayPens,extraTimePlayed=m.extraTimePlayed)
   for(id in m.participation.distinct()){
    val p=w.players.getValue(id);val perf=m.playerPerformance[id]?:PlayerMatchPerformance(minutes=m.minutesPlayed[id]?:0,fitnessStart=p.fitness,rating=6.5)
    p.stats.appearances++;p.stats.minutes+=m.minutesPlayed[id]?:0;p.stats.goals+=m.goals.count{it.playerId==id};p.stats.assists+=m.goals.count{it.assistId==id};p.stats.yellow+=m.yellows[id]?:0
    if(id in m.sentOff){p.stats.red++;p.unavailableReason=UnavailableReason.SUSPENDED;p.unavailableWeeks=2};p.sharpness=(p.sharpness+5).coerceAtMost(100);p.form=perf.rating.coerceIn(1.0,10.0)
   }
   for((id,score,conceded) in listOf(Triple(m.homeId,m.home.goals,m.away.goals),Triple(m.awayId,m.away.goals,m.home.goals))){val c=w.clubs.getValue(id);val result=if(score>conceded)"S" else if(score==conceded)"U" else "N";c.form.add(result);if(c.form.size>5)c.form.removeAt(0);w.squad(id).forEach{it.morale=(it.morale+if(result=="S")4 else if(result=="N")-3 else 0).coerceIn(5,100)};if(id==m.homeId){c.lastIncome=m.attendance*(if(!w.privateTopClubMode&&c.tier>=7)4 else if(w.privateTopClubMode)18 else 22-c.tier*2);c.budget+=c.lastIncome}else c.lastIncome=0}
+  YouthCompetitionSystem.returnTemporaryAfterMatch(w,m)
  }
 }

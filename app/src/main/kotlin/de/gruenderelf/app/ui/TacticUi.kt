@@ -2,6 +2,7 @@ package de.gruenderelf.app.ui
 
 import de.gruenderelf.engine.BuildUp
 import de.gruenderelf.engine.Tactics
+import de.gruenderelf.engine.SavedTactic
 
 val tacticPresets = listOf("Individuell", "Ausgewogen", "Tiki-Taka", "Ballbesitz", "Direkt", "Konter", "Über Außen", "Gegenpressing")
 
@@ -29,4 +30,10 @@ fun tacticSummary(t: Tactics): String {
     val press = when (t.pressing) { 1 -> "sehr passiv"; 2 -> "zurückhaltend"; 3 -> "ausgewogen"; 4 -> "aggressiv"; else -> "maximal aggressiv" }
     val line = when (t.line) { 1 -> "sehr tief"; 2 -> "tief"; 3 -> "mittelhoch"; 4 -> "hoch"; else -> "sehr hoch" }
     return "Spielidee: $build. Pressing $press, Defensivlinie $line. Hohe Werte bei Tempo, Pressing und Linie erhöhen Wirkung, Risiko und Fitnessverbrauch spürbar."
+}
+
+fun tacticSnapshot(t:Tactics)=SavedTactic(t.formation,t.mentality,t.pressing,t.line,t.tempo,t.width,t.buildUp)
+
+fun applySavedTactic(t:Tactics,s:SavedTactic){
+    t.formation=s.formation;t.mentality=s.mentality;t.pressing=s.pressing;t.line=s.line;t.tempo=s.tempo;t.width=s.width;t.buildUp=s.buildUp
 }

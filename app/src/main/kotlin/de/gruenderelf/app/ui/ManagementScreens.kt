@@ -9,7 +9,12 @@ import androidx.compose.ui.unit.dp
 import de.gruenderelf.app.GameViewModel
 import de.gruenderelf.engine.*
 
-@Composable fun MoreScreen(onNavigate: (String)->Unit,onMenu: ()->Unit){Page("Hinter der Bande","VEREIN & VERANTWORTUNG"){listOf("verein" to "Verein, Finanzen & Partner","training" to "Training & Co-Trainer","transfers" to "Transfers & Jugend","karriere" to "Deine Karriere","editor" to "Editor","einstellungen" to "Einstellungen","speichern" to "Speicherstände").forEach{(route,label)->Action(label,secondary=true){onNavigate(route)}};Section("Gründerelf · 0.4.69"){Text("Offline. Ohne Werbung. Ohne Käufe.",color=Grass);Text("Neu: Spielersuche nach Namen/Verein, Wechselinteresse, Co-Trainer-Delegation, eigene Jugendspieler, Intensivtraining und mehrstufige Sponsoren/Partner.",color=Muted);Text("KI-Vereine nutzen Transfer-, Trainings- und Wirtschaftssysteme ebenfalls.",color=Muted,style=MaterialTheme.typography.bodySmall)};Action("Speichern & zum Startbildschirm",secondary=true,onClick=onMenu)}}
+@Composable fun MoreScreen(newScoutReports:Int,onNavigate: (String)->Unit,onMenu: ()->Unit){Page("Hinter der Bande","VEREIN & VERANTWORTUNG"){
+ val entries=listOf("verein" to "Verein, Finanzen & Partner","training" to "Training & Co-Trainer","transfers" to if(newScoutReports>0)"Transfers & Jugend · $newScoutReports neu" else "Transfers & Jugend","karriere" to "Deine Karriere","hilfe" to "Hilfe & Tutorial","editor" to "Editor","einstellungen" to "Einstellungen","speichern" to "Speicherstände")
+ entries.forEach{(route,label)->Action(label,secondary=true){onNavigate(route)}}
+ Section("Gründerelf · 0.5.18"){Text("Offline. Ohne Werbung. Ohne Käufe.",color=Grass);Text("Neu: Ein einmaliges Versions-Changelog erklärt beim ersten Öffnen die wichtigsten Änderungen seit Einführung des Tutorials.",color=Muted);Text("Hilfe & Tutorial wurde vollständig auf U19/U23, Potenzialtraining, Transfers, Benachrichtigungen, Preisgelder und die aktuelle Live-Simulation angepasst.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+ Action("Speichern & zum Startbildschirm",secondary=true,onClick=onMenu)
+}}
 
 @Composable fun TrainingScreen(w: World,vm: GameViewModel){
  val effective=TrainingEngine.effectiveDays(w);val amateur=w.club().tier>=7;val assistant=w.assistantCoach
@@ -21,6 +26,8 @@ import de.gruenderelf.engine.*
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Profikader automatisch trainieren");Text("Der Co-Trainer plant Woche, Intensität, Gegnerfokus und individuelle Schwerpunkte.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(assistant.autoSeniorTraining,{v->vm.action{it.assistantCoach.autoSeniorTraining=v}})}
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Jugend automatisch entwickeln");Text("Seniortraining, Mentoren und Extra-Foki werden nach Reife und Risiko dosiert.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(assistant.autoYouthTraining,{v->vm.action{it.assistantCoach.autoYouthTraining=v}})}
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Wechsel im Match übernehmen");Text("Fitness, Karten, Rating, Spielstand und Bankqualität bestimmen die Wechsel.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(assistant.autoSubstitutions,{v->vm.action{it.assistantCoach.autoSubstitutions=v}})}
+   Pick("Co-Trainer-Profil",assistant.profile,AssistantCoachProfile.entries.toList(),{it.label}){v->vm.action{it.assistantCoach.profile=v}}
+   Text("${assistant.profile.description} · ${AssistantCoachSystem.profileSummary(assistant)}",color=Muted,style=MaterialTheme.typography.bodySmall)
    Pick("Trainingsphilosophie",assistant.trainingStyle,AssistantTrainingStyle.entries.toList(),{it.label}){v->vm.action{it.assistantCoach.trainingStyle=v}}
    StepSlider("Wechsel-Aggressivität",assistant.substitutionAggression,onChange={v->vm.action{it.assistantCoach.substitutionAggression=v}})
    StepSlider("Jugend-Risikobereitschaft",assistant.youthAggression,onChange={v->vm.action{it.assistantCoach.youthAggression=v}})
@@ -41,8 +48,8 @@ import de.gruenderelf.engine.*
   }
   Section("Intensivtraining"){
    Text("Vier Wochen gezielte Förderung. Sie beschleunigt einen Schwerpunkt spürbar, kostet Geld und erhöht Belastungs- sowie Verletzungsrisiko. Kein Sofort-Rating-Sprung.",color=Muted)
-   val candidates=w.squad().filter{!it.retired}.sortedBy{it.name};if(candidates.isNotEmpty()){val selected=intensivePlayerId.takeIf{id->candidates.any{it.id==id}}?:candidates.first().id;val p=w.players.getValue(selected);Pick("Spieler",selected,candidates.map{it.id},{w.players.getValue(it).name}){intensivePlayerId=it};Pick("Schwerpunkt",intensiveFocus,Focus.entries.toList(),{it.label}){intensiveFocus=it};val reason=IntensiveTrainingSystem.reason(w,selected);Action("Intensivprogramm starten · ${euros(IntensiveTrainingSystem.cost(w,p))}",reason==null){intensiveConfirm=selected};if(reason!=null)Text(reason,color=Muted,style=MaterialTheme.typography.bodySmall)}
-   if(w.intensiveTraining.isNotEmpty()){HorizontalDivider();w.intensiveTraining.forEach{pr->val p=w.players[pr.playerId];Text("${p?.name?:"Spieler"} · ${pr.focus.label}",style=MaterialTheme.typography.titleMedium);Text("Noch ${pr.weeksLeft} Wochen · Fortschritt ${(pr.progress*100).toInt()} % bis zum nächsten gezielten Attributpunkt",color=Grass)}}
+   val candidates=w.squad().filter{!it.retired}.sortedBy{it.name};if(candidates.isNotEmpty()){val selected=intensivePlayerId.takeIf{id->candidates.any{it.id==id}}?:candidates.first().id;val p=w.players.getValue(selected);Pick("Spieler",selected,candidates.map{it.id},{w.players.getValue(it).name}){intensivePlayerId=it};Pick("Schwerpunkt",intensiveFocus,Focus.entries.toList(),{it.label}){intensiveFocus=it};val reason=IntensiveTrainingSystem.reason(w,selected);Action("Intensivprogramm starten · ${euros(IntensiveTrainingSystem.cost(w,p))}",reason==null){intensiveConfirm=selected};if(reason!=null)Text(reason,color=Muted,style=MaterialTheme.typography.bodySmall);val potentialReason=IntensiveTrainingSystem.potentialReason(w,selected);Action("Potenzialtraining · ${euros(IntensiveTrainingSystem.potentialCost(w,p))}",potentialReason==null,true){vm.action("Potenzialtraining gestartet."){IntensiveTrainingSystem.startPotential(it,selected,intensiveFocus)}};Text("Potenzialtraining erhöht Potenzial und Attribute. Jugendspieler unter 20 erhalten +3 Potenzial garantiert, mit starker Förderung bis +5, sowie +2 bis +4 aktuelle Gesamtstärke (maximal bis zur neuen Potenzialgrenze). Ältere Spieler entwickeln sich moderater.",color=Muted,style=MaterialTheme.typography.bodySmall);if(potentialReason!=null)Text(potentialReason,color=Muted,style=MaterialTheme.typography.bodySmall)}
+   if(w.intensiveTraining.isNotEmpty()){HorizontalDivider();w.intensiveTraining.forEach{pr->val p=w.players[pr.playerId];Text("${p?.name?:"Spieler"} · ${pr.focus.label}",style=MaterialTheme.typography.titleMedium);Text("Noch ${pr.weeksLeft} Wochen · ${if(pr.raisesPotential)"Potenzialförderung" else "Attributförderung"} · Fortschritt ${(pr.progress*100).toInt()} %",color=Grass)}}
   }
   Section("Was wirklich hängen bleibt"){
    val d=w.club().dynamics;Metric("Teamchemie","${d.chemistry} / 100");Metric("Taktisches Verständnis","${d.tacticalUnderstanding} / 100");Metric("Pressing-Abstimmung","${d.pressingCoordination} / 100");Metric("Mentale Härte","${d.mentalHardness} / 100");Metric("Führung / Hierarchie","${d.leadership} / ${d.hierarchyStability}");Metric("Aktuelle Belastung","${d.fatigueLoad} / 100");Metric("Gegnervorbereitung","${d.opponentPrep} / 100")
@@ -82,52 +89,201 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
 
 @Composable fun TransfersScreen(w: World,vm: GameViewModel,onProfile: (Int)->Unit){
  var filter by rememberSaveable{mutableStateOf("Alle")};var dealType by rememberSaveable{mutableStateOf(DealType.BUY)};var role by rememberSaveable{mutableStateOf(SquadRole.ROTATION)}
- var negotiationPlayerId by rememberSaveable{mutableStateOf<Int?>(null)};var marketView by rememberSaveable{mutableStateOf("Spielersuche")};var nameQuery by rememberSaveable{mutableStateOf("")};var clubFilter by rememberSaveable{mutableIntStateOf(0)}
+ var negotiationPlayerId by rememberSaveable{mutableStateOf<Int?>(null)};var marketView by rememberSaveable{mutableStateOf("Spielersuche")};var planningView by rememberSaveable{mutableStateOf("Transfers")};var nameQuery by rememberSaveable{mutableStateOf("")};var clubFilter by rememberSaveable{mutableIntStateOf(0)};var scoutRegion by rememberSaveable{mutableStateOf(ScoutRegion.DOMESTIC)}
+ var outboundPlayerId by rememberSaveable{mutableIntStateOf(w.squad().firstOrNull{!it.retired&&it.id!=w.user.playerId&&it.loanParentClubId==0}?.id?:w.user.playerId)};var outboundDeal by rememberSaveable{mutableStateOf(DealType.BUY)}
  var youthFirst by rememberSaveable{mutableStateOf("")};var youthLast by rememberSaveable{mutableStateOf("")};var youthNation by rememberSaveable{mutableStateOf("Deutschland")};var youthAge by rememberSaveable{mutableIntStateOf(16)};var youthPos by rememberSaveable{mutableStateOf(Position.ZM)};var youthFoot by rememberSaveable{mutableStateOf(Foot.RIGHT)};var youthBlueprint by rememberSaveable{mutableStateOf(YouthBlueprint.BALANCED)};var youthRole by rememberSaveable{mutableStateOf(PlayerRole.BOX_TO_BOX)}
- Page("Kaderplanung & Academy","SUCHE · INTERESSE · JUGEND · VERHANDLUNGEN"){
-  val c=w.club();val a=c.academy
-  Section("Academy"){
-   Pick("Academy-Identität",a.identity,AcademyIdentity.entries.toList(),{it.label}){v->vm.action{it.club().academy.identity=v}}
-   Metric("Scouting","${a.scouting} / 100");Metric("Internat","${a.boarding} / 100");Metric("Partnervereine","${a.partnerNetwork} / 100");Metric("Leihnetzwerk","${a.loanNetwork} / 100");Metric("U19 / U23","${a.u19Quality} / ${a.u23Quality}")
-   Text(if(a.goldenGeneration)"Goldene Generation: dieser Jahrgang besitzt außergewöhnliche Tiefe." else "Jahrgangszyklus ${a.generationCycle}/100 · Dürrephase ${a.droughtYears} Saison(en).",color=if(a.goldenGeneration)Gold else Muted)
-  }
-  Section("Eigenen Jugendspieler anlegen"){
-   Text("Du bestimmst Identität und Ausbildungsprofil – nicht das Endrating. Die Grundstärke bleibt academyabhängig, Potential wird verdeckt begrenzt und echte Entwicklung dauert Wochen/Saisons.",color=Muted)
-   Text("Verfügbare individuelle Plätze diese Saison: ${CustomYouthSystem.remainingSlots(w)} / 2",color=Grass)
-   Field("Vorname",youthFirst){youthFirst=it.take(30)};Field("Nachname",youthLast){youthLast=it.take(30)};Field("Nationalität",youthNation){youthNation=it.take(30)}
-   Pick("Alter",youthAge,listOf(15,16,17),{"$it Jahre"}){youthAge=it};Pick("Position",youthPos,Position.entries.toList(),{it.label}){youthPos=it};Pick("Fuß",youthFoot,Foot.entries.toList(),{it.label}){youthFoot=it};Pick("Grundprofil",youthBlueprint,YouthBlueprint.entries.toList(),{it.label}){youthBlueprint=it};Pick("Zielrolle / Kompatibilität",youthRole,PlayerRole.entries.filter{it!=PlayerRole.AUTO},{it.label}){youthRole=it}
-   Metric("Voraussichtliche System-Kompatibilität","${CustomYouthSystem.compatibility(w,youthRole)} / 100")
-   Action("Jugendspieler aufnehmen",CustomYouthSystem.remainingSlots(w)>0&&youthFirst.trim().length>=2&&youthLast.trim().length>=2&&w.live==null){vm.action("Jugendspieler wurde in die Academy aufgenommen."){CustomYouthSystem.create(it,youthFirst,youthLast,youthNation,youthAge,youthPos,youthFoot,youthBlueprint,youthRole)}}
-  }
-  Section("Aus eurer Jugend"){
-   val youth=w.squad().filter{it.youth};if(youth.isEmpty())Text("Aktuell kein Jugendspieler. Zum Saisonwechsel kommt der nächste Jahrgang.",color=Muted)
-   youth.forEach{p->val y=p.youthProfile;PlayerRow(p,w,onProfile);Text("${y.path.label} · Lernfähigkeit ${y.learning} · Reife ${y.maturity} · Rollenspark: ${y.roleSpark.label}",color=Muted);Metric("Profibereitschaft","${YouthEngine.readiness(w,p)} / 100");Text(YouthEngine.riskLabel(w,p),color=if(YouthEngine.readiness(w,p)>=65)Grass else Clay)
-    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Mit Profis trainieren");Text(if(w.assistantCoach.autoYouthTraining)"Wird vom Co-Trainer anhand von Reife und Risiko entschieden." else "Mehr taktische Reife, aber zusätzliche Belastung.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(y.seniorTraining,{v->vm.action{it.players.getValue(p.id).youthProfile.seniorTraining=v}},enabled=!w.assistantCoach.autoYouthTraining)}
-    Action("${p.lastName} hochziehen",w.live==null,true){vm.action{ClubActions.promote(it,p.id)}};HorizontalDivider()
+ Page("Kaderplanung & Academy","SUCHE · SCOUTING · U19/U23 · VERTRÄGE"){
+  val c=w.club();val academy=c.academy
+  Section("Bereich"){Pick("Ansicht",planningView,listOf("Transfers","Jugend")){planningView=it};Text(if(planningView=="Jugend")"U19 und U23 sind eigenständige Nachwuchsmannschaften mit getrennten Kadern, Spielzeiten, Statistiken und Entwicklungswegen." else "Merkliste, Scoutberichte, Konkurrenzangebote, Vorverträge, Leihen und Historie an einem Ort.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+  if(planningView=="Jugend"){
+   Section("Academy"){
+    Pick("Academy-Identität",academy.identity,AcademyIdentity.entries.toList(),{it.label}){v->vm.action{it.club().academy.identity=v}}
+    Metric("Scouting","${academy.scouting} / 100");Metric("Internat","${academy.boarding} / 100");Metric("Partnervereine","${academy.partnerNetwork} / 100");Metric("U19 / U23","${academy.u19Quality} / ${academy.u23Quality}")
+    Text(if(academy.goldenGeneration)"Goldene Generation: außergewöhnliche Tiefe im Jahrgang." else "Jahrgangszyklus ${academy.generationCycle}/100 · Dürrephase ${academy.droughtYears} Saison(en).",color=if(academy.goldenGeneration)Gold else Muted)
+   }
+   Section("U19 & U23 Spielbetrieb"){
+    fun summary(label:String,x:AcademyTeamSeason)="$label · ${x.played} Sp · ${x.wins}S ${x.draws}U ${x.losses}N · ${x.points} P · ${x.goalsFor}:${x.goalsAgainst}${x.lastResult.takeIf{it.isNotBlank()}?.let{" · zuletzt $it"}?:""}"
+    Text(summary("U19",academy.u19Season),color=Grass);Text(summary("U23",academy.u23Season),color=Gold)
+    Text("Beide Mannschaften haben einen eigenen Kader und eine eigene Saison. Alle zwei Vereinswochen wird je ein Nachwuchsspiel simuliert; Einsätze, Tore, Vorlagen und Bewertungen wirken auf die Entwicklung.",color=Muted,style=MaterialTheme.typography.bodySmall)
+    Text("Jugendspieler können dauerhaft hochgezogen oder nur für das nächste Profispiel nominiert werden. Eine Notfall-Nominierung kehrt nach diesem Spiel automatisch zurück.",color=Grass,style=MaterialTheme.typography.bodySmall)
+   }
+   Section("Junge Profis in den Nachwuchs schicken"){
+    val prospects=w.squad().filter{!it.youth&&!it.retired&&!it.temporarySeniorCallUp&&it.id!=w.user.playerId&&it.loanParentClubId==0&&w.calendar.season-it.birthYear<=22}.sortedBy{w.calendar.season-it.birthYear}
+    if(prospects.isEmpty())Text("Aktuell gibt es keinen U23-berechtigten Profispieler.",color=Muted)
+    prospects.forEach{p->
+     PlayerRow(p,w,onProfile);Text("Als Nachwuchsspieler erhält er wieder U19/U23-Spielpraxis und den zusätzlichen Academy-Entwicklungsweg.",color=Muted,style=MaterialTheme.typography.bodySmall)
+     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+      if(w.calendar.season-p.birthYear<=19)TextButton({vm.action{YouthCompetitionSystem.assignToYouth(it,p.id,YouthSquad.U19)}},Modifier.weight(1f),enabled=w.live==null){Text("In U19")}
+      TextButton({vm.action{YouthCompetitionSystem.assignToYouth(it,p.id,YouthSquad.U23)}},Modifier.weight(1f),enabled=w.live==null){Text("In U23")}
+     }
+     HorizontalDivider()
+    }
+   }
+   Section("Gezielte Talentsuche"){
+    Text("Name, Nationalität, Alter, Position und Entwicklungsrichtung dürfen vorgegeben werden. Stärke und Potenzial bleiben academyabhängig und unsicher.",color=Muted)
+    Text("Verfügbare Suchen: ${CustomYouthSystem.remainingSlots(w)} / 2",color=Grass)
+    Field("Vorname",youthFirst){youthFirst=it.take(30)};Field("Nachname",youthLast){youthLast=it.take(30)};Field("Nationalität",youthNation){youthNation=it.take(30)}
+    Pick("Alter",youthAge,listOf(15,16,17),{"$it Jahre"}){youthAge=it};Pick("Position",youthPos,Position.entries.toList(),{it.label}){youthPos=it};Pick("Fuß",youthFoot,Foot.entries.toList(),{it.label}){youthFoot=it};Pick("Grundprofil",youthBlueprint,YouthBlueprint.entries.toList(),{it.label}){youthBlueprint=it};Pick("Zielrolle",youthRole,PlayerRole.entries.filter{it!=PlayerRole.AUTO},{it.label}){youthRole=it}
+    val cost=CustomYouthSystem.searchCost(w,youthAge,youthPos,youthFoot,youthBlueprint,youthRole);Metric("Scouting-Auftrag",euros(cost));Action("Talentsuche beauftragen · ${euros(cost)}",CustomYouthSystem.remainingSlots(w)>0&&c.budget>=cost&&youthFirst.trim().length>=2&&youthLast.trim().length>=2&&w.live==null){vm.action("Gezielte Talentsuche abgeschlossen."){CustomYouthSystem.create(it,youthFirst,youthLast,youthNation,youthAge,youthPos,youthFoot,youthBlueprint,youthRole)}}
+    Action("Jugend-Transfermarkt öffnen",secondary=true){planningView="Transfers";marketView="Jugendmarkt"}
+    Text("Dort kannst du reale U19/U23-Talente anderer Vereine kaufen oder leihen und vor Abschluss direkt U19, U23 oder Profikader als Ziel festlegen.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   }
+   YouthSquad.entries.forEach{squad->
+    val season=if(squad==YouthSquad.U19)academy.u19Season else academy.u23Season
+    Section("${squad.label}-Kader · ${season.points} Punkte"){
+     val youth=w.squad().filter{it.youth&&it.youthSquad==squad}.sortedByDescending{it.ca}
+     if(youth.isEmpty())Text("Aktuell kein Spieler in diesem Nachwuchsteam.",color=Muted)
+     youth.forEach{p->val y=p.youthProfile;PlayerRow(p,w,onProfile);Text("${p.youthTeamStats.appearances} Sp · ${p.youthTeamStats.goals} Tore · ${p.youthTeamStats.assists} Vorlagen · Ø ${dec(p.youthTeamStats.averageRating)}",color=Gold,style=MaterialTheme.typography.bodySmall);Text("${y.path.label} · Lernen ${y.learning} · Reife ${y.maturity} · Bereitschaft ${YouthEngine.readiness(w,p)}/100",color=Muted);Text("Entwicklungsfortschritt ${(p.trainingProgress*100).toInt().coerceIn(0,99)}% · Co-Trainer ${if(w.assistantCoach.autoYouthTraining)if(y.seniorTraining)"Proftraining + Academy" else "Academy-Plan" else "Automatik aus"}",color=if(w.assistantCoach.autoYouthTraining)Grass else Muted,style=MaterialTheme.typography.bodySmall)
+      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){if(squad==YouthSquad.U19)TextButton({vm.action{YouthCompetitionSystem.move(it,p.id,YouthSquad.U23)}},Modifier.weight(1f),enabled=w.live==null){Text("Zur U23")} else if(w.calendar.season-p.birthYear<=19)TextButton({vm.action{YouthCompetitionSystem.move(it,p.id,YouthSquad.U19)}},Modifier.weight(1f),enabled=w.live==null){Text("Zur U19")};TextButton({vm.action{YouthCompetitionSystem.temporaryCallUp(it,p.id)}},Modifier.weight(1f),enabled=w.live==null){Text("1 Spiel")};TextButton({vm.action{ClubActions.promote(it,p.id)}},Modifier.weight(1f),enabled=w.live==null){Text("Dauerhaft hoch")}}
+      HorizontalDivider()
+     }
+    }
+   }
+  } else {
+   Section("Scouting-Zentrale"){
+    Pick("Scoutregion",scoutRegion,ScoutRegion.entries.toList(),{it.label}){scoutRegion=it};Metric("Merkliste","${w.watchlist.size} Spieler");Metric("Laufende Aufträge","${w.scoutAssignments.size}")
+    w.scoutAssignments.values.sortedBy{it.weeksRemaining}.take(8).forEach{a->val p=w.players[a.playerId]?:return@forEach;val r=w.scoutReports[p.id];Text("${p.name} · ${a.region.label} · ${a.weeksRemaining} Woche(n)",fontWeight=androidx.compose.ui.text.font.FontWeight.Bold);Meter("Berichtsstand",r?.progress?:0)}
+   }
+   Section("Eigene Spieler anbieten"){
+    val offerable=w.squad().filter{!it.retired&&it.id!=w.user.playerId&&it.loanParentClubId==0}.sortedByDescending{it.ca}
+    if(offerable.isEmpty())Text("Aktuell ist kein eigener Spieler für Verkauf oder Leihe verfügbar.",color=Muted) else {
+     val selected=outboundPlayerId.takeIf{id->offerable.any{it.id==id}}?:offerable.first().id
+     Pick("Spieler",selected,offerable.map{it.id},{id->w.players[id]?.let{"${it.name} · ${if(it.youth)"${it.youthSquad.label} · " else ""}${it.position.label} · Stärke ${it.ca}"}?:"Spieler"}){outboundPlayerId=it}
+     Pick("Angebotsart",outboundDeal,listOf(DealType.BUY,DealType.LOAN,DealType.LOAN_OPTION),{it.label}){outboundDeal=it}
+     Text("Der Spieler wird aktiv mehreren passenden Vereinen angeboten. Angebote bleiben getrennt, damit du vergleichen und mit jedem Verein einzeln verhandeln kannst.",color=Muted,style=MaterialTheme.typography.bodySmall)
+     Action("Mehrere Angebote einholen",w.live==null&&ScoutingTransferSystem.transferWindowOpen(w),true){vm.action{OutboundTransferSystem.requestOffers(it,selected,outboundDeal)}}
+    }
+   }
+   val outboundOffers=OutboundTransferSystem.activeOffers(w)
+   if(outboundOffers.isNotEmpty())Section("Angebote für unsere Spieler"){
+    outboundOffers.forEach{o->val p=w.players[o.playerId]?:return@forEach;val buyer=w.clubs[o.buyerClubId]?:return@forEach
+     Text("${p.name} · ${buyer.name}",style=MaterialTheme.typography.titleMedium)
+     Text("${o.type.label} · ${o.status.label} · Runde ${o.round}",color=when(o.status){NegotiationStatus.AGREED->Grass;NegotiationStatus.REJECTED->Clay;else->Gold})
+     Text("Angebot ${euros(o.fee)}${if(o.type==DealType.BUY)" · Weiterverkauf ${o.sellOnPercent}%" else " · ${o.loanWeeksRequested} Wochen"}",color=Muted)
+     if(o.type==DealType.LOAN_OPTION)Text("Kaufoption ${euros(o.buyOption)} · Rückruf ${if(o.recallAllowed)"möglich" else "ausgeschlossen"}",color=Muted)
+     Text(o.message,color=Muted,style=MaterialTheme.typography.bodySmall)
+     if(o.status==NegotiationStatus.COUNTER){
+      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){TextButton({vm.action{OutboundTransferSystem.accept(it,o.id)}},Modifier.weight(1f)){Text("Annehmen")};TextButton({vm.action{OutboundTransferSystem.counter(it,o.id,"fee")}},Modifier.weight(1f)){Text(if(o.type==DealType.BUY)"Ablöse +" else "Leihgebühr +")};TextButton({vm.action{OutboundTransferSystem.reject(it,o.id)}},Modifier.weight(1f)){Text("Ablehnen")}}
+      if(o.type==DealType.BUY)TextButton({vm.action{OutboundTransferSystem.counter(it,o.id,"sellon")}}){Text("Weiterverkaufsanteil +")}
+      if(o.type==DealType.LOAN_OPTION)TextButton({vm.action{OutboundTransferSystem.counter(it,o.id,"option")}}){Text("Kaufoption +")}
+     } else if(o.status==NegotiationStatus.AGREED){
+      Action("Einigung bestätigen",w.live==null,true){vm.action{OutboundTransferSystem.accept(it,o.id)}};TextButton({vm.action{OutboundTransferSystem.reject(it,o.id)}}){Text("Doch ablehnen")}
+     }
+     HorizontalDivider()
+    }
+   }
+   Section("Transfermarkt"){
+    Pick("Ansicht",marketView,listOf("Spielersuche","Jugendmarkt","Merkliste","Interesse an unserem Verein")){marketView=it}
+    if(marketView=="Spielersuche"||marketView=="Jugendmarkt"){Field("Name suchen",nameQuery){nameQuery=it.take(40)};val clubIds=listOf(0)+w.clubs.values.sortedBy{it.name}.map{it.id};Pick("Verein",clubFilter,clubIds,{id->if(id==0)"Alle Vereine" else w.clubs[id]?.name?:"Verein"}){clubFilter=it};Pick("Position",filter,listOf("Alle")+Position.entries.map{it.name}){filter=it}}
+    Pick("Deal",dealType,DealType.entries.toList(),{it.label}){dealType=it};Pick("Versprochene Rolle",role,SquadRole.entries.toList(),{it.label}){role=it};Text(ScoutingTransferSystem.transferWindowLabel(w),color=if(ScoutingTransferSystem.transferWindowOpen(w))Grass else Clay,style=MaterialTheme.typography.bodySmall)
+   }
+   val candidates=remember(w.calendar.absoluteWeek,w.players.size,w.watchlist.hashCode(),marketView,filter,clubFilter,nameQuery){
+    val ctx=TransferInterestSystem.context(w,w.user.clubId)
+    when(marketView){
+     "Merkliste"->w.watchlist.asSequence().mapNotNull{w.players[it]}.filter{!it.retired&&it.clubId!=w.user.clubId}.map{it to TransferInterestSystem.snapshot(w,it,ctx)}.sortedByDescending{it.second.score}.take(24).toList()
+     "Interesse an unserem Verein"->TransferInterestSystem.candidatesForClub(w,w.user.clubId,58).take(24)
+     "Jugendmarkt"->{
+      val base=w.players.values.asSequence().filter{p->!p.retired&&p.clubId!=w.user.clubId&&w.calendar.season-p.birthYear<=22&&(filter=="Alle"||p.position.name==filter)&&(clubFilter==0||p.clubId==clubFilter)&&(nameQuery.isBlank()||p.name.contains(nameQuery.trim(),true))}
+      base.map{it to TransferInterestSystem.snapshot(w,it,ctx)}.sortedWith(compareBy<Pair<Player,TransferInterestSystem.Snapshot>>{w.calendar.season-it.first.birthYear}.thenByDescending{it.first.ca}).take(40).toList()
+     }
+     else->{
+      val base=w.players.values.asSequence().filter{p->!p.retired&&!p.youth&&p.clubId!=w.user.clubId&&(filter=="Alle"||p.position.name==filter)&&(clubFilter==0||p.clubId==clubFilter)&&(nameQuery.isBlank()||p.name.contains(nameQuery.trim(),true))}
+      // Interesse ist relativ teuer. Erst eine breite sportlich/vertraglich relevante Shortlist bilden,
+      // dann nur für diese Kandidaten den vollständigen Interessen-Snapshot rechnen.
+      val all=base.toList();val shortlist=(all.sortedByDescending{it.ca}.take(180)+all.filter{it.wantsMove||it.clubId==0||it.contractYears<=1}.sortedByDescending{it.ca}.take(120)).distinctBy{it.id}
+      shortlist.asSequence().map{it to TransferInterestSystem.snapshot(w,it,ctx)}.sortedWith(compareByDescending<Pair<Player,TransferInterestSystem.Snapshot>>{it.second.score}.thenByDescending{it.first.ca}).take(24).toList()
+     }
+    }
+   }
+   if(candidates.isEmpty())Section{Text("Keine Spieler passen zu dieser Ansicht.",color=Muted)}
+   candidates.forEach{(p,interest)->Section(p.name){
+    val seller=w.clubs[p.clubId];val report=ScoutingTransferSystem.report(w,p);Text("${p.position.label} · ${w.calendar.season-p.birthYear} Jahre · ${if(p.youth)"${p.youthSquad.label} · " else ""}${seller?.name?:"vereinslos"} · Vertrag ${p.contractYears} J.",color=Muted)
+    Metric("Stärke",ScoutingTransferSystem.strengthLabel(w,p));Metric("Potenzial",ScoutingTransferSystem.potentialLabel(w,p));if(report!=null)Meter("Scoutbericht",report.progress)
+    Metric("Interesse an ${c.shortName}","${interest.score} / 100 · ${interest.level.label}");if(interest.reasons.isNotEmpty())Text(interest.reasons.joinToString(" · "),color=if(interest.score>=74)Grass else Muted)
+    val bids=ScoutingTransferSystem.competition(w,p.id);if(bids.isNotEmpty()){Text("Transferkonkurrenz",style=MaterialTheme.typography.titleMedium);bids.forEach{b->Text("${w.clubs[b.clubId]?.name?:"Konkurrent"}: ca. ${euros(b.fee)} · noch ${b.expiresWeek-w.calendar.absoluteWeek} Wochen",color=Clay,style=MaterialTheme.typography.bodySmall)}}
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton({vm.action{ScoutingTransferSystem.toggleWatchlist(it,p.id)}},Modifier.weight(1f)){Text(if(p.id in w.watchlist)"Von Merkliste" else "Merken")};TextButton({vm.action{ScoutingTransferSystem.startScouting(it,p.id,scoutRegion)}},Modifier.weight(1f),enabled=p.id !in w.scoutAssignments&&c.budget>=ScoutingTransferSystem.scoutCost(w,p,scoutRegion)){Text(if(p.id in w.scoutAssignments)"Scout läuft" else "Scouten")}}
+    val existing=w.negotiations.values.filter{it.buyerClubId==w.user.clubId&&it.playerId==p.id&&it.status !in listOf(NegotiationStatus.COMPLETED,NegotiationStatus.REJECTED,NegotiationStatus.WITHDRAWN)}.maxByOrNull{it.id};Action(if(existing==null)"Verhandlung starten: ${dealType.label}" else "Verhandlung öffnen",w.live==null&&(existing!=null||p.clubId==0||ScoutingTransferSystem.transferWindowOpen(w)),true){negotiationPlayerId=p.id;if(existing==null)vm.action{TransferEngine.createOffer(it,it.user.clubId,p.id,dealType,role)}}
+    if(ScoutingTransferSystem.bosmanEligible(w,p)){val d=ScoutingTransferSystem.precontractDemand(w,p);Action("Bosman-Vorvertrag · ${euros(d.second)} Handgeld",w.live==null&&interest.score>=56&&c.budget>=d.second,true){vm.action{ScoutingTransferSystem.signPrecontract(it,p.id)}};Text("Vorvertrag: etwa ${euros(d.first.toLong())}/Woche · Wechsel zum Saisonstart ablösefrei.",color=Grass,style=MaterialTheme.typography.bodySmall)}
+   }}
+   val incoming=w.squad().filter{it.loanParentClubId!=0};val outgoing=w.players.values.filter{it.loanParentClubId==w.user.clubId&&it.clubId!=w.user.clubId&&!it.retired}
+   if(incoming.isNotEmpty()||outgoing.isNotEmpty())Section("Leihen & Rückruf"){
+    incoming.forEach{p->Text("Bei uns: ${p.name} · ${p.loanWeeks} Wochen",fontWeight=androidx.compose.ui.text.font.FontWeight.Bold);Text("Kaufoption ${if(p.loanOptionFee>0)euros(p.loanOptionFee) else "keine"}",color=Muted);if(p.loanOptionFee>0)Action("Kaufoption ziehen",w.live==null&&c.budget>=p.loanOptionFee,true){vm.action{TransferEngine.exerciseOption(it,p.id)}}}
+    outgoing.forEach{p->Text("Verliehen: ${p.name} → ${w.clubs[p.clubId]?.name?:"Verein"} · ${p.loanWeeks} Wochen",fontWeight=androidx.compose.ui.text.font.FontWeight.Bold);Text("Rückruf ${if(p.loanRecallAllowed)"erlaubt" else "vertraglich ausgeschlossen"}",color=Muted);if(p.loanRecallAllowed)Action("Leihe vorzeitig zurückrufen",w.live==null,true){vm.action{ScoutingTransferSystem.recallLoan(it,p.id)}}}
+   }
+   val talks=w.negotiations.values.filter{it.buyerClubId==w.user.clubId&&it.status !in listOf(NegotiationStatus.COMPLETED,NegotiationStatus.REJECTED,NegotiationStatus.WITHDRAWN)}.sortedByDescending{it.id};if(talks.isNotEmpty())Section("Aktive Verhandlungen"){
+    talks.forEach{o->val p=w.players[o.playerId]?:return@forEach;Text("${p.name} · ${o.type.label} · ${o.stage.label} · Runde ${o.round}",style=MaterialTheme.typography.titleMedium);Text(o.message,color=when(o.status){NegotiationStatus.AGREED->Grass;NegotiationStatus.REJECTED->Clay;else->Gold});Text("Ablöse ${euros(o.fee)} · Gehalt ${euros(o.wage.toLong())}/W · Handgeld ${euros(o.signingBonus)}",color=Muted)
+     val targetAge=w.calendar.season-p.birthYear
+     if(targetAge<=22){
+      val destinations=buildList{add("Profikader");if(targetAge<=19)add("U19");add("U23")};val current=o.targetYouthSquad?.label?:"Profikader"
+      Pick("Zielkader nach Abschluss",current,destinations){dest->vm.action{world->world.negotiations.getValue(o.id).targetYouthSquad=when(dest){"U19"->YouthSquad.U19;"U23"->YouthSquad.U23;else->null}}}
+     }
+     if(o.type==DealType.LOAN||o.type==DealType.LOAN_OPTION){Pick("Leihdauer",o.loanWeeksRequested,listOf(12,24,40),{"$it Wochen"}){v->vm.action{it.negotiations.getValue(o.id).loanWeeksRequested=v}};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Text("Rückrufklausel");Switch(o.recallAllowed,{v->vm.action{it.negotiations.getValue(o.id).recallAllowed=v}})}}
+     if(o.status==NegotiationStatus.COUNTER){Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton({vm.action{TransferEngine.improve(it,o.id,"fee")}}){Text("Ablöse +")};TextButton({vm.action{TransferEngine.improve(it,o.id,"wage")}}){Text("Gehalt +")};TextButton({vm.action{TransferEngine.improve(it,o.id,"role")}}){Text("Rolle +")}}}
+     if(o.status==NegotiationStatus.AGREED&&o.stage==TransferStage.MEDICAL)Action("Medizincheck & Registrierung",w.live==null,true){vm.action{TransferEngine.advanceProcess(it,o.id)}};if(o.status==NegotiationStatus.AGREED&&o.stage==TransferStage.REGISTRATION){if(o.registrationReady)Action("Deal abschließen",w.live==null,true){vm.action{TransferEngine.complete(it,o.id)}} else Action("Registrierung erneut prüfen",w.live==null,true){vm.action{TransferEngine.advanceProcess(it,o.id)}}};TextButton({vm.action("Verhandlung zurückgezogen."){TransferEngine.withdraw(it,o.id)}}){Text("Verhandlung zurückziehen")};HorizontalDivider()
+    }
+   }
+   if(w.transferHistory.isNotEmpty())Section("Transferhistorie"){
+    w.transferHistory.take(20).forEach{h->val p=w.players[h.playerId];Text("S${h.season} W${h.week+1} · ${p?.name?:"Spieler"}",fontWeight=androidx.compose.ui.text.font.FontWeight.Bold);Text("${w.clubs[h.fromClubId]?.shortName?:"frei"} → ${w.clubs[h.toClubId]?.shortName?:"frei"} · ${if(h.fee>0)euros(h.fee) else "ablösefrei"}${h.note.takeIf{it.isNotBlank()}?.let{" · $it"}?:""}",color=Muted,style=MaterialTheme.typography.bodySmall)}
    }
   }
-  Section("Transfermarkt"){
-   Pick("Ansicht",marketView,listOf("Spielersuche","Interesse an unserem Verein")){marketView=it}
-   if(marketView=="Spielersuche"){Field("Name suchen",nameQuery){nameQuery=it.take(40)};val clubIds=listOf(0)+w.clubs.values.sortedBy{it.name}.map{it.id};Pick("Verein",clubFilter,clubIds,{id->if(id==0)"Alle Vereine" else w.clubs[id]?.name?:"Verein"}){clubFilter=it};Pick("Positionsfilter",filter,listOf("Alle")+Position.entries.map{it.name}){filter=it}}
-   Pick("Deal",dealType,DealType.entries.toList(),{it.label}){dealType=it};Pick("Versprochene Rolle",role,SquadRole.entries.toList(),{it.label}){role=it}
-   Text(if(marketView=="Spielersuche")"Suche gezielt nach Name, Verein und Position. Wechselinteresse ist immer zielvereinsspezifisch und beeinflusst anschließend die Spielerverhandlung." else "Hier stehen Spieler, die sich einen Wechsel zu ${c.name} konkret vorstellen können – bis hin zu Spielern, die unbedingt kommen wollen.",color=Muted)
-  }
-  val candidates=if(marketView=="Spielersuche")w.players.values.filter{p->!p.retired&&!p.youth&&p.clubId!=w.user.clubId&&(filter=="Alle"||p.position.name==filter)&&(clubFilter==0||p.clubId==clubFilter)&&(nameQuery.isBlank()||p.name.contains(nameQuery.trim(),ignoreCase=true))}.sortedWith(compareByDescending<Player>{TransferInterestSystem.score(w,it,w.user.clubId)}.thenByDescending{it.ca}).take(60).map{it to TransferInterestSystem.snapshot(w,it,w.user.clubId)} else TransferInterestSystem.candidatesForClub(w,w.user.clubId,58).take(60)
-  if(candidates.isEmpty())Section{Text("Keine Spieler passen zu den aktuellen Filtern.",color=Muted)}
-  candidates.forEach{(p,interest)->Section(p.name){val seller=w.clubs[p.clubId];Text("${p.position.label} · ${w.calendar.season-p.birthYear} Jahre · ${seller?.name?:"vereinslos"}",color=Muted);Metric("Scouting: Stärke",ClubActions.scouting(w,p));Metric("Interesse an ${c.shortName}","${interest.score} / 100 · ${interest.level.label}");if(interest.reasons.isNotEmpty())Text(interest.reasons.joinToString(" · "),color=if(interest.score>=74)Grass else Muted);val mv=TransferEngine.marketValue(w,p);val uncertainty=p.marketUncertainty.coerceIn(5,45);Text("Marktwert-Schätzung: ${euros((mv*(100-uncertainty)/100).coerceAtLeast(0))} – ${euros(mv*(100+uncertainty)/100)}",color=Muted);Text("Charakterbericht: ${if(p.marketUncertainty<=15)p.personalityType(w.calendar.season).label else "unvollständig"} · Rollenprofil ${p.effectiveRole().label}",color=Muted);if(p.injuryWeeks>0&&p.marketUncertainty<=20)Text("Medizinischer Hinweis: ${p.injury}",color=Clay);val existing=w.negotiations.values.filter{it.buyerClubId==w.user.clubId&&it.playerId==p.id&&it.status !in listOf(NegotiationStatus.COMPLETED,NegotiationStatus.REJECTED)}.maxByOrNull{it.id};Action(if(existing==null)"Verhandlung starten: ${dealType.label}" else "Verhandlung öffnen",w.live==null,true){negotiationPlayerId=p.id;if(existing==null)vm.action{TransferEngine.createOffer(it,it.user.clubId,p.id,dealType,role)}}}}
-  val loans=w.squad().filter{it.loanParentClubId!=0};if(loans.isNotEmpty())Section("Leihstationen & Optionen"){loans.forEach{p->Text("${p.name} · noch ${p.loanWeeks} Wochen",style=MaterialTheme.typography.titleMedium);Text("Kaufoption ${if(p.loanOptionFee>0)euros(p.loanOptionFee) else "keine"}",color=Muted);if(p.loanOptionFee>0)Action("Kaufoption ziehen",w.live==null&&w.club().budget>=p.loanOptionFee,true){vm.action{TransferEngine.exerciseOption(it,p.id)}}}}
-  val talks=w.negotiations.values.filter{it.buyerClubId==w.user.clubId&&it.status!=NegotiationStatus.COMPLETED}.sortedByDescending{it.id};if(talks.isNotEmpty())Section("Aktive Verhandlungen"){talks.forEach{o->val p=w.players[o.playerId]?:return@forEach;Text("${p.name} · ${o.type.label} · Runde ${o.round}",style=MaterialTheme.typography.titleMedium);Text(o.message,color=when(o.status){NegotiationStatus.AGREED->Grass;NegotiationStatus.REJECTED->Clay;else->Gold});Text("Verein ${o.sellerScore}/100 · Spieler ${o.playerScore}/100 · Berater ${o.agentScore}/100",color=Muted);Text("Ablöse ${euros(o.fee)} · Gehalt ${euros(o.wage.toLong())}/W · Handgeld ${euros(o.signingBonus)} · Weiterverkauf ${o.sellOnPercent}% · Rolle ${o.role.label}",color=Muted);if(o.status==NegotiationStatus.COUNTER){Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton({vm.action{TransferEngine.improve(it,o.id,"fee")}}){Text("Ablöse +")};TextButton({vm.action{TransferEngine.improve(it,o.id,"wage")}}){Text("Gehalt +")};TextButton({vm.action{TransferEngine.improve(it,o.id,"role")}}){Text("Rolle +")};TextButton({vm.action{TransferEngine.improve(it,o.id,"sellon")}}){Text("% +")}}};if(o.status==NegotiationStatus.AGREED)Action("Deal abschließen",w.live==null,true){vm.action{TransferEngine.complete(it,o.id)}};HorizontalDivider()}}
  }
- val selectedTalk=negotiationPlayerId?.let{id->w.negotiations.values.filter{it.buyerClubId==w.user.clubId&&it.playerId==id&&it.status!=NegotiationStatus.COMPLETED}.maxByOrNull{it.id}}
- selectedTalk?.let{o->val p=w.players[o.playerId];AlertDialog(onDismissRequest={negotiationPlayerId=null},title={Text(if(p!=null)"Verhandlung · ${p.name}" else "Verhandlung")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text(o.message,color=when(o.status){NegotiationStatus.AGREED->Grass;NegotiationStatus.REJECTED->Clay;else->Gold});Text("Verein ${o.sellerScore}/100 · Spieler ${o.playerScore}/100 · Berater ${o.agentScore}/100",color=Muted);p?.let{val interest=TransferInterestSystem.snapshot(w,it,w.user.clubId);Text("Wechselinteresse: ${interest.score}/100 · ${interest.level.label}",color=if(interest.score>=74)Grass else Muted)};Text("Ablöse ${euros(o.fee)} · Gehalt ${euros(o.wage.toLong())}/W",color=Muted);Text("Handgeld ${euros(o.signingBonus)} · Weiterverkauf ${o.sellOnPercent}% · Rolle ${o.role.label}",color=Muted);if(o.status==NegotiationStatus.COUNTER){Text("Gegenangebot verbessern",style=MaterialTheme.typography.titleMedium);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){TextButton({vm.action{TransferEngine.improve(it,o.id,"fee")}},Modifier.weight(1f)){Text("Ablöse +")};TextButton({vm.action{TransferEngine.improve(it,o.id,"wage")}},Modifier.weight(1f)){Text("Gehalt +")}};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){TextButton({vm.action{TransferEngine.improve(it,o.id,"role")}},Modifier.weight(1f)){Text("Rolle +")};TextButton({vm.action{TransferEngine.improve(it,o.id,"sellon")}},Modifier.weight(1f)){Text("Anteil +")}}}}},confirmButton={if(o.status==NegotiationStatus.AGREED)TextButton({vm.action{TransferEngine.complete(it,o.id)}}){Text("Deal abschließen")}else TextButton({negotiationPlayerId=null}){Text("Schließen")}},dismissButton={if(o.status==NegotiationStatus.AGREED)TextButton({negotiationPlayerId=null}){Text("Später")}else null})}
+ val selectedTalk=negotiationPlayerId?.let{id->w.negotiations.values.filter{it.buyerClubId==w.user.clubId&&it.playerId==id&&it.status !in listOf(NegotiationStatus.COMPLETED,NegotiationStatus.REJECTED,NegotiationStatus.WITHDRAWN)}.maxByOrNull{it.id}}
+ selectedTalk?.let{o->val p=w.players[o.playerId];AlertDialog(onDismissRequest={negotiationPlayerId=null},title={Text(if(p!=null)"Verhandlung · ${p.name}" else "Verhandlung")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text(o.message,color=when(o.status){NegotiationStatus.AGREED->Grass;NegotiationStatus.REJECTED->Clay;else->Gold});Text("Verein ${o.sellerScore}/100 · Spieler ${o.playerScore}/100 · Berater ${o.agentScore}/100",color=Muted);p?.let{val interest=TransferInterestSystem.snapshot(w,it,w.user.clubId);Text("Wechselinteresse: ${interest.score}/100 · ${interest.level.label}",color=if(interest.score>=74)Grass else Muted)};Text("Ablöse ${euros(o.fee)} · Gehalt ${euros(o.wage.toLong())}/W",color=Muted);Text("Handgeld ${euros(o.signingBonus)} · Weiterverkauf ${o.sellOnPercent}% · Rolle ${o.role.label}",color=Muted);if(o.status==NegotiationStatus.COUNTER){Text("Gegenangebot verbessern",style=MaterialTheme.typography.titleMedium)}}},confirmButton={when{o.status==NegotiationStatus.AGREED&&o.stage==TransferStage.MEDICAL->TextButton({vm.action{TransferEngine.advanceProcess(it,o.id)}}){Text("Medizincheck")};o.status==NegotiationStatus.AGREED&&o.stage==TransferStage.REGISTRATION&&o.registrationReady->TextButton({vm.action{TransferEngine.complete(it,o.id)}}){Text("Deal abschließen")};o.status==NegotiationStatus.AGREED&&o.stage==TransferStage.REGISTRATION->TextButton({vm.action{TransferEngine.advanceProcess(it,o.id)}}){Text("Registrierung prüfen")};else->TextButton({negotiationPlayerId=null}){Text("Schließen")}}},dismissButton={TextButton({negotiationPlayerId=null;vm.action("Verhandlung zurückgezogen."){TransferEngine.withdraw(it,o.id)}}){Text("Zurückziehen")}})}
 }
 
-@Composable fun CareerScreen(w: World){val p=w.self();Page(p.name,"DEINE SPUREN IM VEREIN"){
- Section("Saison ${w.calendar.season}"){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Metric("Einsätze","${p.stats.appearances}");Metric("Tore","${p.stats.goals}");Metric("Vorlagen","${p.stats.assists}")};Text("${p.stats.minutes} Minuten · ${p.stats.yellow} gelbe Karten · ${p.stats.red} Platzverweise",color=Muted);Text("${w.calendar.season-p.birthYear} Jahre · Stärke ${p.ca} · ${p.foot.label}",color=Muted);if(p.injuryWeeks>0)Text("${p.injury}: ${p.injuryWeeks} Wochen",color=Clay)}
- Section("Karriere gesamt"){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Metric("Spiele","${p.stats.appearances+p.career.sumOf{it.stats.appearances}}");Metric("Tore","${p.stats.goals+p.career.sumOf{it.stats.goals}}");Metric("Vorlagen","${p.stats.assists+p.career.sumOf{it.stats.assists}}")}}
- Section("Vereinsgeschichte"){if(w.history.isEmpty())Text("Euer erstes Kapitel läuft. Nach Saisonende stehen hier Platzierung, Aufstieg und Auszeichnungen.",color=Muted);w.history.asReversed().forEach{h->Text("${h.season} · ${h.outcome}",style=MaterialTheme.typography.titleLarge,color=if(h.outcome=="Aufstieg")Grass else Chalk);Text("${h.league}: Platz ${h.rank}, ${h.points} Punkte, ${h.goals} Tore");h.awards.forEach{Text(it,color=Grass)};HorizontalDivider()}}
- if(p.career.isNotEmpty())Section("Deine abgeschlossenen Spielzeiten"){p.career.asReversed().forEach{Text("${it.season} · ${it.clubName}");Text("${it.stats.appearances} Einsätze · ${it.stats.goals} Tore · ${it.stats.assists} Vorlagen",color=Muted)}}
-}}
+private fun careerTotals(p:Player)=Stats(
+ appearances=p.stats.appearances+p.career.sumOf{it.stats.appearances},
+ goals=p.stats.goals+p.career.sumOf{it.stats.goals},
+ assists=p.stats.assists+p.career.sumOf{it.stats.assists},
+ minutes=p.stats.minutes+p.career.sumOf{it.stats.minutes},
+ yellow=p.stats.yellow+p.career.sumOf{it.stats.yellow},
+ red=p.stats.red+p.career.sumOf{it.stats.red}
+)
+private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}?:((value/100)+1)*100
+
+@Composable fun CareerScreen(w: World,vm:GameViewModel){val p=w.self();val totals=careerTotals(p);val age=w.calendar.season-p.birthYear
+ val contributionTarget=when(p.position){Position.ST,Position.LA,Position.RA->18;Position.OM,Position.ZM->14;Position.DM->9;Position.LV,Position.RV,Position.IV->6;Position.TW->0}
+ val contribution=p.stats.goals+p.stats.assists;val seasons=p.career+PlayerSeason(w.calendar.season,w.club().name,p.stats);val best=seasons.maxByOrNull{it.stats.goals+it.stats.assists}
+ val legacy=(totals.appearances+totals.goals*3+totals.assists*2+w.history.sumOf{it.awards.size*8}+w.history.count{it.outcome=="Aufstieg"}*15).coerceAtLeast(0)
+ val legacyLabel=when{legacy>=500->"Vereinslegende";legacy>=260->"Vereinsikone";legacy>=120->"Identifikationsfigur";legacy>=45->"Stammkraft";else->"Gründer"}
+ Page(p.name,"SPIELERKARRIERE & VEREINSGESCHICHTE"){
+  Section("Saison ${w.calendar.season}"){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Metric("Einsätze","${p.stats.appearances}");Metric("Tore","${p.stats.goals}");Metric("Vorlagen","${p.stats.assists}")};Text("${p.stats.minutes} Minuten · ${p.stats.yellow} gelbe Karten · ${p.stats.red} Platzverweise",color=Muted);Text("$age Jahre · Stärke ${p.ca} · ${p.foot.label}",color=Muted);if(p.injuryWeeks>0)Text("${p.injury}: ${p.injuryWeeks} Wochen",color=Clay)}
+  Section("Dein Karriereweg"){
+   Pick("Karrierefokus",w.user.playerCareerFocus,PlayerCareerFocus.entries.toList(),{it.label}){focus->vm.action("Karrierefokus geändert."){it.user.playerCareerFocus=focus}}
+   Text(w.user.playerCareerFocus.description,color=Muted,style=MaterialTheme.typography.bodySmall)
+   if(w.user.playerCareerFocus!=PlayerCareerFocus.BALANCED)Text("Der Fokus hat einen kleinen echten Einfluss auf deine wöchentliche Entwicklung; Teamtraining und Spielpraxis bleiben wichtiger.",color=Grass,style=MaterialTheme.typography.bodySmall)
+  }
+  Section("Persönliche Saisonziele"){
+   Text("Einsätze · ${p.stats.appearances}/24",color=if(p.stats.appearances>=24)Grass else Chalk);LinearProgressIndicator(progress={(p.stats.appearances/24f).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
+   if(contributionTarget>0){Text("Torbeteiligungen · $contribution/$contributionTarget",color=if(contribution>=contributionTarget)Grass else Chalk);LinearProgressIndicator(progress={(contribution/contributionTarget.toFloat()).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())}
+   Text("Disziplin · ${p.stats.yellow} Gelbe / ${p.stats.red} Rot",color=if(p.stats.red==0&&p.stats.yellow<=6)Grass else Gold);Text("Ziel: höchstens 6 Gelbe und kein Platzverweis.",color=Muted,style=MaterialTheme.typography.bodySmall)
+  }
+  Section("Karriere gesamt"){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Metric("Spiele","${totals.appearances}");Metric("Tore","${totals.goals}");Metric("Vorlagen","${totals.assists}")};Metric("Vermächtnis","$legacy · $legacyLabel");best?.let{Text("Beste Saison: ${it.season} · ${it.stats.goals} Tore + ${it.stats.assists} Vorlagen",color=Gold)};Text("Nächste Marken: ${nextMilestone(totals.appearances,listOf(25,50,100,150,200,300,500))} Spiele · ${nextMilestone(totals.goals,listOf(10,25,50,100,150,250))} Tore · ${nextMilestone(totals.assists,listOf(10,25,50,100,150,250))} Vorlagen",color=Muted,style=MaterialTheme.typography.bodySmall)}
+  Section("Vereinsziele"){
+   val table=WorldFactory.table(w,w.club().tier);val rank=table.indexOfFirst{it.clubId==w.user.clubId}.let{if(it<0)0 else it+1};val topHalf=(table.size+1)/2;val youthMinutes=w.squad().filter{w.calendar.season-it.birthYear<=21}.sumOf{it.stats.minutes}
+   Text("Sportlich · obere Tabellenhälfte",color=if(rank in 1..topHalf)Grass else Chalk);Text("Aktuell Platz ${if(rank==0)"–" else rank.toString()} von ${table.size}",color=Muted)
+   Text("Entwicklung · 900 U21-Minuten",color=if(youthMinutes>=900)Grass else Chalk);Text("$youthMinutes / 900 Minuten",color=Muted)
+   Text("Wirtschaft · positive Vereinskasse",color=if(w.club().budget>=0)Grass else Clay);Text(euros(w.club().budget),color=Muted)
+  }
+  val all=w.players.values.filter{!it.retired||it.career.isNotEmpty()};val scorer=all.maxByOrNull{careerTotals(it).goals};val apps=all.maxByOrNull{careerTotals(it).appearances};val assists=all.maxByOrNull{careerTotals(it).assists}
+  Section("Vereinsrekorde & Hall of Fame"){scorer?.let{Text("Rekordtorschütze · ${it.name} · ${careerTotals(it).goals}",color=Gold)};apps?.let{Text("Meiste Einsätze · ${it.name} · ${careerTotals(it).appearances}")};assists?.let{Text("Meiste Vorlagen · ${it.name} · ${careerTotals(it).assists}")};Text("Rekorde berücksichtigen laufende und abgeschlossene Spielzeiten der im Spiel bekannten Karrieren.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+  Section("Vereinsgeschichte"){if(w.history.isEmpty())Text("Euer erstes Kapitel läuft. Nach Saisonende stehen hier Platzierung, Aufstieg und Auszeichnungen.",color=Muted);w.history.asReversed().forEach{h->Text("${h.season} · ${h.outcome}",style=MaterialTheme.typography.titleLarge,color=if(h.outcome=="Aufstieg")Grass else Chalk);Text("${h.league}: Platz ${h.rank}, ${h.points} Punkte, ${h.goals} Tore");h.awards.forEach{Text(it,color=Grass)};HorizontalDivider()}}
+  if(p.career.isNotEmpty())Section("Deine abgeschlossenen Spielzeiten"){p.career.asReversed().forEach{Text("${it.season} · ${it.clubName}");Text("${it.stats.appearances} Einsätze · ${it.stats.goals} Tore · ${it.stats.assists} Vorlagen",color=Muted)}}
+ }
+}
+
+@Composable fun HelpScreen(w:World,vm:GameViewModel){Page("Hilfe & Tutorial","MANAGER-HANDBUCH · v0.5.18"){
+ Section("Geführtes Tutorial"){Text(if(w.user.tutorialEnabled&&!w.user.tutorialCompleted)"Das geführte Tutorial ist in dieser Karriere aktiv." else "Das Tutorial ist aktuell beendet oder deaktiviert.",color=Muted);Text("Es führt durch Startseite, Profikader/Jugend, Training, Transfers und das Live-Spiel und berücksichtigt die aktuellen Systeme bis v0.5.18.",color=Muted,style=MaterialTheme.typography.bodySmall);Action("Tutorial von vorn starten",secondary=true){vm.action("Tutorial neu gestartet."){it.user.tutorialEnabled=true;it.user.tutorialCompleted=false;it.user.tutorialStep=0}};if(w.user.tutorialEnabled&&!w.user.tutorialCompleted)Action("Tutorial beenden",secondary=true){vm.action{it.user.tutorialEnabled=false;it.user.tutorialCompleted=true}}}
+ Section("Kader & Hinweise"){Text("Kader verwaltet Profis, Formation, Rollen und Verträge. Das Kader-Badge zählt nur neue Warnungen und wird beim Öffnen quittiert. U19 und U23 sind eigene Mannschaften und werden nicht auf die 32er-Profikadergrenze angerechnet.",color=Muted)}
+ Section("U19 & U23"){Text("Talente können gezielt in U19/U23 entwickelt, in den Profikader hochgezogen oder im Notfall eingesetzt werden. Junge Spieler lassen sich direkt für eine Jugendmannschaft kaufen sowie aus der Jugend verkaufen oder verleihen. Der Co-Trainer kann die Nachwuchsentwicklung automatisch steuern.",color=Muted)}
+ Section("Training & Potenzial"){Text("Wochenplan, Intensität, Gegnerfokus und Extra-Foki beeinflussen Entwicklung und Belastung. Intensivtraining läuft vier Wochen. Potenzialtraining hebt die Entwicklungsgrenze und Attribute; unter 20-Jährige erhalten besonders starke Potenzial- und Ratingfortschritte. Ältere Profis entwickeln sich moderater.",color=Muted)}
+ Section("Transfers & Verhandlungen"){Text("Scouting verbessert Berichte mit der Zeit. Eigene Spieler können mehrere Kauf- oder Leihangebote erhalten. Bei aktiven Verhandlungen wird Budget reserviert; beim Rücktritt wird es sofort wieder freigegeben. Ein akzeptierter Deal durchläuft Medizincheck und Registrierung und startet dabei nicht erneut von vorn.",color=Muted)}
+ Section("Wettbewerbe & Preisgeld"){Text("Liga, DFB-Pokal und Champions League werden als getrennte Wettbewerbe geführt. Im Topclub-Modus werden Titelprämien einmal pro Titel ausgezahlt: Bundesliga 20 Mio. €, DFB-Pokal 6 Mio. € und Champions League 25 Mio. €.",color=Muted)}
+ Section("Live-Spiel & Simulation"){Text("Live zeigt Ball, Status und Ticker; Taktik enthält Formation, Regler, Sofortanweisungen und Wechsel. Der Live-Runner überwacht sich selbst, Schnellläufe nutzen denselben Match-Zustand und sichere Checkpoints reduzieren das Risiko verlorener Partien.",color=Muted)}
+ Section("Statistik & Analyse"){Text("Statistik zeigt Matchwerte. Analyse nutzt echte Ereignisse für xG, Schusskarte, Passnetz und die Wirkung deiner Taktikänderungen. xG beschreibt Chancenqualität und ist keine Garantie für Tore.",color=Muted)}
+ Section("Speichern & Stabilität"){Text("Spielstände werden mit Sicherheitskopie und speicherschonenden Checkpoints geschrieben. Große Karrieren bis 128 MB werden unterstützt. Ältere Saves werden migriert; alte permanente Benachrichtigungs-Badges und bestimmte blockierte Transferzustände werden dabei bereinigt.",color=Muted)}
+ Section("Spielerkarriere"){Text("Karrierefokus, Saisonziele, Vermächtnis, Meilensteine, Vereinsrekorde und abgeschlossene Spielzeiten machen lange Karrieren nachvollziehbar.",color=Muted)}
+ }}
 
 
 @Composable fun SettingsScreen(vm: GameViewModel){
@@ -141,7 +297,7 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
    Text("Ein einziger Schalter steuert sämtliche Pfiffe, Ballkontakte, Schüsse, Pfosten, Torjubel, Crowd-Reaktionen, Karten, Standards, Wechsel, Nachspielzeit, Elfmeter und VAR-Sounds. Es gibt bewusst keine einzelnen Sound-Schalter.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
   Section("Hinweis"){Text("Die Einstellung gilt appweit und bleibt auch nach einem Neustart erhalten. Beim Ausschalten oder sobald die App in den Hintergrund wechselt, werden laufende Match-Sounds sofort beendet.",color=Muted)}
-  Section("Audio-Quellen"){Text("v0.4.69 verwendet weiterhin echte Aufnahmen: Stadion/Crowd aus ‘WWS FootballAustriavs.Sweden’ (CC BY 4.0), echter Applaus aus ‘Applause.ogg’ (CC BY-SA) und echter Pfiff aus ‘Whistle.ogg’ (CC BY-SA 3.0). Ballkontakt, Keeper- und Metall-Samples bleiben reale Aufnahmen. FFmpeg wird nur für Schnitt, Pegel, Filter und Mischung verwendet – keine synthetischen Crowd-/Pfiffgeneratoren mehr.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+  Section("Audio-Quellen"){Text("v0.5.2 verwendet weiterhin echte Aufnahmen: Stadion/Crowd aus ‘WWS FootballAustriavs.Sweden’ (CC BY 4.0), echter Applaus aus ‘Applause.ogg’ (CC BY-SA) und echter Pfiff aus ‘Whistle.ogg’ (CC BY-SA 3.0). Ballkontakt, Keeper- und Metall-Samples bleiben reale Aufnahmen. FFmpeg wird nur für Schnitt, Pegel, Filter und Mischung verwendet – keine synthetischen Crowd-/Pfiffgeneratoren mehr.",color=Muted,style=MaterialTheme.typography.bodySmall)}
  }
 }
 

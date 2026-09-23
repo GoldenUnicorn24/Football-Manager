@@ -81,4 +81,20 @@ class MatchAudioRulesTest {
   assertEquals(listOf(MatchSoundCue.PENALTY_GOAL),MatchAudioRules.cues(before,snap(serial=31,phase=LivePhase.SHOOTOUT,shootout=3,shot=ShotType.PENALTY,outcome=ShotOutcome.GOAL)))
   assertEquals(listOf(MatchSoundCue.PENALTY_SAVED),MatchAudioRules.cues(before,snap(serial=31,phase=LivePhase.SHOOTOUT,shootout=3,shot=ShotType.PENALTY,outcome=ShotOutcome.SAVED)))
  }
+ @Test fun homeGoalNeverUsesAwayCrowdPerspective(){
+  val before=snap(serial=90,homeSubs=0,awaySubs=0)
+  for(homeSubs in 0..1)for(awaySubs in 0..1){
+   val goal=snap(serial=91,phase=LivePhase.GOAL,homeSubs=homeSubs,awaySubs=awaySubs,homeId=10,awayId=20,liveClubId=10,outcome=ShotOutcome.GOAL)
+   assertEquals(MatchCrowdSide.HOME,MatchAudioRules.crowdSide(before,goal))
+   assertTrue(MatchSoundCue.GOAL in MatchAudioRules.cues(before,goal))
+  }
+ }
+
+ @Test fun awayGoalNeverUsesHomeCrowdPerspective(){
+  val before=snap(serial=100,homeSubs=0,awaySubs=0,homeId=10,awayId=20)
+  val goal=snap(serial=101,phase=LivePhase.GOAL,homeId=10,awayId=20,liveClubId=20,outcome=ShotOutcome.GOAL)
+  assertEquals(MatchCrowdSide.AWAY,MatchAudioRules.crowdSide(before,goal))
+  assertTrue(MatchSoundCue.GOAL in MatchAudioRules.cues(before,goal))
+ }
+
 }

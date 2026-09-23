@@ -8,8 +8,8 @@ class ManagerSystemsV0469Test {
   val w=WorldFactory.createWorld(46901L);val target=w.club()
   val p=w.players.values.first{!it.retired&&!it.youth&&it.clubId!=0&&it.clubId!=target.id}
   p.wantsMove=false;p.hidden.loyalty=55;p.hidden.ambition=55
-  val a=TransferInterestSystem.snapshot(w,p,target.id);val b=TransferInterestSystem.snapshot(w,p,target.id)
-  assertEquals(a,b)
+  val a=TransferInterestSystem.snapshot(w,p,target.id);val b=TransferInterestSystem.snapshot(w,p,target.id);val cached=TransferInterestSystem.snapshot(w,p,TransferInterestSystem.context(w,target.id))
+  assertEquals(a,b);assertEquals(a,cached,"Der gecachte Transferkontext muss exakt dieselbe Bewertung liefern.")
   p.wantsMove=true
   val eager=TransferInterestSystem.snapshot(w,p,target.id)
   assertTrue(eager.score>a.score,"Ein expliziter Wechselwunsch muss die Bereitschaft erhöhen.")
@@ -52,21 +52,21 @@ class ManagerSystemsV0469Test {
 
  @Test fun assistantSubstitutionBecomesAcceptRejectProposal(){
   val w=WorldFactory.createWorld(46907L);w.assistantCoach.autoSubstitutions=true;w.assistantCoach.substitutionAggression=5
-  val m=MatchEngine.start(w);val ownHome=w.user.clubId==m.homeId;val xi=if(ownHome)m.homeXi else m.awayXi;val out=xi.first{it!=0&&w.players.getValue(it).position!=Position.TW};w.players.getValue(out).fitness=38.0
+  val m=MatchEngine.start(w);val ownHome=w.user.clubId==m.homeId;val xi=if(ownHome)m.homeXi else m.awayXi;val tired=xi.filter{it!=0&&w.players.getValue(it).position!=Position.TW}.take(5);tired.forEachIndexed{i,id->w.players.getValue(id).fitness=36.0+i}
   m.minute=59
-  var guard=0;while(!m.assistantSubPending&&guard++<120&&!m.finished){when{m.pendingDecision->MatchEngine.decide(w,m,Decision.PASS);m.incidentPause->{if(m.incidentReason==MatchPauseReason.INJURY&&m.incidentClubId==w.user.clubId)MatchEngine.substitutionSuggestions(w,m).firstOrNull{it.outId==m.incidentPlayerId}?.let{MatchEngine.substitute(w,m,it.outId,it.inId)};MatchEngine.resumeIncident(w,m)};m.halfTime->MatchEngine.secondHalf(m);else->MatchEngine.step(w,m)}}
-  assertTrue(m.assistantSubPending,"Der Co-Trainer muss einen pausierenden Vorschlag erzeugen statt selbst zu wechseln.")
-  val proposedOut=m.assistantSubOutId;val proposedIn=m.assistantSubInId;val subsBefore=if(ownHome)m.homeSubs else m.awaySubs
-  MatchEngine.rejectAssistantSubstitution(w,m);assertFalse(m.assistantSubPending);assertEquals(subsBefore,if(ownHome)m.homeSubs else m.awaySubs);assertEquals(proposedOut,m.assistantSubRejectedOutId);assertEquals(proposedIn,m.assistantSubRejectedInId);assertTrue(m.assistantSubRejectedUntilMinute>m.minute)
-  m.assistantSubRejectedUntilMinute=0;m.minute=maxOf(m.minute,71);w.players.getValue(proposedOut).fitness=35.0
-  guard=0;while(!m.assistantSubPending&&guard++<120&&!m.finished){when{m.pendingDecision->MatchEngine.decide(w,m,Decision.PASS);m.incidentPause->{if(m.incidentReason==MatchPauseReason.INJURY&&m.incidentClubId==w.user.clubId)MatchEngine.substitutionSuggestions(w,m).firstOrNull{it.outId==m.incidentPlayerId}?.let{MatchEngine.substitute(w,m,it.outId,it.inId)};MatchEngine.resumeIncident(w,m)};m.halfTime->MatchEngine.secondHalf(m);else->MatchEngine.step(w,m)}}
-  assertTrue(m.assistantSubPending);val acceptedIn=m.assistantSubInId;MatchEngine.acceptAssistantSubstitution(w,m);assertFalse(m.assistantSubPending);assertEquals(subsBefore+1,if(ownHome)m.homeSubs else m.awaySubs);assertTrue(acceptedIn in (if(ownHome)m.homeXi else m.awayXi))
+  fun advanceToProposal(){var guard=0;while(!m.assistantSubPending&&guard++<140&&!m.finished){when{m.pendingDecision->MatchEngine.decide(w,m,Decision.PASS);m.incidentPause->{if(m.incidentReason==MatchPauseReason.INJURY&&m.incidentClubId==w.user.clubId)MatchEngine.substitutionSuggestions(w,m).firstOrNull{it.outId==m.incidentPlayerId}?.let{MatchEngine.substitute(w,m,it.outId,it.inId)};MatchEngine.resumeIncident(w,m)};m.halfTime->MatchEngine.secondHalf(m);else->MatchEngine.step(w,m)}}}
+  advanceToProposal();assertTrue(m.assistantSubPending,"Der Co-Trainer muss einen pausierenden Vorschlag erzeugen statt selbst zu wechseln.")
+  val rejectedPairs=m.assistantSubOutIds.zip(m.assistantSubInIds).ifEmpty{listOf(m.assistantSubOutId to m.assistantSubInId)};val subsBefore=if(ownHome)m.homeSubs else m.awaySubs
+  assertTrue(rejectedPairs.size in 1..5);MatchEngine.rejectAssistantSubstitution(w,m);assertFalse(m.assistantSubPending);assertEquals(subsBefore,if(ownHome)m.homeSubs else m.awaySubs);assertTrue(rejectedPairs.all{(o,i)->(m.assistantSubRejectedPairs["$o:$i"]?:0)>m.minute})
+  m.minute=maxOf(m.minute,m.assistantNextSuggestionMinute);advanceToProposal();assertTrue(m.assistantSubPending)
+  val nextPairs=m.assistantSubOutIds.zip(m.assistantSubInIds).ifEmpty{listOf(m.assistantSubOutId to m.assistantSubInId)};assertTrue(nextPairs.none{it in rejectedPairs},"Abgelehnte Paarungen dürfen nicht sofort wieder vorgeschlagen werden.")
+  val batch=nextPairs.size;MatchEngine.acceptAssistantSubstitution(w,m);assertFalse(m.assistantSubPending);assertEquals(subsBefore+batch,if(ownHome)m.homeSubs else m.awaySubs)
  }
 
  @Test fun newManagerSystemsSurviveSaveRoundtrip(){
   val w=WorldFactory.createWorld(46906L);w.assistantCoach.autoSeniorTraining=true;w.assistantCoach.autoYouthTraining=true;w.assistantCoach.autoSubstitutions=true;w.assistantCoach.trainingStyle=AssistantTrainingStyle.MATCH_PREP
   val p=w.squad().first{!it.youth};p.hidden.potential=maxOf(p.hidden.potential,p.ca+10);w.club().budget=50_000_000L;IntensiveTrainingSystem.start(w,p.id,Focus.VISION);EconomySystem.initialize(w)
   val copy=SaveCodec.decode(SaveCodec.encode(w))
-  assertEquals(4,copy.saveVersion);assertTrue(copy.assistantCoach.autoSeniorTraining);assertTrue(copy.assistantCoach.autoYouthTraining);assertTrue(copy.assistantCoach.autoSubstitutions);assertEquals(AssistantTrainingStyle.MATCH_PREP,copy.assistantCoach.trainingStyle);assertTrue(copy.intensiveTraining.any{it.playerId==p.id});assertTrue(copy.club().sponsorDeals.isNotEmpty())
+  assertEquals(SAVE_VERSION,copy.saveVersion);assertTrue(copy.assistantCoach.autoSeniorTraining);assertTrue(copy.assistantCoach.autoYouthTraining);assertTrue(copy.assistantCoach.autoSubstitutions);assertEquals(AssistantTrainingStyle.MATCH_PREP,copy.assistantCoach.trainingStyle);assertTrue(copy.intensiveTraining.any{it.playerId==p.id});assertTrue(copy.club().sponsorDeals.isNotEmpty())
  }
 }

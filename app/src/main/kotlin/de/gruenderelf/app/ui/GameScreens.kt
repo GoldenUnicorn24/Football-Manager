@@ -18,7 +18,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import de.gruenderelf.app.*
 import de.gruenderelf.engine.*
-import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position==target->Grass;p.fit(target)>=.92->Blue;p.fit(target)>=.84->Gold;else->Clay}
@@ -26,16 +25,24 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
 @Composable fun NextGame(w: World,f: Fixture,label: String=if(w.live==null)"Zum Spiel" else "Partie fortsetzen",onGame: ()->Unit){val home=f.homeId==w.user.clubId;val opponent=w.clubs.getValue(if(home)f.awayId else f.homeId);val host=w.clubs.getValue(f.homeId)
  Section{Text((if(f.competition!=CompetitionType.LEAGUE)"${CompetitionEngine.displayName(w,f.competition).uppercase()} · ${f.stage.uppercase()} · " else "")+(if(w.isDerby(f.homeId,f.awayId)&&f.competition==CompetitionType.LEAGUE)"DERBY · " else "")+(if(home)"ZU HAUSE" else "AUSWÄRTS"),color=Grass,style=MaterialTheme.typography.labelMedium,letterSpacing=1.sp);Row(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically){Crest(opponent.logo,opponent.primary,opponent.secondary,Modifier.size(74.dp));Column(Modifier.weight(1f)){Text("${opponent.name} (${opponent.shortName})",style=MaterialTheme.typography.headlineMedium);Text(host.stadium.name,color=Muted);Text("${host.stadium.surface.label} · ${host.stadium.capacity} Plätze",color=Muted,style=MaterialTheme.typography.bodySmall)}};if(opponent.form.isNotEmpty())Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Text("Gegnerform",color=Muted);opponent.form.forEach{FormDot(it)}};Action(label,onClick=onGame)}
 }
-@Composable fun HomeScreen(w: World,onGame: ()->Unit,onProfile: ()->Unit){val c=w.club();val p=w.self()
+@Composable fun HomeScreen(w: World,onGame: ()->Unit,onProfile: ()->Unit,onNavigate:(String)->Unit){val c=w.club();val p=w.self()
  Page(c.name,"SAISON ${w.calendar.season}/${(w.calendar.season+1)%100} · SPIELTAG ${w.calendar.matchday}"){
   ClubHero(w)
   w.nextFixture()?.let{NextGame(w,it,onGame=onGame)}
+  val tired=w.squad().filter{it.available&&!it.youth&&it.fitness<65}.sortedBy{it.fitness};val hot=w.squad().filter{!it.youth}.maxByOrNull{it.form};val expiring=w.squad().filter{!it.youth&&it.contractYears<=1}.take(4);val finishedReports=w.scoutReports.values.filter{it.progress>=100}.take(4)
+  Section("Diese Woche"){
+   var count=0
+   if(w.live!=null){count++;Text("Laufende Partie fortsetzen",color=Gold);Action("Zur Live-Partie",secondary=true,onClick=onGame)}
+   if(tired.isNotEmpty()){count++;Text("${tired.size} Spieler unter 65 % Fitness",color=Gold);Action("Kader prüfen",secondary=true){onNavigate("kader")}}
+   if(expiring.isNotEmpty()){count++;Text("${expiring.size} Vertrag/Verträge laufen aus: ${expiring.joinToString{it.lastName}}",color=Gold);Action("Verträge ansehen",secondary=true){onNavigate("kader")}}
+   if(finishedReports.isNotEmpty()){count++;Text("${finishedReports.size} Scoutbericht(e) vollständig",color=Grass);Action("Scouting öffnen",secondary=true){onNavigate("transfers")}}
+   if(count==0)Text("Keine dringenden Aufgaben. Du kannst dich auf das nächste Spiel konzentrieren.",color=Grass)
+  }
   Section{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Metric("Vereinskasse",euros(c.budget));Metric("Moral",w.squad().map{it.morale}.average().roundToInt().toString())};Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){Text("Form",color=Muted);if(c.form.isEmpty())Text("Die Geschichte beginnt.",color=Muted);c.form.forEach{FormDot(it)}}}
-  val tired=w.squad().filter{it.available&&!it.youth&&it.fitness<65}.sortedBy{it.fitness};val hot=w.squad().filter{!it.youth}.maxByOrNull{it.form}
-  Section("Trainer-Notizen"){if(tired.isEmpty())Text("Der Kader wirkt frisch.",color=Grass)else Text("${tired.size} Spieler unter 65 % Fitness. ${tired.take(3).joinToString{it.lastName}} brauchen Aufmerksamkeit.",color=Gold);hot?.let{Text("Beste Form: ${it.name} · ${dec(it.form)}",color=Muted)};Text("Die Kaderseite bewertet jeden Spieler jetzt positionsgenau und zeigt Schwachstellen direkt an.",color=Muted,style=MaterialTheme.typography.bodySmall)}
-  Section("Gründer. Trainer. Nummer ${p.number}."){Row(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically){PlayerPortrait(p.appearance,c.kits.home);Column{Text(p.name,style=MaterialTheme.typography.titleLarge);Text("${p.position.label} · Stärke ${p.ca}",color=Grass);Text("${p.stats.goals} Tore · ${p.stats.assists} Vorlagen",color=Muted)}};Meter("Deine Fitness",p.fitness.roundToInt());if(!p.available)Text(if(p.injuryWeeks>0)"${p.injury}: ${p.injuryWeeks} Wochen" else "${p.unavailableReason?.label}",color=Clay);Action("Dein Spielerprofil",secondary=true,onClick=onProfile)}
+  Section("Trainer-Notizen"){if(tired.isEmpty())Text("Der Kader wirkt frisch.",color=Grass)else Text("${tired.size} Spieler unter 65 % Fitness. ${tired.take(3).joinToString{it.lastName}} brauchen Aufmerksamkeit.",color=Gold);hot?.let{Text("Beste Form: ${it.name} · ${dec(it.form)}",color=Muted)};Text("Die Manager-Zentrale bündelt nur Dinge, die gerade wirklich Aufmerksamkeit benötigen.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+  Section("Gründer. Trainer. Nummer ${p.number}."){Row(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically){PlayerPortrait(p.appearance,c.kits.home);Column{Text(p.name,style=MaterialTheme.typography.titleLarge);Text("${p.position.label} · Stärke ${p.ca}",color=Grass);Text("${p.stats.goals} Tore · ${p.stats.assists} Vorlagen",color=Muted)}};Meter("Deine Fitness",p.fitness.roundToInt());if(!p.available)Text(if(p.injuryWeeks>0)"${p.injury}: ${p.injuryWeeks} Wochen" else "${p.unavailableReason?.label}",color=Clay);Action("Dein Spielerprofil",secondary=true,onClick=onProfile);Action("Spielerkarriere",secondary=true){onNavigate("karriere")}}
   Text("Am Spielfeldrand",style=MaterialTheme.typography.titleLarge)
-  w.news.take(12).forEach{n->Section{Text(n.title,style=MaterialTheme.typography.titleMedium,color=when(n.tone){"good"->Grass;"bad"->Clay;else->Chalk});Text(n.text);Text("Vereinswoche ${n.week+1}",style=MaterialTheme.typography.labelSmall,color=Muted)}}
+  w.news.take(10).forEach{n->Section{Text(n.title,style=MaterialTheme.typography.titleMedium,color=when(n.tone){"good"->Grass;"bad"->Clay;else->Chalk});Text(n.text);Text("Vereinswoche ${n.week+1}",style=MaterialTheme.typography.labelSmall,color=Muted)}}
  }
 }
 @Composable private fun CompetitionResultRow(w: World,f: Fixture){
@@ -125,39 +132,18 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
 }
 
 @Composable fun StatLine(label: String,left: String,right: String){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(left,Modifier.weight(1f));Text(label,color=Muted);Text(right,Modifier.weight(1f),textAlign=TextAlign.End)}}
-private fun liveDelayMs(phase: LivePhase,speed: MatchSpeed): Long {
- val normal=when(phase){
-  LivePhase.GOAL->4200L
-  LivePhase.SHOT_ON_TARGET,LivePhase.SHOT_OFF_TARGET,LivePhase.WOODWORK->2800L
-  LivePhase.VAR->1600L
-  LivePhase.OFFSIDE,LivePhase.THROW_IN->1800L
-  LivePhase.CORNER->3000L
-  LivePhase.FREE_KICK,LivePhase.DANGEROUS_FREE_KICK,LivePhase.PENALTY->2900L
-  LivePhase.YELLOW_CARD,LivePhase.YELLOW_RED_CARD,LivePhase.RED_CARD,LivePhase.INJURY->2500L
-  LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK->2000L
-  LivePhase.COUNTER->1450L
-  else->2250L
- }
- return when(speed){
-  MatchSpeed.SLOW->if(phase==LivePhase.VAR)1900L else (normal*1.45).toLong()
-  MatchSpeed.NORMAL->normal
-  MatchSpeed.FAST->when(phase){LivePhase.GOAL->2300L;LivePhase.SHOT_ON_TARGET,LivePhase.SHOT_OFF_TARGET,LivePhase.WOODWORK->1550L;LivePhase.VAR->1200L;LivePhase.OFFSIDE,LivePhase.THROW_IN->950L;LivePhase.CORNER->1700L;LivePhase.FREE_KICK,LivePhase.DANGEROUS_FREE_KICK,LivePhase.PENALTY->1650L;LivePhase.YELLOW_CARD,LivePhase.YELLOW_RED_CARD,LivePhase.RED_CARD,LivePhase.INJURY->1450L;LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK->1100L;LivePhase.COUNTER->720L;else->850L}
- }
-}
-
 @Composable fun MatchScreen(state: GameState,vm: GameViewModel,speed: MatchSpeed){
- val w=state.world?:return;val m=w.live;var running by rememberSaveable{mutableStateOf(true)};var liveTab by rememberSaveable(m?.fixtureId){mutableIntStateOf(0)};var showLiveGraphic by rememberSaveable(m?.fixtureId){mutableStateOf(true)};val lifecycle=LocalLifecycleOwner.current.lifecycle
- DisposableEffect(lifecycle){val observer=LifecycleEventObserver{_,e->if(e==Lifecycle.Event.ON_PAUSE||e==Lifecycle.Event.ON_STOP)running=false};lifecycle.addObserver(observer);onDispose{lifecycle.removeObserver(observer)}}
- LaunchedEffect(m?.incidentPause,m?.assistantSubPending){if(m?.incidentPause==true||m?.assistantSubPending==true)running=false}
- // Der Match-Timer setzt absichtlich keinen globalen busy/loading-Zustand.
- LaunchedEffect(state.revision,running,speed,m?.fixtureId,m?.liveEventSerial){if(m!=null&&running&&!m.finished&&!m.halfTime&&!m.pendingDecision&&!m.incidentPause&&!m.assistantSubPending){delay(liveDelayMs(m.livePhase,speed));vm.liveStep()}}
+ val w=state.world?:return;val m=w.live;var userPaused by rememberSaveable(m?.fixtureId){mutableStateOf(false)};var foreground by remember{mutableStateOf(true)};val running=foreground&&!userPaused;var liveTab by rememberSaveable(m?.fixtureId){mutableIntStateOf(0)};var showLiveGraphic by rememberSaveable(m?.fixtureId){mutableStateOf(true)};val lifecycle=LocalLifecycleOwner.current.lifecycle
+ DisposableEffect(lifecycle){val observer=LifecycleEventObserver{_,e->when(e){Lifecycle.Event.ON_RESUME->foreground=true;Lifecycle.Event.ON_PAUSE,Lifecycle.Event.ON_STOP->foreground=false;else->{}}};lifecycle.addObserver(observer);onDispose{lifecycle.removeObserver(observer)}}
+ LaunchedEffect(running,speed,m?.fixtureId){m?.let{vm.setLiveRunning(running,speed,it.fixtureId)}}
+ DisposableEffect(m?.fixtureId){onDispose{m?.let{vm.setLiveRunning(false,speed,it.fixtureId)}}}
  if(m==null){
   Page("${w.nextFixture()?.let{CompetitionEngine.displayName(w,it.competition)}?:"Spieltag"} ${w.calendar.matchday}","KREIDE AN DEN SCHUHEN"){
-   w.nextFixture()?.let{NextGame(w,it,"Anpfiff"){vm.startMatch();running=true}}
+   w.nextFixture()?.let{NextGame(w,it,"Anpfiff"){vm.startMatch();userPaused=false}}
    Section("Vor dem Anpfiff"){
     Text("Formation ${w.club().tactics.formation} · Mentalität ${w.club().tactics.mentality}")
     val missing=w.squad().filter{!it.available&&!it.youth};if(missing.isEmpty())Text("Alle Spieler sind verfügbar.",color=Grass)else missing.forEach{Text("${it.name}: ${if(it.injuryWeeks>0)it.injury else it.unavailableReason?.label}",color=Clay)}
-    Text("Live-Match v0.4.67: realistischere Match-KI, nachvollziehbare Angriffsketten und kontextabhängige Stadionkulisse. Beim Wechsel in den Hintergrund pausieren Match und Audio sofort.",color=Muted)
+    Text("Live-Match v0.5.9: eine zentrale Match-Engine liefert Zustand, Takt, Ballposition, Statistik und Analyse. Die Grafik rendert nur noch diesen Zustand; beim Wechsel in den Hintergrund pausieren Match und Audio sofort.",color=Muted)
    }
   };return
  }
@@ -173,22 +159,30 @@ private fun liveDelayMs(phase: LivePhase,speed: MatchSpeed): Long {
     Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally){Crest(a.logo,a.primary,a.secondary,Modifier.size(56.dp));Text(a.shortName)}
    }
    if(!m.finished){
-    if(m.halfTime)Action(MatchEngine.breakActionLabel(m),true){vm.secondHalf();running=true}
-    else if(!m.incidentPause)Action(if(running)"Pause" else "Live fortsetzen",true){running=!running}
+    if(m.halfTime)Action(MatchEngine.breakActionLabel(m),true){vm.secondHalf();userPaused=false}
+    else if(!m.incidentPause)Action(if(userPaused)"Live fortsetzen" else "Pause",true){userPaused=!userPaused}
+    if(!m.halfTime&&!m.incidentPause&&!m.pendingDecision&&!m.assistantSubPending){
+     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
+      if(m.period==1)Box(Modifier.weight(1f)){Action("Bis Halbzeit",!state.busy,true){userPaused=true;vm.quickSimulate(true)}}
+      Box(Modifier.weight(1f)){Action("Spiel simulieren",!state.busy,true){userPaused=true;vm.quickSimulate(false)}}
+     }
+     Text("Schnellsimulation verwendet dieselbe Match-KI, Taktik, Fitness-, Karten- und Verletzungslogik wie das Live-Spiel.",color=Muted,style=MaterialTheme.typography.bodySmall)
+    }
     Pick("Spieltempo",speed,MatchSpeed.entries.toList(),{it.label}){vm.setMatchSpeed(it)}
     Text(when(speed){MatchSpeed.SLOW->"Langsam: mehr Zeit für jede Ballbewegung und Szene.";MatchSpeed.NORMAL->"Normal: ungefähr 2–2,5 Sekunden pro gewöhnlicher Spielminute.";MatchSpeed.FAST->"Schnell: kürzere Abläufe, wichtige Ereignisse bleiben vollständig sichtbar."},color=Muted,style=MaterialTheme.typography.bodySmall)
-   }else Action(if(w.fixtures.firstOrNull{it.id==m.fixtureId}?.competition==CompetitionType.LEAGUE)"Spieltag bestätigen & weiter" else "Pokalpartie bestätigen & weiter",!state.busy){running=false;vm.finishWeek()}
+   }else Action(if(w.fixtures.firstOrNull{it.id==m.fixtureId}?.competition==CompetitionType.LEAGUE)"Spieltag bestätigen & weiter" else "Pokalpartie bestätigen & weiter",!state.busy){userPaused=true;vm.finishWeek()}
   }
 
   if(!m.finished){
-   Section{PrimaryTabRow(selectedTabIndex=liveTab,containerColor=Color.Transparent,contentColor=Grass){Tab(selected=liveTab==0,onClick={liveTab=0},text={Text("Live-Animation")});Tab(selected=liveTab==1,onClick={liveTab=1},text={Text("Live-Statistiken")})}}
+   Section{PrimaryTabRow(selectedTabIndex=liveTab,containerColor=Color.Transparent,contentColor=Grass){Tab(selected=liveTab==0,onClick={liveTab=0},text={Text("Live")});Tab(selected=liveTab==1,onClick={liveTab=1},text={Text("Taktik")});Tab(selected=liveTab==2,onClick={liveTab=2},text={Text("Statistik")});Tab(selected=liveTab==3,onClick={liveTab=3},text={Text("Analyse")})}}
    if(liveTab==0)Section("Live-Animation"){
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Text("Spielfeld-Grafik anzeigen");Switch(showLiveGraphic,{showLiveGraphic=it})}
-    if(showLiveGraphic)LiveMatchAnimation(w,m) else Text("Die Spielfeld-Grafik ist ausgeblendet. Das Match läuft normal weiter.",color=Muted)
-    Text("Nur der Ball bewegt sich. Die letzten Bewegungen bleiben als verblassende Spur sichtbar; Konter, Schüsse und Ecken werden in zusammenhängenden Sequenzen animiert.",color=Muted,style=MaterialTheme.typography.bodySmall)
-   }else LiveStatistics(w,m,h,a)
+    if(showLiveGraphic)LiveMatchAnimation(w,m,MatchEngine.liveFrameDurationMs(m.livePhase,speed)) else Text("Die Spielfeld-Grafik ist ausgeblendet. Das Match läuft normal weiter.",color=Muted)
+    Text("Alle Match-Ansichten lesen denselben atomar veröffentlichten Engine-Zustand. Live-Grafik, Statistik, Taktik und Analyse besitzen keine eigene Simulation mehr.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   }else if(liveTab==1) Section("Taktik-Zentrale"){Text("Formation, Sofortanweisungen und Wechsel stehen weiter unten in diesem Tab. Während du Live ansiehst, werden diese schweren UI-Berechnungen nicht permanent neu aufgebaut.",color=Muted)} else if(liveTab==2) LiveStatistics(w,m,h,a) else MatchAnalysisView(w,m)
   }else{
    LiveStatistics(w,m,h,a,"Endstand & Statistik")
+   MatchAnalysisView(w,m,"Analyse & Taktik-Impact")
    Section("Spielerbewertungen"){
     for((club,lineup) in listOf(h to m.participation.filter{w.players[it]?.clubId==h.id},a to m.participation.filter{w.players[it]?.clubId==a.id})){
      Text(club.name,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
@@ -204,11 +198,11 @@ private fun liveDelayMs(phase: LivePhase,speed: MatchSpeed): Long {
     Pill(m.incidentReason.label,Clay)
     Text(when(m.incidentReason){MatchPauseReason.RED_CARD->if(ownIncident)"${player?.name?:"Ein Spieler"} ist vom Platz. Ordne Formation und Wechsel neu, bevor du fortsetzt." else "Der Gegner hat einen Platzverweis. Du kannst Formation und Mentalität sofort anpassen.";MatchPauseReason.INJURY->"${player?.name?:"Ein Spieler"} kann nicht weiterspielen. Die Uhr steht, bis die Situation geklärt ist.";else->"Das Spiel ist unterbrochen."})
     if(injuryStillOn&&canReplace)Text("Wechsle zuerst den verletzten Spieler.",color=Gold)
-    Action("Spiel fortsetzen",!injuryStillOn||!canReplace){vm.resumeIncident();running=true}
+    Action("Spiel fortsetzen",!injuryStillOn||!canReplace){vm.resumeIncident();userPaused=false}
    }
   }
 
-  if(!m.finished)Section("Live-Taktik"){
+  if(!m.finished&&liveTab==1)Section("Live-Taktik"){
    Pick("Formation",ownFormation,Formations.all.keys.toList(),{it}){vm.changeFormation(it)}
    Pick("Taktik-Vorlage",livePreset,tacticPresets,{it}){v->livePreset=v;if(v!="Individuell")vm.updateLiveTactic{world->applyTacticPreset(world.club().tactics,v);world.live?.let{live->if(ownHome)live.homeMentality=world.club().tactics.mentality else live.awayMentality=world.club().tactics.mentality}}}
    StepSlider("Mentalität · defensiv bis offensiv",if(ownHome)m.homeMentality else m.awayMentality,true){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.mentality=v;it.live?.let{live->if(ownHome)live.homeMentality=v else live.awayMentality=v}}}
@@ -218,32 +212,43 @@ private fun liveDelayMs(phase: LivePhase,speed: MatchSpeed): Long {
    StepSlider("Defensivlinie",ownClub.tactics.line,true){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.line=v}}
    Pick("Spielaufbau",ownClub.tactics.buildUp,BuildUp.entries.toList(),{it.label}){v->livePreset="Individuell";vm.updateLiveTactic{it.club().tactics.buildUp=v}}
    Text(tacticSummary(ownClub.tactics),color=Muted,style=MaterialTheme.typography.bodySmall)
+   val liveImpact=when{allOut->"Aktiv: Angriff stark erhöht · Defensive/Konteranfälligkeit bleibt auf vollem Risiko · normaler Mehrverbrauch";conserve->"Aktiv: deutlich tieferer Block · stärkere Konter · rund 40 % weniger Grundverbrauch";controlGame->"Aktiv: deutlich mehr Ballsicherheit/Ballbesitz · merklich weniger Vorwärtsrisiko";else->"Regler wirken direkt auf Chancenaufbau, Pressing, Ballverluste, Abseits, Fouls und Fitness."}
+   Text(liveImpact,color=if(allOut||conserve||controlGame)Gold else Muted,style=MaterialTheme.typography.bodySmall)
    Text("Sofort-Anweisungen",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Kräfte schonen",fontWeight=FontWeight.Bold);Text("Haramball-Modus: tiefer Block, fast alle hinter dem Ball und nach Ballgewinn schnell kontern. Spart Kraft und gibt Ballbesitz ab, ohne die Konter künstlich abzuwürgen.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(conserve,{vm.setConserveEnergy(it)})}
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Alles nach vorn",fontWeight=FontWeight.Bold);Text("Volles Risiko: hohe Linie, mehr Vorwärtsdrang und mehr Abschlüsse. Kann einen Rückstand drehen, kostet aber Kraft und öffnet große Räume für gegnerische Konter.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(allOut,{vm.setAllOutAttack(it)})}
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Spiel kontrollieren",fontWeight=FontWeight.Bold);Text("Ball halten, Tempo herausnehmen und Risiken reduzieren. Gut zum Verwalten einer Führung, dafür entstehen weniger direkte Abschlüsse.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(controlGame,{vm.setControlGame(it)})}
   }
 
-  if(!m.finished)Section("Wechsel & Co-Trainer"){
+  if(!m.finished&&liveTab==1)Section("Wechsel & Co-Trainer"){
    val incidentOut=if(m.incidentPause&&m.incidentReason==MatchPauseReason.INJURY&&m.incidentPlayerId in xi)m.incidentPlayerId else 0;var out by remember(m.fixtureId,m.incidentPause,m.incidentPlayerId){mutableIntStateOf(incidentOut.takeIf{it!=0}?:xi.lastOrNull()?:0)};var incoming by remember(m.fixtureId,m.incidentPause,m.incidentPlayerId){mutableIntStateOf(bench.firstOrNull()?:0)}
-   val suggestions=remember(state.revision,m.minute,xi,bench,ownFormation){MatchEngine.substitutionSuggestions(w,m)};Text("Wechsel: $ownSubs / 5",color=Muted)
+   val suggestions=remember(m.minute/5,xi.hashCode(),bench.hashCode(),ownFormation){MatchEngine.substitutionSuggestions(w,m)};val maxSubs=CompetitionRulesEngine.maxSubs(w,m);val subIssue=CompetitionRulesEngine.substitutionIssue(w,m,ownHome);val windows=if(ownHome)m.homeSubWindows else m.awaySubWindows;Text("Wechsel: $ownSubs / $maxSubs · Wechselgelegenheiten $windows / ${CompetitionRulesEngine.maxWindows(w,m)}",color=Muted);if(subIssue!=null)Text(subIssue,color=Gold,style=MaterialTheme.typography.bodySmall)
    if(suggestions.isNotEmpty()){Text("Co-Trainer: 5 gewichtete Vorschläge",style=MaterialTheme.typography.titleMedium);Text("Berücksichtigt Fitness, Live-Rating, Karten, Spielstand, Minuten, Form, Moral und Positionspassung.",color=Muted,style=MaterialTheme.typography.bodySmall);suggestions.forEachIndexed{i,sug->val po=w.players.getValue(sug.outId);val pi=w.players.getValue(sug.inId);Surface(color=Color(0xFF183127),shape=RoundedCornerShape(14.dp),modifier=Modifier.fillMaxWidth().clickable{out=sug.outId;incoming=sug.inId}){Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("${i+1}. ${po.lastName} → ${pi.lastName}",fontWeight=FontWeight.Bold);SuitabilityBadge(pi,sug.target)};Text(sug.reason,color=Muted,style=MaterialTheme.typography.bodySmall)}}}}
-   if(bench.isNotEmpty()&&xi.isNotEmpty()){val so=out.takeIf{it in xi}?:xi.first();val targetIndex=ownXiRaw.indexOf(so);val target=Formations.positions(ownFormation).getOrElse(targetIndex.coerceAtLeast(0)){w.players.getValue(so).position};val orderedBench=bench.sortedByDescending{w.players.getValue(it).ratingAt(target)};val si=incoming.takeIf{it in bench}?:orderedBench.first();Pick("Vom Platz",so,xi,{id->val pl=w.players.getValue(id);"${pl.name} · ${pl.fitness.roundToInt()} %${if(id in m.injured)" · verletzt" else ""}"}){out=it};Pick("Ins Spiel",si,orderedBench,{id->val pl=w.players.getValue(id);"${pl.name} · ${pl.position.name}/${pl.ratingAt(target)}"}){incoming=it};Text("Zielposition $target · ${w.players.getValue(si).roleAt(target)} · Eignung ${w.players.getValue(si).ratingAt(target)}/99",color=suitabilityColorForMatch(w.players.getValue(si),target),style=MaterialTheme.typography.bodySmall);Action("Wechsel durchführen",ownSubs<5,true){vm.substitute(so,si)}}else Text("Kein Wechsel verfügbar.",color=Muted)
+   if(bench.isNotEmpty()&&xi.isNotEmpty()){val so=out.takeIf{it in xi}?:xi.first();val targetIndex=ownXiRaw.indexOf(so);val target=Formations.positions(ownFormation).getOrElse(targetIndex.coerceAtLeast(0)){w.players.getValue(so).position};val orderedBench=bench.sortedByDescending{w.players.getValue(it).ratingAt(target)};val si=incoming.takeIf{it in bench}?:orderedBench.first();Pick("Vom Platz",so,xi,{id->val pl=w.players.getValue(id);"${pl.name} · ${pl.fitness.roundToInt()} %${if(id in m.injured)" · verletzt" else ""}"}){out=it};Pick("Ins Spiel",si,orderedBench,{id->val pl=w.players.getValue(id);"${pl.name} · ${pl.position.name}/${pl.ratingAt(target)}"}){incoming=it};Text("Zielposition $target · ${w.players.getValue(si).roleAt(target)} · Eignung ${w.players.getValue(si).ratingAt(target)}/99",color=suitabilityColorForMatch(w.players.getValue(si),target),style=MaterialTheme.typography.bodySmall);Action("Wechsel durchführen",subIssue==null,true){vm.substitute(so,si)}}else Text("Kein Wechsel verfügbar.",color=Muted)
   }
 
-  Section("Live-Ticker"){m.ticker.asReversed().take(80).forEach{t->Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){Text("${t.clockLabel.ifBlank{t.minute.toString()}}′",Modifier.width(38.dp),color=Muted,style=MaterialTheme.typography.labelMedium);Text(t.text,Modifier.weight(1f),color=when(t.tone){"goal","decision"->Grass;"bad"->Clay;else->Chalk},style=MaterialTheme.typography.bodyMedium)}}}
+  if(liveTab==0){val tickerRows=remember(m.ticker.size){m.ticker.takeLast(30).asReversed()};Section("Live-Ticker"){tickerRows.forEach{t->Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){Text("${t.clockLabel.ifBlank{t.minute.toString()}}′",Modifier.width(38.dp),color=Muted,style=MaterialTheme.typography.labelMedium);Text(t.text,Modifier.weight(1f),color=when(t.tone){"goal","decision"->Grass;"bad"->Clay;else->Chalk},style=MaterialTheme.typography.bodyMedium)}}}}
  }
  if(m.assistantSubPending){
-  val out=w.players[m.assistantSubOutId];val incoming=w.players[m.assistantSubInId];val ownHome=w.user.clubId==m.homeId;val lineup=if(ownHome)m.homeXi else m.awayXi;val slotIndex=lineup.indexOf(m.assistantSubOutId);val target=Formations.positions(if(ownHome)m.homeFormation else m.awayFormation).getOrElse(slotIndex.coerceAtLeast(0)){out?.position?:Position.ZM};val forced=m.assistantSubOutId in m.injured
-  AlertDialog(onDismissRequest={},title={Text(if(forced)"Co-Trainer: Verletzungswechsel" else "Co-Trainer: Wechselvorschlag")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text("${MatchEngine.clockLabel(m)}. Minute · ${m.home.goals}:${m.away.goals}",color=Muted);if(out!=null&&incoming!=null){Text("${out.name}  →  ${incoming.name}",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Pill("RAUS · ${out.position.label}",Clay);Pill("REIN · ${incoming.position.label}",Grass)};Text("Zielposition: ${target.label} · Eignung ${incoming.ratingAt(target)}/99",color=suitabilityColorForMatch(incoming,target));Text("${out.lastName}: ${out.fitness.roundToInt()} % Fitness · Live-Rating ${String.format(java.util.Locale.GERMANY,"%.1f",m.playerPerformance[out.id]?.rating?:6.5)}",color=Muted,style=MaterialTheme.typography.bodySmall);Text("${incoming.lastName}: ${incoming.fitness.roundToInt()} % Fitness · Form ${String.format(java.util.Locale.GERMANY,"%.1f",incoming.form)}",color=Muted,style=MaterialTheme.typography.bodySmall)};Text(m.assistantSubReason.ifBlank{"Der Co-Trainer bewertet Fitness, Leistung, Karten, Spielstand und Positionspassung."});if(forced)Text("Bei Ablehnung öffnet sich die manuelle Verletzungs-Unterbrechung. Der verletzte Spieler wird nicht automatisch weiter eingesetzt.",color=Gold,style=MaterialTheme.typography.bodySmall)else Text("Bei Ablehnung wird genau dieser Vorschlag für einige Spielminuten gesperrt. Der Co-Trainer kann später eine neue Lösung vorschlagen.",color=Muted,style=MaterialTheme.typography.bodySmall)}},confirmButton={Button(onClick={vm.acceptAssistantSubstitution();running=true}){Text("Annehmen")}},dismissButton={OutlinedButton(onClick={vm.rejectAssistantSubstitution();running=!forced}){Text("Ablehnen")}})
+  val outs=(m.assistantSubOutIds.ifEmpty{mutableListOf(m.assistantSubOutId)});val ins=(m.assistantSubInIds.ifEmpty{mutableListOf(m.assistantSubInId)});val forced=outs.any{it in m.injured}
+  AlertDialog(onDismissRequest={},title={Text(if(forced)"Co-Trainer: Verletzungswechsel" else if(outs.size>1)"Co-Trainer: ${outs.size}-fach Wechsel" else "Co-Trainer: Wechselvorschlag")},text={Column(Modifier.heightIn(max=440.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)){Text("${MatchEngine.clockLabel(m)}. Minute · ${m.home.goals}:${m.away.goals}",color=Muted);outs.forEachIndexed{i,outId->val inId=ins.getOrNull(i)?:return@forEachIndexed;val out=w.players[outId]?:return@forEachIndexed;val incoming=w.players[inId]?:return@forEachIndexed;val ownHome=w.user.clubId==m.homeId;val lineup=if(ownHome)m.homeXi else m.awayXi;val slotIndex=lineup.indexOf(outId);val target=Formations.positions(if(ownHome)m.homeFormation else m.awayFormation).getOrElse(slotIndex.coerceAtLeast(0)){out.position};Text("${i+1}. ${out.name}  →  ${incoming.name}",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold);Text("${target.label} · Eignung ${incoming.ratingAt(target)}/99 · ${m.assistantSubReasons.getOrNull(i).orEmpty()}",color=Muted,style=MaterialTheme.typography.bodySmall)};if(forced)Text("Bei Ablehnung öffnet sich für einen verletzten Spieler die manuelle Unterbrechung.",color=Gold,style=MaterialTheme.typography.bodySmall)else Text("Abgelehnte Paarungen und der betroffene Raus-Spieler werden eine Zeit lang gesperrt. Der Co-Trainer schlägt nicht sofort dieselbe Lösung erneut vor und hebt Wechsel nicht künstlich bis zur Schlussphase auf.",color=Muted,style=MaterialTheme.typography.bodySmall)}},confirmButton={Button(onClick={vm.acceptAssistantSubstitution();userPaused=false}){Text(if(outs.size>1)"${outs.size} Wechsel annehmen" else "Annehmen")}},dismissButton={OutlinedButton(onClick={vm.rejectAssistantSubstitution();userPaused=false}){Text("Ablehnen")}})
  }
- if(m.pendingDecision)AlertDialog(onDismissRequest={},title={Text("Du am Ball")},text={Column(Modifier.heightIn(max=440.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){Text("${MatchEngine.clockLabel(m)}. Minute · ${m.home.goals}:${m.away.goals}. Was machst du?");Text("Dribbling riskiert den Ball. Halten schont Kräfte. Ein Foul riskiert Gelb.",color=Muted,style=MaterialTheme.typography.bodySmall);Decision.entries.forEach{d->Action(d.label,true,d!=Decision.SHOOT){vm.decide(d)}}}},confirmButton={})
+ if(m.pendingDecision){
+  val context=remember(m.liveEventSerial,m.ballX,m.ballY,m.homeXi.hashCode(),m.awayXi.hashCode()){MatchEngine.playerDecisionContext(w,m)}
+  val choices=listOf(Decision.SHOOT,Decision.DRIBBLE,Decision.CROSS,Decision.THROUGH_PASS,Decision.PASS)
+  AlertDialog(onDismissRequest={},title={Text("Du am Ball")},text={Column(Modifier.heightIn(max=500.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){
+   Text("${MatchEngine.clockLabel(m)}. Minute · ${m.home.goals}:${m.away.goals}. Was machst du?")
+   Surface(color=Color(0xFF183127),shape=RoundedCornerShape(12.dp),modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(3.dp)){Text("Distanz zum Tor: ca. ${context.distanceMeters} m",fontWeight=FontWeight.Bold);Text("Gegnerdruck: ${context.pressureLabel} · ca. ${context.nearbyOpponents} Gegenspieler in der Nähe",color=Muted,style=MaterialTheme.typography.bodySmall)}}
+   Text("Schuss = direkter Abschluss · Dribbling = Raumgewinn mit Ballverlustrisiko · Flanke/Steilpass = Chance kreieren · Sicherungspass = Ballbesitz priorisieren.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   choices.forEach{d->Action(d.label,true,d!=Decision.SHOOT){vm.decide(d)}}
+  }},confirmButton={})
+ }
 }
 
 @Composable private fun LiveStatistics(w: World,m: LiveMatch,h: Club,a: Club,title: String="Aktuelle Live-Statistiken"){
  val poss=if(m.home.possessionTicks+m.away.possessionTicks==0)50 else (100.0*m.home.possessionTicks/(m.home.possessionTicks+m.away.possessionTicks)).roundToInt()
  Section(title){
   StatLine("xG",dec(m.home.xg),dec(m.away.xg));StatLine("Schüsse gesamt","${m.home.shots}","${m.away.shots}");StatLine("Schüsse aufs Tor","${m.home.shotsOnTarget}","${m.away.shotsOnTarget}");StatLine("Schüsse neben das Tor","${m.home.shotsOffTarget}","${m.away.shotsOffTarget}");if(m.home.blockedShots+m.away.blockedShots>0)StatLine("Geblockt","${m.home.blockedShots}","${m.away.blockedShots}");StatLine("Ballbesitz","$poss %","${100-poss} %");StatLine("Ecken","${m.home.corners}","${m.away.corners}");StatLine("Einwürfe","${m.home.throwIns}","${m.away.throwIns}");StatLine("Abseits","${m.home.offsides}","${m.away.offsides}");if(m.home.varChecks+m.away.varChecks>0)StatLine("VAR-Prüfungen","${m.home.varChecks}","${m.away.varChecks}");StatLine("Fouls","${m.home.fouls}","${m.away.fouls}");val homeYellow=m.yellows.filter{w.players[it.key]?.clubId==m.homeId}.values.sum();val awayYellow=m.yellows.filter{w.players[it.key]?.clubId==m.awayId}.values.sum();val homeRed=m.sentOff.count{w.players[it]?.clubId==m.homeId};val awayRed=m.sentOff.count{w.players[it]?.clubId==m.awayId};StatLine("Gelbe Karten","$homeYellow","$awayYellow");if(homeRed+awayRed>0)StatLine("Platzverweise","$homeRed","$awayRed")
-  val active=w.clubs[m.chainOwnerClubId.takeIf{it==m.homeId||it==m.awayId}?:if(m.homeInPossession)m.homeId else m.awayId];Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Text("Aktuelle Phase",color=Muted);Pill("${m.livePhase.label} · ${active?.shortName?:"-"}",if(active?.id==m.homeId)Color(h.primary)else Color(a.primary))}
+  val active=w.clubs[m.chainOwnerClubId.takeIf{it==m.homeId||it==m.awayId}?:if(m.homeInPossession)m.homeId else m.awayId];Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Text("Aktuelle Phase",color=Muted);Pill("${m.livePhase.label} · ${active?.shortName?:"-"}",if(active?.id==m.homeId)Color(h.primary)else Color(a.primary))};if(m.chainPasses>0||m.chainNarrative.isNotBlank())Text("Angriffskette: ${m.chainPasses} Aktionen · Zone ${m.chainZone+1}/4 · ${m.chainNarrative}",color=Muted,style=MaterialTheme.typography.bodySmall)
  }
 }

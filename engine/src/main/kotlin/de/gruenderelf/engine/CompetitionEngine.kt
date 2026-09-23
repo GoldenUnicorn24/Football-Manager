@@ -14,7 +14,13 @@ object CompetitionEngine {
   GuestSpec(1013,"FK Zlatograd","Zlatograd","Kroatien",84,0xFF325B8E), GuestSpec(1014,"SK Dunavica","Dunavica","Serbien",83,0xFF7E2E45),
   GuestSpec(1015,"Prag Aurora","Aurora","Tschechien",85,0xFF642E78), GuestSpec(1016,"Danubia Wien","Danubia","Österreich",87,0xFFB93737),
   GuestSpec(1017,"Helvetia Nord","Helvetia","Schweiz",84,0xFFB13B3B), GuestSpec(1018,"Nordhavn BK","Nordhavn","Dänemark",82,0xFF315C77),
-  GuestSpec(1019,"Stockholm Krona","Kronvik","Schweden",83,0xFF2F5E87), GuestSpec(1020,"Athletikos Asteri","Asteri","Griechenland",86,0xFF234A77)
+  GuestSpec(1019,"Stockholm Krona","Kronvik","Schweden",83,0xFF2F5E87), GuestSpec(1020,"Athletikos Asteri","Asteri","Griechenland",86,0xFF234A77),
+  GuestSpec(1021,"Royal Brüssel","Brüssel","Belgien",90,0xFF2D4C8C), GuestSpec(1022,"Istanbul Bosporus","Istanbul","Türkei",89,0xFF7A2435),
+  GuestSpec(1023,"Caledonia Glasgow","Glasgow","Schottland",88,0xFF1F4F79), GuestSpec(1024,"Oslo Fjord FK","Oslo","Norwegen",87,0xFF294F67),
+  GuestSpec(1025,"Warszawa Orzel","Warszawa","Polen",86,0xFFB22D34), GuestSpec(1026,"Kyiv Dnipro","Kyiv","Ukraine",85,0xFF315E9B),
+  GuestSpec(1027,"Bucuresti Steaua Noua","Bucuresti","Rumänien",84,0xFF8B2F44), GuestSpec(1028,"Budapest Danubius","Budapest","Ungarn",83,0xFF315C4E),
+  GuestSpec(1029,"Ljubljana Zmaj","Ljubljana","Slowenien",82,0xFF2D6A48), GuestSpec(1030,"Bratislava Dunaj","Bratislava","Slowakei",81,0xFF355B87),
+  GuestSpec(1031,"Sofia Vitosha","Sofia","Bulgarien",80,0xFF3972A6), GuestSpec(1032,"Helsinki Aurora","Helsinki","Finnland",79,0xFF315C77)
  )
  private val fantasyNationalDays=listOf(1,4,7,10,14,17)
  private val fantasyNationalNames=listOf("1. Runde","2. Runde","Achtelfinale","Viertelfinale","Halbfinale","Finale")
@@ -39,9 +45,12 @@ object CompetitionEngine {
  }
 
  fun ensureGuestClubs(w: World,rng: SeededRandom=SeededRandom(w.seed xor 0x4555524FL)){
-  if(isReal(w))return
   val used=w.clubs.values.map{it.shortName}.toMutableSet()
-  for((index,g) in guests.withIndex()){
+  // Fantasy mode intentionally keeps the original 20 guest clubs so existing worlds,
+  // cup sizes and legacy Europa Elite structures remain stable. Real mode needs the
+  // extended 32-association pool for mathematically valid modern UEFA league phases.
+  val activeGuests=if(isReal(w))guests else guests.take(20)
+  for((index,g) in activeGuests.withIndex()){
    if(g.id in w.clubs)continue
    val short=WorldFactory.deriveShortName(g.name,used);used.add(short)
    val c=Club(g.id,g.name,short,0,city="${g.city}, ${g.country}",founded=1880+(index*7)%125,primary=g.primary,secondary=0xFFF2F2EE,
@@ -70,6 +79,12 @@ object CompetitionEngine {
 
  fun scheduleSeason(w: World){
   if(isReal(w)){
+   // Der Real-Modus enthält fünf vollständig gepackte Topligen. Für die moderne
+   // UEFA-Ligaphase reichen fünf Verbände mathematisch nicht aus, sobald acht
+   // Gegner und maximal zwei Gegner je fremdem Verband gleichzeitig gelten.
+   // Qualifikanten aus weiteren europäischen Verbänden bilden deshalb denselben
+   // realistischen Pfad ab, den die echten Wettbewerbe über Meister-/Ligawege haben.
+   ensureGuestClubs(w)
    scheduleRealDfbPokal(w)
    val order=realEuropeanQualificationOrder(w)
    require(order.size>=72){"Für Champions League und Europa League werden mindestens 72 Topliga-Vereine benötigt."}
@@ -112,9 +127,34 @@ object CompetitionEngine {
   require(top.size>=5){"Europapokal benötigt die fünf Topligen."}
   val rotation=(w.calendar.season-top.first().tier).mod(top.size)
   val orderedLeagues=(top.drop(rotation)+top.take(rotation)).map{league->league.clubIds.sortedWith(compareByDescending<Int>{w.clubs.getValue(it).reputation}.thenBy{it})}
-  val result=mutableListOf<Int>();val max=orderedLeagues.maxOf{it.size}
-  for(rank in 0 until max)for(league in orderedLeagues)if(rank<league.size)result.add(league[rank])
-  return result.distinct()
+  val domestic=mutableListOf<Int>();val max=orderedLeagues.maxOf{it.size}
+  for(rank in 0 until max)for(league in orderedLeagues)if(rank<league.size)domestic.add(league[rank])
+
+  // 16 Qualifikanten pro Wettbewerb verbreitern das Feld auf deutlich mehr
+  // Verbände. Zusammen mit 20 Vereinen aus den fünf gepackten Topligen bleiben
+  // die UEFA-Regeln (2 Gegner je Topf, keine Landsduelle, max. 2 je Verband)
+  // auch bei ungünstiger Topfverteilung mathematisch erfüllbar.
+  val qualifierSpecs=guests.filter{it.id in w.clubs}.sortedWith(compareByDescending<GuestSpec>{it.reputation}.thenBy{it.id})
+  require(qualifierSpecs.size>=32){"Europapokal benötigt 32 Qualifikanten aus zusätzlichen Verbänden."}
+  val championsQualifiers=qualifierSpecs.filterIndexed{i,_->i%2==0}.take(16).map{it.id}
+  val europaQualifiers=qualifierSpecs.filterIndexed{i,_->i%2==1}.take(16).map{it.id}
+  fun field(domesticOffset:Int,extra:List<Int>):List<Int>{
+   val local=domestic.drop(domesticOffset).take(20)
+   require(local.size==20&&extra.size==16){"Europapokal-Feld konnte nicht vollständig besetzt werden."}
+   return (local+extra).distinct()
+  }
+  val champions=field(0,championsQualifiers);val europa=field(20,europaQualifiers)
+  require(champions.size==36&&europa.size==36&&champions.intersect(europa.toSet()).isEmpty()){ "Europapokal-Felder müssen 36 unterschiedliche Vereine enthalten." }
+  return champions+europa+domestic.drop(40)
+ }
+
+ private data class ModernEuroMatch(val home:Int,val away:Int)
+
+ private fun associationForClub(w:World,clubId:Int):String {
+  val league=w.leagues.firstOrNull{clubId in it.clubIds}
+  return league?.let{RealModeDatabase.countryForLeague(it.name)}
+   ?:w.clubs[clubId]?.city?.substringAfterLast(", ","")?.takeIf{it.isNotBlank()}
+   ?:"International"
  }
 
  private fun scheduleModernEurope(w: World,type: CompetitionType,participants: List<Int>,salt: Long){
@@ -122,27 +162,154 @@ object CompetitionEngine {
   if(w.fixtures.any{it.season==w.calendar.season&&it.competition==type})return
   require(participants.size==36){"${type.label} benötigt 36 Vereine."}
   val rng=SeededRandom(w.seed xor w.calendar.season.toLong() xor salt)
-  val rotation=shuffle(participants,rng)
-  val edges=mutableListOf<EuroEdge>()
-  repeat(8){round->
-   for(i in 0 until rotation.size/2)edges.add(EuroEdge(round,rotation[i],rotation[rotation.lastIndex-i]))
-   val last=rotation.removeAt(rotation.lastIndex);rotation.add(1,last)
-  }
-  // Die ersten acht Runden bilden einen 8-regulären Graphen. Eine Euler-Orientierung garantiert exakt vier Heim- und vier Auswärtsspiele pro Verein.
-  val adjacency=participants.associateWith{mutableListOf<Int>()}.toMutableMap()
-  edges.forEachIndexed{index,e->adjacency.getValue(e.a).add(index);adjacency.getValue(e.b).add(index)}
-  val used=BooleanArray(edges.size);val homes=IntArray(edges.size);val aways=IntArray(edges.size)
-  for(start in participants){
-   if(adjacency.getValue(start).none{!used[it]})continue
-   val stack=mutableListOf(start)
-   while(stack.isNotEmpty()){
-    val v=stack.last();val edgeIndex=adjacency.getValue(v).firstOrNull{!used[it]}
-    if(edgeIndex==null)stack.removeAt(stack.lastIndex) else{
-     used[edgeIndex]=true;val e=edges[edgeIndex];val next=if(e.a==v)e.b else e.a;homes[edgeIndex]=v;aways[edgeIndex]=next;stack.add(next)
+  val ordered=participants.sortedWith(compareByDescending<Int>{w.clubs.getValue(it).reputation}.thenBy{it})
+  val pots=ordered.chunked(9)
+  require(pots.size==4&&pots.all{it.size==9}){"Die Ligaphase benötigt vier Töpfe mit je neun Vereinen."}
+  val associations=participants.associateWith{associationForClub(w,it)}
+
+  fun buildDraw():List<ModernEuroMatch>?{
+   val potOf=pots.flatMapIndexed{index,pot->pot.map{it to index}}.toMap()
+   val opponents=participants.associateWith{mutableSetOf<Int>()}
+   val assocCounts=participants.associateWith{mutableMapOf<String,Int>()}
+   val undirected=mutableListOf<Pair<Int,Int>>()
+
+   fun canPair(a:Int,b:Int):Boolean{
+    if(a==b||b in opponents.getValue(a))return false
+    val aa=associations.getValue(a);val ab=associations.getValue(b)
+    if(aa==ab)return false
+    if((assocCounts.getValue(a)[ab]?:0)>=2)return false
+    if((assocCounts.getValue(b)[aa]?:0)>=2)return false
+    return true
+   }
+   fun add(a:Int,b:Int){
+    opponents.getValue(a)+=b;opponents.getValue(b)+=a
+    val aa=associations.getValue(a);val ab=associations.getValue(b)
+    assocCounts.getValue(a)[ab]=(assocCounts.getValue(a)[ab]?:0)+1
+    assocCounts.getValue(b)[aa]=(assocCounts.getValue(b)[aa]?:0)+1
+    undirected+=minOf(a,b) to maxOf(a,b)
+   }
+   fun remove(a:Int,b:Int){
+    val key=minOf(a,b) to maxOf(a,b);undirected.remove(key)
+    opponents.getValue(a)-=b;opponents.getValue(b)-=a
+    val aa=associations.getValue(a);val ab=associations.getValue(b)
+    val ca=(assocCounts.getValue(a)[ab]?:1)-1;val cb=(assocCounts.getValue(b)[aa]?:1)-1
+    if(ca<=0)assocCounts.getValue(a).remove(ab) else assocCounts.getValue(a)[ab]=ca
+    if(cb<=0)assocCounts.getValue(b).remove(aa) else assocCounts.getValue(b)[aa]=cb
+   }
+
+   // Zwischen zwei Töpfen werden zwei disjunkte perfekte Matchings gebaut.
+   // Damit erhält jeder Verein exakt zwei Gegner aus jedem fremden Topf, ohne
+   // den früheren 144-Kanten-Global-Backtracker zu benötigen.
+   fun addCrossMatching(left:List<Int>,right:List<Int>):Boolean{
+    val unmatchedLeft=left.toMutableSet();val unmatchedRight=right.toMutableSet();val chosen=mutableListOf<Pair<Int,Int>>()
+    fun rec():Boolean{
+     if(unmatchedLeft.isEmpty())return true
+     val a=unmatchedLeft.minByOrNull{x->unmatchedRight.count{y->canPair(x,y)}}?:return false
+     val options=shuffle(unmatchedRight.filter{canPair(a,it)},rng)
+      .sortedWith(compareBy<Int>{y->(assocCounts.getValue(a)[associations.getValue(y)]?:0)+(assocCounts.getValue(y)[associations.getValue(a)]?:0)}.thenBy{it})
+     for(b in options){
+      unmatchedLeft-=a;unmatchedRight-=b;add(a,b);chosen+=a to b
+      if(rec())return true
+      chosen.removeAt(chosen.lastIndex);remove(a,b);unmatchedLeft+=a;unmatchedRight+=b
+     }
+     return false
+    }
+    if(rec())return true
+    // rec() rollt alle gewählten Kanten zurück; defensive Sicherung für künftige Änderungen.
+    chosen.asReversed().forEach{(a,b)->if(b in opponents.getValue(a))remove(a,b)}
+    return false
+   }
+
+   // Innerhalb eines Topfes bildet ein 9er-Zyklus den Grad 2. Ein Zyklus ist
+   // gleichzeitig ideal für die spätere Heim/Auswärts-Orientierung (1/1 je Topf).
+   fun addSamePotCycle(pot:List<Int>):Boolean{
+    val start=pot.minByOrNull{club->pot.count{other->other!=club&&canPair(club,other)}}?:return false
+    val path=mutableListOf(start);val unused=(pot-start).toMutableSet()
+    fun rec(current:Int):Boolean{
+     if(unused.isEmpty()){
+      if(!canPair(current,start))return false
+      add(current,start);return true
+     }
+     val options=shuffle(unused.filter{canPair(current,it)},rng)
+      .sortedWith(compareBy<Int>{candidate->unused.count{other->other!=candidate&&canPair(candidate,other)}}.thenBy{it})
+     for(next in options){
+      unused-=next;path+=next;add(current,next)
+      if(rec(next))return true
+      remove(current,next);path.removeAt(path.lastIndex);unused+=next
+     }
+     return false
+    }
+    if(rec(start))return true
+    // Alle Rekursionskanten sind zurückgerollt; nur eine evtl. Schlusskante kann nicht übrig bleiben.
+    return false
+   }
+
+   // Restriktive Eigen-Topf-Zyklen zuerst, danach fremde Topfpaare. Die beiden
+   // Matchings je Paar sind klein (9x9) und können lokal mit MRV gelöst werden.
+   for(pot in pots)if(!addSamePotCycle(pot))return null
+   val pairs=mutableListOf<Pair<Int,Int>>()
+   for(i in 0..3)for(j in i+1..3)pairs+=i to j
+   for((i,j) in pairs){
+    if(!addCrossMatching(pots[i],pots[j]))return null
+    if(!addCrossMatching(pots[i],pots[j]))return null
+   }
+   if(undirected.size!=144||participants.any{opponents.getValue(it).size!=8})return null
+
+   // Jede Topf-Paarung ist ein 2-regulärer Graph. Zyklen werden gerichtet, sodass
+   // jeder Klub gegen jeden Topf exakt ein Heim- und ein Auswärtsspiel erhält.
+   val result=mutableListOf<ModernEuroMatch>()
+   fun key(a:Int,b:Int)=minOf(a,b) to maxOf(a,b)
+   for(i in 0..3)for(j in i..3){
+    val subset=undirected.filter{(a,b)->val pa=potOf.getValue(a);val pb=potOf.getValue(b);minOf(pa,pb)==i&&maxOf(pa,pb)==j}
+    val adj=mutableMapOf<Int,MutableList<Int>>()
+    subset.forEach{(a,b)->adj.getOrPut(a){mutableListOf()}.add(b);adj.getOrPut(b){mutableListOf()}.add(a)}
+    if(adj.values.any{it.size!=2})return null
+    val unused=subset.map{key(it.first,it.second)}.toMutableSet()
+    while(unused.isNotEmpty()){
+     val first=unused.first();val start=first.first;var current=start;var previous=-1;var guard=0
+     do{
+      if(guard++>40)return null
+      val next=adj.getValue(current).firstOrNull{n->key(current,n) in unused&&n!=previous}
+       ?:adj.getValue(current).firstOrNull{n->key(current,n) in unused}?:return null
+      unused.remove(key(current,next));result+=ModernEuroMatch(current,next)
+      previous=current;current=next
+     }while(current!=start)
     }
    }
+   val homes=participants.associateWith{id->result.count{it.home==id}}
+   val aways=participants.associateWith{id->result.count{it.away==id}}
+   if(result.size!=144||participants.any{homes.getValue(it)!=4||aways.getValue(it)!=4})return null
+   return result
   }
-  edges.forEachIndexed{index,e->addFixture(w,type,e.round+1,"Ligaphase",modernEuroLeagueDays[e.round],homes[index],aways[index])}
+
+  fun factorize(all:List<ModernEuroMatch>):List<List<ModernEuroMatch>>?{
+   var remaining=all.toMutableList();val rounds=mutableListOf<List<ModernEuroMatch>>()
+   repeat(8){
+    val selected=mutableListOf<ModernEuroMatch>();val used=mutableSetOf<Int>()
+    fun rec():Boolean{
+     if(used.size==participants.size)return true
+     val free=participants.filter{it !in used}
+     val v=free.minByOrNull{x->remaining.count{e->(e.home==x&&e.away !in used)||(e.away==x&&e.home !in used)}}?:return false
+     val choices=shuffle(remaining.indices.filter{idx->val e=remaining[idx];(e.home==v&&e.away !in used)||(e.away==v&&e.home !in used)},rng)
+     for(index in choices){
+      val e=remaining[index];val other=if(e.home==v)e.away else e.home;if(other in used)continue
+      used+=v;used+=other;selected+=e
+      if(rec())return true
+      selected.removeAt(selected.lastIndex);used-=v;used-=other
+     }
+     return false
+    }
+    if(!rec())return null
+    val keys=selected.map{minOf(it.home,it.away) to maxOf(it.home,it.away)}.toSet()
+    remaining=remaining.filterNot{(minOf(it.home,it.away) to maxOf(it.home,it.away)) in keys}.toMutableList();rounds+=selected.toList()
+   }
+   return if(remaining.isEmpty())rounds else null
+  }
+
+  var rounds:List<List<ModernEuroMatch>>?=null
+  repeat(96){if(rounds==null){val draw=buildDraw();if(draw!=null)rounds=factorize(draw)}}
+  val finalRounds=rounds?:error("${type.label}: keine gültige Ligaphasen-Auslosung unter Topf-/Verbandsregeln gefunden.")
+  finalRounds.forEachIndexed{round,matches->matches.forEach{match->addFixture(w,type,round+1,"Ligaphase",modernEuroLeagueDays[round],match.home,match.away)}}
  }
 
  private fun scheduleLegacyEuroGroups(w: World,type: CompetitionType,participants: List<Int>,salt: Long){
@@ -292,7 +459,7 @@ object CompetitionEngine {
 
  /** Alte Saves bekommen die neuen Wettbewerbe; ungespielte v0.4.62-Spielpläne werden auf das neue Format migriert. */
  fun ensureForLoadedWorld(w: World){
-  if(!isReal(w))ensureGuestClubs(w)
+  ensureGuestClubs(w)
   val seasonExtras=w.fixtures.filter{it.season==w.calendar.season&&it.competition!=CompetitionType.LEAGUE}
   if(isReal(w)&&seasonExtras.isNotEmpty()&&seasonExtras.none{it.played}&&hasLegacyRealCompetitionShape(w)){
    val ids=seasonExtras.map{it.id}.toSet();w.fixtures.removeAll{it.id in ids};ids.forEach{w.matches.remove(it)};scheduleSeason(w)
@@ -308,6 +475,6 @@ object CompetitionEngine {
  }
 
  private fun storeWithoutCareerSideEffects(w: World,f: Fixture,m: LiveMatch){
-  f.played=true;w.matches[f.id]=MatchRecord(f.id,m.homeId,m.awayId,m.home.copy(),m.away.copy(),m.minute,m.goals.toList(),m.attendance,m.shotEvents.toList(),m.homePens,m.awayPens,m.extraTimePlayed)
+  f.played=true;w.matches[f.id]=MatchRecord(fixtureId=f.id,homeId=m.homeId,awayId=m.awayId,home=m.home.copy(),away=m.away.copy(),minute=m.minute,goals=m.goals.toList(),attendance=m.attendance,homePens=m.homePens,awayPens=m.awayPens,extraTimePlayed=m.extraTimePlayed)
  }
 }

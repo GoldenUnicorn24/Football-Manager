@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -21,9 +22,14 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import de.gruenderelf.app.R
 import de.gruenderelf.engine.LiveMatch
 import de.gruenderelf.engine.MatchEngine
@@ -34,9 +40,6 @@ import de.gruenderelf.engine.World
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.PI
-import kotlin.math.abs
-import kotlin.math.ceil
-import kotlin.math.max
 import kotlin.math.sin
 
 private fun LiveMatch.effectiveLiveClubId() = liveClubId.takeIf { it == homeId || it == awayId } ?: chainOwnerClubId.takeIf { it == homeId || it == awayId } ?: if (homeInPossession) homeId else awayId
@@ -72,7 +75,7 @@ private fun LivePitchImage(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun LiveMatchAnimation(w: World, m: LiveMatch) {
+fun LiveMatchAnimation(w: World, m: LiveMatch, frameDurationMs: Long) {
     val home = w.clubs.getValue(m.homeId)
     val away = w.clubs.getValue(m.awayId)
     val activeId = m.effectiveLiveClubId()
@@ -87,11 +90,11 @@ fun LiveMatchAnimation(w: World, m: LiveMatch) {
                 TeamHeader(away.shortName, Color(away.primary))
             }
             when (m.livePhase) {
-                LivePhase.SHOT_OFF_TARGET, LivePhase.SHOT_ON_TARGET, LivePhase.WOODWORK, LivePhase.GOAL -> ShotScene(w, m, activeId, actor?.name ?: active.shortName)
+                LivePhase.SHOT_OFF_TARGET, LivePhase.SHOT_ON_TARGET, LivePhase.WOODWORK, LivePhase.GOAL -> ShotScene(w, m, activeId, actor?.name ?: active.shortName, frameDurationMs)
                 LivePhase.VAR -> VarReviewScene(w, m, activeId, actor?.name ?: active.shortName)
-                LivePhase.SHOOTOUT -> ShotScene(w,m,activeId,actor?.name?:active.shortName)
-                LivePhase.PENALTY -> OpenPlayScene(m,home.shortName,away.shortName,activeId,Color(home.primary),Color(away.primary))
-                LivePhase.CORNER -> CornerScene(w, m, activeId, actor?.name ?: active.shortName)
+                LivePhase.SHOOTOUT -> ShotScene(w,m,activeId,actor?.name?:active.shortName,frameDurationMs)
+                LivePhase.PENALTY -> OpenPlayScene(m,home.shortName,away.shortName,activeId,Color(home.primary),Color(away.primary),frameDurationMs)
+                LivePhase.CORNER -> CornerScene(w, m, activeId, actor?.name ?: active.shortName, frameDurationMs)
                 LivePhase.YELLOW_CARD, LivePhase.YELLOW_RED_CARD, LivePhase.RED_CARD, LivePhase.INJURY -> IncidentScene(w, m, activeId)
                 else -> OpenPlayScene(
                     m = m,
@@ -100,6 +103,7 @@ fun LiveMatchAnimation(w: World, m: LiveMatch) {
                     activeId = activeId,
                     homeColor = Color(home.primary),
                     awayColor = Color(away.primary),
+                    frameDurationMs = frameDurationMs,
                 )
             }
             MatchEngine.stoppageTimeOverlay(m)?.let { added ->
@@ -132,74 +136,89 @@ private fun OpenPlayScene(
     activeId: Int,
     homeColor: Color,
     awayColor: Color,
+    frameDurationMs: Long,
 ) {
     val activeColor = if (activeId == m.homeId) homeColor else awayColor
-    // Animiert wird direkt im Engine-Koordinatensystem. So benutzt die offene Szene
-    // exakt dieselbe Position wie die nachfolgende Schussanimation.
     val ballX = remember(m.fixtureId) { Animatable(m.ballX.coerceIn(.04f, .96f)) }
     val ballY = remember(m.fixtureId) { Animatable(m.ballY.coerceIn(.04f, .96f)) }
     val trail = remember(m.fixtureId) { mutableStateListOf<Pair<Float, Float>>() }
     val event = m.liveEventSerial
-
-    LaunchedEffect(event, m.livePhase, activeId) {
-        val tx = m.ballX.coerceIn(.04f, .96f)
-        val ty = m.ballY.coerceIn(.04f, .96f)
-        val sx = ballX.value
-        val sy = ballY.value
-        if (trail.isEmpty()) trail.add(sx to sy)
-        val dist = max(abs(tx - sx), abs(ty - sy))
-        val pieces = ceil(dist / .115f).toInt().coerceIn(1, 6)
-        val specialPass = m.liveDetail.contains("Langer") || m.liveDetail.contains("Seitenwechsel") || m.liveDetail.contains("Steilpass") || m.liveDetail.contains("Torwart")
-        val totalMs = when {
-            specialPass -> 1050
-            m.livePhase == LivePhase.COUNTER -> 430
-            m.livePhase == LivePhase.DANGEROUS_ATTACK -> 720
-            m.livePhase == LivePhase.ATTACK -> 820
-            else -> 900
+    val targetX = m.ballX.coerceIn(.04f, .96f)
+    val targetY = m.ballY.coerceIn(.04f, .96f)
+    // Ausschließlich echte Engine-Frames steuern die sichtbare Ballbewegung. PassEvents sind
+    // Analyse-/Statistikdaten und dürfen niemals als zweite, konkurrierende Simulation dienen.
+    val engineTrail = m.ballTrace.takeLast(5)
+    LaunchedEffect(event, m.livePhase, activeId, frameDurationMs, targetX, targetY) {
+        if (trail.isEmpty()) {
+            engineTrail.dropLast(1).forEach { trail.add(it.x to it.y) }
+            if (trail.isEmpty()) trail.add(ballX.value to ballY.value)
         }
-        for (i in 1..pieces) {
-            val f = i / pieces.toFloat()
-            val nx = sx + (tx - sx) * f
-            val ny = sy + (ty - sy) * f
-            coroutineScope {
-                launch { ballX.animateTo(nx, tween((totalMs / pieces).coerceAtLeast(90))) }
-                launch { ballY.animateTo(ny, tween((totalMs / pieces).coerceAtLeast(90))) }
-            }
-            trail.add(nx to ny)
-            while (trail.size > 5) trail.removeAt(0)
+        val animationMs = (frameDurationMs * .88).toInt().coerceIn(260, 3600)
+        coroutineScope {
+            launch { ballX.animateTo(targetX, tween(animationMs)) }
+            launch { ballY.animateTo(targetY, tween(animationMs)) }
         }
+        trail.add(targetX to targetY)
+        while (trail.size > 5) trail.removeAt(0)
     }
 
-    BoxWithConstraints(Modifier.fillMaxWidth().aspectRatio(1.5f)) {
+    val club = if (activeId == m.homeId) homeShort else awayShort
+    val detail = m.liveDetail.takeIf { it.isNotBlank() } ?: m.livePhase.label
+    val textMeasurer = rememberTextMeasurer()
+    val clubLayout = remember(club) {
+        textMeasurer.measure(
+            AnnotatedString(club),
+            style = TextStyle(color = Chalk, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold),
+        )
+    }
+    val detailLayout = remember(detail) {
+        textMeasurer.measure(
+            AnnotatedString(detail),
+            style = TextStyle(color = Chalk, fontSize = 10.sp, fontWeight = FontWeight.Bold),
+        )
+    }
+
+    Box(Modifier.fillMaxWidth().aspectRatio(1.5f)) {
         LivePitchImage(Modifier.matchParentSize())
+        // Ball, Spur und die beiden mitbewegten Labels werden in EINEM Draw-Pass gerendert.
+        // Animatable-Reads in der Draw-Phase invalidieren nur die Canvas-Ebene und lösen
+        // nicht mehr bei jedem Animationsframe Text-Layout und Compose-Recomposition aus.
         Canvas(Modifier.matchParentSize()) {
             val ww = size.width
             val hh = size.height
             fun p(x: Float, y: Float) = Offset(ww * engineProjectedX(x, y), hh * engineProjectedY(x, y))
 
-            val points = trail.takeLast(5).map { p(it.first, it.second) } + p(ballX.value, ballY.value)
+            val liveBallX = ballX.value
+            val liveBallY = ballY.value
+            val points = trail.takeLast(6).map { p(it.first, it.second) } + p(liveBallX, liveBallY)
             for (i in 1 until points.size) {
-                val alpha = (.08f + .105f * i).coerceAtMost(.56f)
-                drawLine(activeColor.copy(alpha = alpha), points[i - 1], points[i], (1f + i * .16f).dp.toPx())
+                val alpha = (.07f + .085f * i).coerceAtMost(.55f)
+                drawLine(activeColor.copy(alpha = alpha), points[i - 1], points[i], (1f + i * .14f).dp.toPx())
             }
-            val ball = p(ballX.value, ballY.value)
+
+            val ball = p(liveBallX, liveBallY)
             drawOval(Color.Black.copy(alpha = .34f), Offset(ball.x - 8.dp.toPx(), ball.y + 6.dp.toPx()), Size(16.dp.toPx(), 5.dp.toPx()))
             drawCircle(Color.White, 7.5.dp.toPx(), ball)
             drawCircle(Color(0xFF1C1C1C), 7.5.dp.toPx(), ball, style = Stroke(1.1.dp.toPx()))
             drawCircle(Color(0xFF252525), 2.1.dp.toPx(), Offset(ball.x - 1.dp.toPx(), ball.y - 1.dp.toPx()))
+
+            val padX = 6.dp.toPx()
+            val padY = 2.dp.toPx()
+            val clubW = clubLayout.size.width + padX * 2
+            val clubH = clubLayout.size.height + padY * 2
+            val clubLeft = (ball.x - clubW / 2f).coerceIn(4.dp.toPx(), (ww - clubW - 4.dp.toPx()).coerceAtLeast(4.dp.toPx()))
+            val clubTop = (ball.y - 43.dp.toPx()).coerceIn(4.dp.toPx(), hh - clubH - 4.dp.toPx())
+            drawRoundRect(Color.Black.copy(alpha = .52f), Offset(clubLeft, clubTop), Size(clubW, clubH), CornerRadius(5.dp.toPx()))
+            drawText(clubLayout, topLeft = Offset(clubLeft + padX, clubTop + padY))
+
+            val detailW = (detailLayout.size.width + padX * 2).coerceAtMost(ww - 8.dp.toPx())
+            val detailH = detailLayout.size.height + padY * 2
+            val detailLeft = (ball.x - detailW / 2f).coerceIn(4.dp.toPx(), (ww - detailW - 4.dp.toPx()).coerceAtLeast(4.dp.toPx()))
+            val detailTop = (ball.y + 16.dp.toPx()).coerceIn(4.dp.toPx(), hh - detailH - 4.dp.toPx())
+            drawRoundRect(Color.Black.copy(alpha = .46f), Offset(detailLeft, detailTop), Size(detailW, detailH), CornerRadius(5.dp.toPx()))
+            drawText(detailLayout, topLeft = Offset(detailLeft + padX, detailTop + padY))
         }
 
-        val sx = engineProjectedX(ballX.value, ballY.value).coerceIn(.06f, .94f)
-        val sy = engineProjectedY(ballX.value, ballY.value).coerceIn(.17f, .90f)
-        val club = if (activeId == m.homeId) homeShort else awayShort
-        Text(
-            club,
-            color = Chalk,
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.ExtraBold,
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.offset(x = maxWidth * sx - 42.dp, y = maxHeight * sy - 42.dp).width(84.dp).background(Color.Black.copy(alpha = .52f), RoundedCornerShape(5.dp)).padding(vertical = 2.dp),
-        )
         if (m.livePhase in setOf(LivePhase.FREE_KICK, LivePhase.DANGEROUS_FREE_KICK, LivePhase.PENALTY)) {
             Text(
                 m.livePhase.label.uppercase(),
@@ -209,19 +228,11 @@ private fun OpenPlayScene(
                 modifier = Modifier.align(Alignment.TopStart).padding(12.dp).background(Color.Black.copy(alpha = .66f), RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
             )
         }
-        Text(
-            m.liveDetail.takeIf { it.isNotBlank() } ?: m.livePhase.label,
-            color = Chalk,
-            textAlign = TextAlign.Center,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.offset(x = maxWidth * sx - 72.dp, y = maxHeight * sy + 15.dp).width(144.dp).background(Color.Black.copy(alpha = .46f), RoundedCornerShape(5.dp)).padding(horizontal = 4.dp, vertical = 2.dp),
-        )
     }
 }
 
 @Composable
-private fun ShotScene(w: World, m: LiveMatch, activeId: Int, shooterName: String) {
+private fun ShotScene(w: World, m: LiveMatch, activeId: Int, shooterName: String, frameDurationMs: Long) {
     val home = w.clubs.getValue(m.homeId)
     val away = w.clubs.getValue(m.awayId)
     val club = if (activeId == home.id) home else away
@@ -230,11 +241,12 @@ private fun ShotScene(w: World, m: LiveMatch, activeId: Int, shooterName: String
 
     LaunchedEffect(event, m.livePhase) {
         progress.snapTo(0f)
-        progress.animateTo(1f, tween(when (m.livePhase) {
+        val base = when (m.livePhase) {
             LivePhase.GOAL -> 1080
             LivePhase.SHOT_ON_TARGET -> 980
             else -> 880
-        }))
+        }
+        progress.animateTo(1f, tween((frameDurationMs * .72).toInt().coerceIn(base, 2200)))
     }
 
     val t = progress.value
@@ -383,14 +395,14 @@ private fun VarReviewScene(w: World, m: LiveMatch, activeId: Int, shooterName: S
 }
 
 @Composable
-private fun CornerScene(w: World, m: LiveMatch, activeId: Int, takerName: String) {
+private fun CornerScene(w: World, m: LiveMatch, activeId: Int, takerName: String, frameDurationMs: Long) {
     val home = w.clubs.getValue(m.homeId)
     val away = w.clubs.getValue(m.awayId)
     val club = if (activeId == home.id) home else away
     val goalRight = activeId == home.id
     val progress = remember(m.fixtureId, m.liveEventSerial) { Animatable(0f) }
     val lowerCorner = m.ballX > .5f
-    LaunchedEffect(m.liveEventSerial) { progress.snapTo(0f); progress.animateTo(1f, tween(1900)) }
+    LaunchedEffect(m.liveEventSerial, frameDurationMs) { progress.snapTo(0f); progress.animateTo(1f, tween((frameDurationMs * .82).toInt().coerceIn(900, 2300))) }
     val t = progress.value
     val startX = if (goalRight) .99f else .01f
     val startY = if (lowerCorner) .96f else .04f

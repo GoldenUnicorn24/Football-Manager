@@ -6,12 +6,19 @@ import kotlin.math.roundToInt
 /** Transferinteresse ist zielvereinsspezifisch und stabil aus der Welt ableitbar. */
 object TransferInterestSystem {
  data class Snapshot(val score:Int,val level:TransferInterestLevel,val reasons:List<String>)
+ data class Context(val targetClubId:Int,val bestCaByPosition:Map<Position,Int>)
+ fun context(w:World,targetClubId:Int):Context {
+  val best=w.players.values.asSequence().filter{!it.retired&&!it.youth&&it.clubId==targetClubId}.groupBy{it.position}.mapValues{(_,ps)->ps.maxOfOrNull{it.ca}?:0}
+  return Context(targetClubId,best)
+ }
  private fun deterministicAffinity(w:World,p:Player,targetClubId:Int):Int {
   var x=(w.seed xor (p.id.toLong()*0x9E3779B1L) xor (targetClubId.toLong()*0x85EBCA77L))
   x=x xor (x ushr 17);x*=0xC2B2AE3DL;x=x xor (x ushr 13)
   return (((x and 0x7fffffffL)%31L).toInt()-10)
  }
- fun snapshot(w:World,p:Player,targetClubId:Int):Snapshot {
+ fun snapshot(w:World,p:Player,targetClubId:Int):Snapshot = snapshot(w,p,context(w,targetClubId))
+ fun snapshot(w:World,p:Player,ctx:Context):Snapshot {
+  val targetClubId=ctx.targetClubId
   val target=w.clubs[targetClubId]?:return Snapshot(0,TransferInterestLevel.LOW,listOf("Verein unbekannt"))
   if(p.retired||p.clubId==targetClubId)return Snapshot(0,TransferInterestLevel.LOW,listOf("kein externer Transfer"))
   val current=w.clubs[p.clubId]
@@ -24,8 +31,7 @@ object TransferInterestSystem {
   val repGap=target.reputation-(current?.reputation?:target.reputation-5)
   score+=(repGap/2).coerceIn(-18,18)
   if(repGap>=12)reasons+="sportlicher Schritt nach oben" else if(repGap<=-14)reasons+="sportlicher Rückschritt"
-  val samePos=w.squad(targetClubId).filter{!it.youth&&!it.retired&&it.position==p.position&&it.id!=p.id}
-  val best=samePos.maxOfOrNull{it.ca}?:0
+  val best=ctx.bestCaByPosition[p.position]?:0
   if(best<=p.ca-4){score+=10;reasons+="sieht realistische Einsatzchancen"} else if(best>=p.ca+12){score-=8;reasons+="starke Konkurrenz auf seiner Position"}
   val age=w.calendar.season-p.birthYear
   if(age<=23&&target.academy.u23Quality>=60){score+=6;reasons+="gutes Entwicklungsumfeld"}
@@ -37,12 +43,19 @@ object TransferInterestSystem {
   return Snapshot(final,when{final>=85->TransferInterestLevel.DESPERATE;final>=74->TransferInterestLevel.VERY_INTERESTED;final>=62->TransferInterestLevel.INTERESTED;final>=48->TransferInterestLevel.OPEN;else->TransferInterestLevel.LOW},reasons.take(4))
  }
  fun score(w:World,p:Player,targetClubId:Int)=snapshot(w,p,targetClubId).score
- fun candidatesForClub(w:World,targetClubId:Int,minimum:Int=58):List<Pair<Player,Snapshot>> = w.players.values
-  .asSequence().filter{!it.retired&&!it.youth&&it.clubId!=targetClubId}.map{it to snapshot(w,it,targetClubId)}
+ fun score(w:World,p:Player,ctx:Context)=snapshot(w,p,ctx).score
+ fun candidatesForClub(w:World,targetClubId:Int,minimum:Int=58):List<Pair<Player,Snapshot>> {
+  val ctx=context(w,targetClubId)
+  return w.players.values
+  .asSequence().filter{!it.retired&&!it.youth&&it.clubId!=targetClubId}.map{it to snapshot(w,it,ctx)}
   .filter{it.second.score>=minimum}.sortedByDescending{it.second.score}.take(80).toList()
+ }
 }
 
 object AssistantCoachSystem {
+ fun substitutionAggressionBonus(a:AssistantCoachState)=when(a.profile){AssistantCoachProfile.TACTICIAN->1;AssistantCoachProfile.ANALYST->1;AssistantCoachProfile.MOTIVATOR->0;AssistantCoachProfile.DEVELOPER->-1;AssistantCoachProfile.BALANCED->0}
+ fun youthThresholdBonus(a:AssistantCoachState)=when(a.profile){AssistantCoachProfile.DEVELOPER->6;AssistantCoachProfile.MOTIVATOR->2;AssistantCoachProfile.ANALYST->1;else->0}
+ fun profileSummary(a:AssistantCoachState)=a.profile.description
  private fun weakestFocus(p:Player):Focus {
   val choices=when(p.position){
    Position.TW->listOf(Focus.KEEPING,Focus.VISION,Focus.TECHNIQUE)
@@ -60,6 +73,9 @@ object AssistantCoachSystem {
   val a=w.assistantCoach;val fatigue=c.dynamics.fatigueLoad;val opponent=nextOpponent(w,c)
   val plan=when{
    fatigue>=72->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.VIDEO,UnitType.OFF,UnitType.TACTICS,UnitType.RECOVERY,UnitType.SET_PIECES,UnitType.OFF),intensity=2)
+   a.profile==AssistantCoachProfile.ANALYST&&opponent!=null->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.VIDEO,UnitType.TACTICS,UnitType.POSITIONAL,UnitType.SET_PIECES,UnitType.VIDEO,UnitType.OFF),intensity=3,opponentPrep=true)
+   a.profile==AssistantCoachProfile.DEVELOPER&&a.trainingStyle==AssistantTrainingStyle.BALANCED->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.TECHNIQUE,UnitType.POSITIONAL,UnitType.MENTAL,UnitType.FINISHING,UnitType.RECOVERY,UnitType.OFF),intensity=3)
+   a.profile==AssistantCoachProfile.MOTIVATOR&&c.dynamics.chemistry<58->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.TEAM_BONDING,UnitType.TACTICS,UnitType.MENTAL,UnitType.TECHNIQUE,UnitType.RECOVERY,UnitType.OFF),intensity=2)
    a.trainingStyle==AssistantTrainingStyle.FITNESS->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.FITNESS,UnitType.DUELS,UnitType.TECHNIQUE,UnitType.FITNESS,UnitType.RECOVERY,UnitType.OFF),intensity=4)
    a.trainingStyle==AssistantTrainingStyle.DEVELOPMENT->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.TECHNIQUE,UnitType.POSITIONAL,UnitType.FINISHING,UnitType.TACTICS,UnitType.RECOVERY,UnitType.OFF),intensity=3)
    a.trainingStyle==AssistantTrainingStyle.YOUTH->TrainingPlan(mutableListOf(UnitType.RECOVERY,UnitType.TECHNIQUE,UnitType.POSITIONAL,UnitType.MENTAL,UnitType.TEAM_BONDING,UnitType.RECOVERY,UnitType.OFF),intensity=3)
@@ -74,34 +90,64 @@ object AssistantCoachSystem {
  }
  fun prepareUserPlan(w:World):TrainingPlan {
   val c=w.club();val p=recommendedPlan(w,c);w.training.days=p.days.toMutableList();w.training.intensity=p.intensity;w.training.opponentPrep=p.opponentPrep;w.training.extra=p.extra.toMutableList()
-  w.assistantCoach.lastPlanReason=when{c.dynamics.fatigueLoad>=72->"Belastung hoch: Regeneration und Video vor zusätzlicher Intensität.";w.assistantCoach.trainingStyle==AssistantTrainingStyle.MATCH_PREP->"Schwerpunkt auf Gegneranalyse, Taktik und Standards.";w.assistantCoach.trainingStyle==AssistantTrainingStyle.DEVELOPMENT->"Mehr Technik- und Positionsarbeit für langfristige Entwicklung.";w.assistantCoach.trainingStyle==AssistantTrainingStyle.YOUTH->"Technik, Mentalität und Positionsspiel mit Jugendfokus.";w.assistantCoach.trainingStyle==AssistantTrainingStyle.FITNESS->"Athletikblock mit zusätzlicher Regeneration.";else->"Ausgewogener Wochenplan anhand von Belastung und nächstem Gegner."}
+  w.assistantCoach.lastPlanReason=when{c.dynamics.fatigueLoad>=72->"Belastung hoch: Regeneration und Video vor zusätzlicher Intensität.";w.assistantCoach.profile==AssistantCoachProfile.ANALYST->"Analytiker-Profil: zusätzliche Gegneranalyse, Video und Standards.";w.assistantCoach.profile==AssistantCoachProfile.DEVELOPER&&w.assistantCoach.trainingStyle==AssistantTrainingStyle.BALANCED->"Entwickler-Profil: Technik, Rollenarbeit und langfristige Fortschritte.";w.assistantCoach.profile==AssistantCoachProfile.MOTIVATOR&&c.dynamics.chemistry<58->"Motivator-Profil: Belastung senken und Teamchemie stabilisieren.";w.assistantCoach.trainingStyle==AssistantTrainingStyle.MATCH_PREP->"Schwerpunkt auf Gegneranalyse, Taktik und Standards.";w.assistantCoach.trainingStyle==AssistantTrainingStyle.DEVELOPMENT->"Mehr Technik- und Positionsarbeit für langfristige Entwicklung.";w.assistantCoach.trainingStyle==AssistantTrainingStyle.YOUTH->"Technik, Mentalität und Positionsspiel mit Jugendfokus.";w.assistantCoach.trainingStyle==AssistantTrainingStyle.FITNESS->"Athletikblock mit zusätzlicher Regeneration.";else->"Ausgewogener Wochenplan anhand von Belastung und nächstem Gegner."}
   return w.training
  }
- fun prepareYouth(w:World,c:Club){if(c.id!=w.user.clubId||!w.assistantCoach.autoYouthTraining)return
-  val youths=w.squad(c.id).filter{it.youth&&!it.retired};var withPros=0
-  for(p in youths){val y=p.youthProfile;val readiness=YouthEngine.readiness(w,p);val aggressive=w.assistantCoach.youthAggression.coerceIn(1,5);val allow=readiness>=62-aggressive*3&&y.growthSpurtWeeks==0&&y.injuryGrowthRisk<68&&c.dynamics.fatigueLoad<78;y.seniorTraining=allow;if(allow)withPros++
+ fun prepareYouth(w:World,c:Club){
+  if(c.id!=w.user.clubId)return
+  val youths=w.squad(c.id).filter{it.youth&&!it.retired}
+  if(!w.assistantCoach.autoYouthTraining){youths.forEach{it.youthProfile.seniorTraining=false};w.assistantCoach.lastYouthReason="Jugend-Automatik aus: Der Co-Trainer weist aktuell kein zusätzliches Proftraining zu.";return}
+  var withPros=0
+  for(p in youths){val y=p.youthProfile;val readiness=YouthEngine.readiness(w,p);val aggressive=w.assistantCoach.youthAggression.coerceIn(1,5);val profileBoost=youthThresholdBonus(w.assistantCoach);val allow=readiness>=62-aggressive*3-profileBoost&&y.growthSpurtWeeks==0&&y.injuryGrowthRisk<68&&c.dynamics.fatigueLoad<78;y.seniorTraining=allow;if(allow)withPros++
    if(y.mentorId==0||w.players[y.mentorId]?.clubId!=c.id)y.mentorId=w.squad(c.id).filter{!it.youth&&w.calendar.season-it.birthYear>=25}.maxByOrNull{it.hidden.professionalism+it.hidden.consistency}?.id?:0
   }
-  w.assistantCoach.lastYouthReason="$withPros von ${youths.size} Jugendspielern trainieren dosiert bei den Profis; Wachstum, Reife und Verletzungsrisiko wurden berücksichtigt."
+  w.assistantCoach.lastYouthReason="$withPros von ${youths.size} Jugendspielern trainieren dosiert bei den Profis; zusätzlicher Academy-Entwicklungsbonus aktiv. ${w.assistantCoach.profile.label} berücksichtigt Wachstum, Reife und Verletzungsrisiko."
  }
 }
 
 object IntensiveTrainingSystem {
  fun cost(w:World,p:Player):Long{val base=when{w.club().tier>=8->1_500L;w.club().tier>=6->6_000L;w.club().tier>=4->25_000L;w.club().tier>=2->80_000L;else->160_000L};return (base+TransferEngine.marketValue(w,p)/180L).coerceAtLeast(base)}
- fun reason(w:World,playerId:Int):String?{val p=w.players[playerId]?:return "Spieler nicht gefunden.";val price=cost(w,p);return when{w.live!=null->"Nicht während eines laufenden Spiels.";p.clubId!=w.user.clubId||p.retired->"Spieler gehört nicht zum Verein.";w.intensiveTraining.any{it.playerId==playerId}->"Für diesen Spieler läuft bereits Intensivtraining.";w.intensiveTraining.size>=3->"Maximal drei Intensivprogramme gleichzeitig.";p.hidden.potential<=p.ca->"Der Spieler hat aktuell kaum Entwicklungsspielraum.";w.club().budget<price->"Vereinskasse reicht für ${price} € nicht aus.";else->null}}
- fun start(w:World,playerId:Int,focus:Focus){val reason=reason(w,playerId);require(reason==null){reason?:"Intensivtraining nicht möglich."};val p=w.players.getValue(playerId);val price=cost(w,p);w.club().budget-=price;w.intensiveTraining.add(IntensiveTrainingProject(playerId,focus,4,4,price,0.0,w.calendar.absoluteWeek));w.news("Intensivtraining gestartet","${p.name}: vier Wochen ${focus.label}. Kosten ${price} €. Mehr Entwicklung, aber höhere Belastung.","normal")}
- fun applyWeek(w:World,c:Club,p:Player,report:TrainingReport,rng:SeededRandom){val project=w.intensiveTraining.firstOrNull{it.playerId==p.id}?:return;if(p.injuryWeeks>0)return
-  val age=w.calendar.season-p.birthYear;val youthFactor=when{age<=19->1.18;age<=23->1.08;age>=31->.72;else->1.0};val staff=.65+c.dynamics.staffQuality/180.0;val facility=1+c.stadium.training/220.0+c.stadium.gym/400.0;project.progress+=.32*youthFactor*staff*facility
-  p.fitness=(p.fitness-3.0).coerceAtLeast(20.0);p.sharpness=(p.sharpness+2).coerceAtMost(100)
-  while(project.progress>=1.0){project.progress-=1.0;if(p.attributes.improve(project.focus,p.hidden.potential)&&c.id==w.user.clubId)report.gains.add("${p.name}: Intensivtraining ${project.focus.label} +1")}
-  val risk=.012*(1+p.hidden.injuryProneness/80.0)*(1-c.stadium.medicine*.005)*(if(p.youthProfile.growthSpurtWeeks>0)1.8 else 1.0);if(rng.chance(risk)){p.injuryWeeks=maxOf(p.injuryWeeks,2);p.injury="Überlastung im Intensivtraining";if(c.id==w.user.clubId)report.injuries.add("${p.name}: Überlastung durch Intensivtraining")}
-  project.weeksLeft--;if(project.weeksLeft<=0){w.intensiveTraining.remove(project);p.hidden.development=(p.hidden.development+1).coerceAtMost(100);if(c.id==w.user.clubId)w.news("Intensivtraining abgeschlossen","${p.name} beendet das vierwöchige Programm ${project.focus.label}. Entwicklung wurde gezielt beschleunigt.","good")}
+ fun potentialCost(w:World,p:Player):Long=(cost(w,p)*3L/2L).coerceAtLeast(cost(w,p)+1_000L)
+ private fun commonReason(w:World,playerId:Int,price:Long):String?{val p=w.players[playerId]?:return "Spieler nicht gefunden.";return when{w.live!=null->"Nicht während eines laufenden Spiels.";p.clubId!=w.user.clubId||p.retired->"Spieler gehört nicht zum Verein.";w.intensiveTraining.any{it.playerId==playerId}->"Für diesen Spieler läuft bereits Intensivtraining.";w.intensiveTraining.size>=3->"Maximal drei Intensivprogramme gleichzeitig.";w.club().budget<price->"Vereinskasse reicht für ${price} € nicht aus.";else->null}}
+ fun reason(w:World,playerId:Int):String?{val p=w.players[playerId]?:return "Spieler nicht gefunden.";return commonReason(w,playerId,cost(w,p))?:if(p.hidden.potential<=p.ca)"Natürliches Potenzial erreicht. Nutze Potenzialtraining, um die Entwicklungsgrenze gezielt anzuheben." else null}
+ fun potentialReason(w:World,playerId:Int):String?{val p=w.players[playerId]?:return "Spieler nicht gefunden.";return commonReason(w,playerId,potentialCost(w,p))?:if(p.hidden.potential>=99)"Das reguläre Maximalpotenzial 99 ist bereits erreicht." else null}
+ fun start(w:World,playerId:Int,focus:Focus){val reason=reason(w,playerId);require(reason==null){reason?:"Intensivtraining nicht möglich."};val p=w.players.getValue(playerId);val price=cost(w,p);w.club().budget-=price;w.intensiveTraining.add(IntensiveTrainingProject(playerId,focus,4,4,price,0.0,w.calendar.absoluteWeek,false));w.news("Intensivtraining gestartet","${p.name}: vier Wochen ${focus.label}. Kosten ${price} €. Mehr Entwicklung, aber höhere Belastung.","normal")}
+ fun startPotential(w:World,playerId:Int,focus:Focus){val reason=potentialReason(w,playerId);require(reason==null){reason?:"Potenzialtraining nicht möglich."};val p=w.players.getValue(playerId);val price=potentialCost(w,p);w.club().budget-=price;w.intensiveTraining.add(IntensiveTrainingProject(playerId,focus,4,4,price,0.0,w.calendar.absoluteWeek,true));val age=w.calendar.season-p.birthYear;val youthNote=if(p.youth&&age<20)" Unter 20: stark beschleunigte Potenzial- und Ratingentwicklung." else "";w.news("Potenzialtraining gestartet","${p.name}: vier Wochen gezielte ${focus.label}-Förderung. Ziel ist eine höhere Entwicklungsgrenze plus echte Attributentwicklung.$youthNote Kosten ${price} €.","normal")}
+ private fun raiseCoreRating(p:Player,cap:Int,targetGain:Int):Int{
+  val start=p.ca;val target=(start+targetGain).coerceAtMost(cap.coerceIn(1,99));if(target<=start)return 0
+  fun up(get:()->Int,set:(Int)->Unit):Boolean{val v=get();if(v>=cap.coerceIn(1,99))return false;set(v+1);return true}
+  fun round():Boolean=when(p.position){
+   Position.TW->listOf(up({p.attributes.keeping}){p.attributes.keeping=it},up({p.attributes.vision}){p.attributes.vision=it},up({p.attributes.passing}){p.attributes.passing=it},up({p.attributes.strength}){p.attributes.strength=it},up({p.attributes.pace}){p.attributes.pace=it}).any{it}
+   Position.IV->listOf(up({p.attributes.tackling}){p.attributes.tackling=it},up({p.attributes.heading}){p.attributes.heading=it},up({p.attributes.strength}){p.attributes.strength=it},up({p.attributes.vision}){p.attributes.vision=it},up({p.attributes.pace}){p.attributes.pace=it}).any{it}
+   Position.LV,Position.RV->listOf(up({p.attributes.tackling}){p.attributes.tackling=it},up({p.attributes.pace}){p.attributes.pace=it},up({p.attributes.stamina}){p.attributes.stamina=it},up({p.attributes.passing}){p.attributes.passing=it},up({p.attributes.technique}){p.attributes.technique=it}).any{it}
+   Position.DM->listOf(up({p.attributes.tackling}){p.attributes.tackling=it},up({p.attributes.passing}){p.attributes.passing=it},up({p.attributes.vision}){p.attributes.vision=it},up({p.attributes.stamina}){p.attributes.stamina=it},up({p.attributes.strength}){p.attributes.strength=it}).any{it}
+   Position.ZM->listOf(up({p.attributes.passing}){p.attributes.passing=it},up({p.attributes.vision}){p.attributes.vision=it},up({p.attributes.technique}){p.attributes.technique=it},up({p.attributes.stamina}){p.attributes.stamina=it},up({p.attributes.tackling}){p.attributes.tackling=it}).any{it}
+   Position.OM->listOf(up({p.attributes.vision}){p.attributes.vision=it},up({p.attributes.technique}){p.attributes.technique=it},up({p.attributes.passing}){p.attributes.passing=it},up({p.attributes.finishing}){p.attributes.finishing=it}).any{it}
+   Position.LA,Position.RA->listOf(up({p.attributes.pace}){p.attributes.pace=it},up({p.attributes.technique}){p.attributes.technique=it},up({p.attributes.passing}){p.attributes.passing=it},up({p.attributes.finishing}){p.attributes.finishing=it},up({p.attributes.stamina}){p.attributes.stamina=it}).any{it}
+   Position.ST->listOf(up({p.attributes.finishing}){p.attributes.finishing=it},up({p.attributes.pace}){p.attributes.pace=it},up({p.attributes.technique}){p.attributes.technique=it},up({p.attributes.heading}){p.attributes.heading=it},up({p.attributes.strength}){p.attributes.strength=it}).any{it}
+  }
+  var guard=0;while(p.ca<target&&guard++<12){if(!round())break};return (p.ca-start).coerceAtLeast(0)
  }
-}
+ fun applyWeek(w:World,c:Club,p:Player,report:TrainingReport,rng:SeededRandom){val project=w.intensiveTraining.firstOrNull{it.playerId==p.id}?:return;if(p.injuryWeeks>0)return
+  val age=w.calendar.season-p.birthYear;val youngYouth=p.youth&&age<20;val youthFactor=when{age<=19->1.18;age<=23->1.08;age>=31->.72;else->1.0};val staff=.65+c.dynamics.staffQuality/180.0;val facility=1+c.stadium.training/220.0+c.stadium.gym/400.0;val potentialYouthBoost=if(project.raisesPotential&&youngYouth)1.65 else 1.0;project.progress+=.32*youthFactor*staff*facility*potentialYouthBoost
+  p.fitness=(p.fitness-3.0).coerceAtLeast(20.0);p.sharpness=(p.sharpness+2).coerceAtMost(100)
+  while(project.progress>=1.0){project.progress-=1.0;if(p.attributes.improve(project.focus,p.hidden.potential)&&c.id==w.user.clubId)report.gains.add("${p.name}: ${if(project.raisesPotential)"Potenzialtraining" else "Intensivtraining"} ${project.focus.label} +1")}
+  val risk=.012*(1+p.hidden.injuryProneness/80.0)*(1-c.stadium.medicine*.005)*(if(p.youthProfile.growthSpurtWeeks>0)1.8 else 1.0);if(rng.chance(risk)){p.injuryWeeks=maxOf(p.injuryWeeks,2);p.injury="Überlastung im Intensivtraining";if(c.id==w.user.clubId)report.injuries.add("${p.name}: Überlastung durch Intensivtraining")}
+  project.weeksLeft--;if(project.weeksLeft<=0){w.intensiveTraining.remove(project);p.hidden.development=(p.hidden.development+1).coerceAtMost(100);var potentialGain=0;var ratingGain=0;if(project.raisesPotential&&p.hidden.potential<99){val beforePotential=p.hidden.potential;val beforeRating=p.ca;val academyBonus=if(youngYouth&&c.stadium.youth>=70)1 else 0;val eliteBonus=if(youngYouth&&p.hidden.development>=80&&p.hidden.professionalism>=70)1 else 0;val legacyYouthBonus=if(!youngYouth&&p.youth&&age<=20&&p.hidden.development>=75&&c.stadium.youth>=70)1 else 0;val requestedGain=if(youngYouth)3+academyBonus+eliteBonus else 1+legacyYouthBonus;p.hidden.potential=(p.hidden.potential+requestedGain).coerceAtMost(99);potentialGain=p.hidden.potential-beforePotential;val focused=p.attributes.improve(project.focus,p.hidden.potential);val targetRatingGain=if(youngYouth)2+academyBonus+eliteBonus else 1;val alreadyGained=(p.ca-beforeRating).coerceAtLeast(0);if(alreadyGained<targetRatingGain)raiseCoreRating(p,p.hidden.potential,targetRatingGain-alreadyGained);ratingGain=(p.ca-beforeRating).coerceAtLeast(0);if(c.id==w.user.clubId){if(focused)report.gains.add("${p.name}: neue Entwicklungsgrenze genutzt · ${project.focus.label} +1");if(ratingGain>0)report.gains.add("${p.name}: Potenzialtraining · Gesamtstärke +$ratingGain")}}
+   if(c.id==w.user.clubId)w.news("Potenzialtraining abgeschlossen",if(youngYouth)"${p.name} beendet die vierwöchige Jugend-Potenzialförderung. Entwicklungsgrenze ${if(potentialGain>0)"+$potentialGain auf ${p.hidden.potential}" else "bleibt bei ${p.hidden.potential}"}; aktuelle Gesamtstärke ${if(ratingGain>0)"+$ratingGain auf ${p.ca}" else "bleibt bei ${p.ca}"}." else "${p.name} beendet die vierwöchige Potenzialförderung. Entwicklungsgrenze ${if(potentialGain>0)"+$potentialGain auf ${p.hidden.potential}" else "bleibt bei ${p.hidden.potential}"}; aktuelle Gesamtstärke ${if(ratingGain>0)"+$ratingGain auf ${p.ca}" else "bleibt bei ${p.ca}"}.","good")
+  } else if(c.id==w.user.clubId)w.news("Intensivtraining abgeschlossen","${p.name} beendet das vierwöchige Programm ${project.focus.label}. Entwicklung wurde gezielt beschleunigt.","good")}
+ }
 
 object CustomYouthSystem {
  fun remainingSlots(w:World):Int{val a=w.club().academy;if(a.customIntakeSeason!=w.calendar.season)return 2;return (2-a.customIntakeUsed).coerceAtLeast(0)}
- private fun compatible(identity:AcademyIdentity,role:PlayerRole)=when(identity){AcademyIdentity.POSSESSION->role in listOf(PlayerRole.PLAYMAKER,PlayerRole.DEEP_PLAYMAKER,PlayerRole.BALL_PLAYING_CB,PlayerRole.INVERTED_FULLBACK);AcademyIdentity.ATHLETIC->role in listOf(PlayerRole.PRESSING_FORWARD,PlayerRole.OVERLAPPING_FULLBACK,PlayerRole.BOX_TO_BOX);AcademyIdentity.STREET->role in listOf(PlayerRole.INSIDE_FORWARD,PlayerRole.PLAYMAKER,PlayerRole.POACHER);AcademyIdentity.DEFENSIVE->role in listOf(PlayerRole.STOPPER,PlayerRole.ANCHOR,PlayerRole.INVERTED_FULLBACK);AcademyIdentity.PRESSING->role in listOf(PlayerRole.PRESSING_FORWARD,PlayerRole.BOX_TO_BOX,PlayerRole.OVERLAPPING_FULLBACK);AcademyIdentity.BALANCED->true}
+
+ fun searchCost(w:World,age:Int=16,position:Position=Position.ZM,foot:Foot=Foot.RIGHT,blueprint:YouthBlueprint=YouthBlueprint.BALANCED,role:PlayerRole=PlayerRole.PLAYMAKER):Long{
+  val c=w.club();val base=when{c.tier>=8->2_000L;c.tier>=6->7_500L;c.tier>=4->25_000L;c.tier>=2->75_000L;else->150_000L}
+  val specificity=1.0+(if(age!=16).08 else 0.0)+(if(foot==Foot.BOTH).18 else 0.0)+(if(blueprint!=YouthBlueprint.BALANCED).10 else 0.0)+(if(role!=PlayerRole.AUTO).10 else 0.0)+(if(position==Position.TW).06 else 0.0)
+  val networkDiscount=(1.0-(c.academy.scouting+c.academy.partnerNetwork).coerceAtMost(160)/800.0).coerceAtLeast(.78)
+  return (base*specificity*networkDiscount).toLong().coerceAtLeast(1_000L)
+ }
+  private fun compatible(identity:AcademyIdentity,role:PlayerRole)=when(identity){AcademyIdentity.POSSESSION->role in listOf(PlayerRole.PLAYMAKER,PlayerRole.DEEP_PLAYMAKER,PlayerRole.BALL_PLAYING_CB,PlayerRole.INVERTED_FULLBACK);AcademyIdentity.ATHLETIC->role in listOf(PlayerRole.PRESSING_FORWARD,PlayerRole.OVERLAPPING_FULLBACK,PlayerRole.BOX_TO_BOX);AcademyIdentity.STREET->role in listOf(PlayerRole.INSIDE_FORWARD,PlayerRole.PLAYMAKER,PlayerRole.POACHER);AcademyIdentity.DEFENSIVE->role in listOf(PlayerRole.STOPPER,PlayerRole.ANCHOR,PlayerRole.INVERTED_FULLBACK);AcademyIdentity.PRESSING->role in listOf(PlayerRole.PRESSING_FORWARD,PlayerRole.BOX_TO_BOX,PlayerRole.OVERLAPPING_FULLBACK);AcademyIdentity.BALANCED->true}
  fun compatibility(w:World,role:PlayerRole):Int{val c=w.club();return (48+c.academy.u19Quality/4+c.dynamics.staffQuality/5+(if(compatible(c.academy.identity,role))15 else -5)).coerceIn(20,95)}
  private fun attrs(base:Int,pos:Position,blueprint:YouthBlueprint):Attributes{
   fun v(d:Int=0)=(base+d).coerceIn(10,58)
@@ -111,12 +157,12 @@ object CustomYouthSystem {
   return a
  }
  fun create(w:World,first:String,last:String,nationality:String,age:Int,position:Position,foot:Foot,blueprint:YouthBlueprint,role:PlayerRole):Player{
-  require(w.live==null){"Nicht während eines laufenden Spiels."};require(first.trim().length in 2..30&&last.trim().length in 2..30){"Vor- und Nachname müssen 2 bis 30 Zeichen haben."};require(age in 15..17){"Jugendspieler müssen 15 bis 17 Jahre alt sein."};require(remainingSlots(w)>0){"Die zwei individuellen Jugendplätze dieser Saison sind bereits belegt."}
-  val c=w.club();YouthEngine.configureClub(c);var made:Player?=null
+  require(w.live==null){"Nicht während eines laufenden Spiels."};require(first.trim().length in 2..30&&last.trim().length in 2..30){"Vor- und Nachname müssen 2 bis 30 Zeichen haben."};require(age in 15..17){"Jugendspieler müssen 15 bis 17 Jahre alt sein."};require(remainingSlots(w)>0){"Die zwei gezielten Talentsuchen dieser Saison sind bereits belegt."}
+  val c=w.club();val fee=searchCost(w,age,position,foot,blueprint,role);require(c.budget>=fee){"Für die gezielte Talentsuche werden $fee € benötigt."};c.budget-=fee;YouthEngine.configureClub(c);var made:Player?=null
   w.random{rng->val compatibility=compatibility(w,role);val base=(24+c.academy.u19Quality/10+c.stadium.youth/12+rng.int(-2,3)).coerceIn(22,44);val hidden=Hidden(potential=55,injuryProneness=rng.int(12,48),consistency=rng.int(40,72),professionalism=rng.int(42,76),loyalty=rng.int(45,88),ambition=rng.int(42,82),development=rng.int(55,84),pressure=rng.int(35,72));val p=Player(w.nextIds.player++,c.id,first.trim(),last.trim(),w.calendar.season-age,nationality=nationality.trim().ifBlank{"Deutschland"},foot=foot,position=position,number=(1..99).firstOrNull{n->w.squad(c.id).none{it.number==n}}?:99,attributes=attrs(base,position,blueprint),hidden=hidden,fitness=92.0,morale=68,form=6.2,sharpness=45,youth=true,wage=0,homegrownClubId=c.id,role=PlayerRole.AUTO)
    val learn=(48+c.academy.scouting/5+compatibility/10+rng.int(0,14)).coerceAtMost(91);p.youthProfile=YouthProfile(learning=learn,maturity=rng.int(32,58),path=when(rng.int(0,99)){in 0..13->DevelopmentPath.EARLY;in 14..31->DevelopmentPath.LATE;in 32..37->DevelopmentPath.PLATEAU;else->DevelopmentPath.NORMAL},familySupport=rng.int(45,90),adviserPressure=rng.int(15,62),schoolStress=rng.int(15,55),injuryGrowthRisk=rng.int(12,42),seniorTraining=false,roleSpark=role,confidence=rng.int(48,68),homegrownYears=1)
    val potentialCap=(70+c.academy.scouting/5).coerceAtMost(90);p.hidden.potential=(p.ca+12+learn/12+rng.int(0,7)).coerceAtMost(potentialCap).coerceAtLeast(p.ca+8);w.players[p.id]=p;made=p}
-  if(c.academy.customIntakeSeason!=w.calendar.season){c.academy.customIntakeSeason=w.calendar.season;c.academy.customIntakeUsed=0};c.academy.customIntakeUsed++;val p=made!!;w.news("Jugendspieler aufgenommen","${p.name}, ${age} Jahre, ${position.label}. Grundstärke ${p.ca}; Entwicklung hängt jetzt von Academy, Co-Trainer, Einsätzen und Training ab.","good");return p
+  if(c.academy.customIntakeSeason!=w.calendar.season){c.academy.customIntakeSeason=w.calendar.season;c.academy.customIntakeUsed=0};c.academy.customIntakeUsed++;val p=made!!;w.news("Gezielte Talentsuche erfolgreich","Scoutingauftrag ${fee} €: ${p.name}, ${age} Jahre, ${position.label}. Der Scout fand das gewünschte Profil; Grundstärke ${p.ca}, Potential bleibt bewusst unsicher und Entwicklung muss erarbeitet werden.","good");return p
  }
 }
 

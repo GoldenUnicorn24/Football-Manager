@@ -174,7 +174,7 @@ private class MatchAudioEngine(private val context:android.content.Context) {
   enabled=false;foreground=false;stopAll();released=true;runCatching{soundPool.release()}
  }
  private fun audible()=enabled&&foreground&&!released
- private fun restoreAmbience(){ambiencePlayer?.setVolume(normalAmbience,normalAmbience)}
+ private fun restoreAmbience(){ambiencePlayer?.let{runCatching{it.setVolume(normalAmbience,normalAmbience)}}}
  private fun stopTransient(){
   handler.removeCallbacksAndMessages(null)
   activeStreams.forEach{runCatching{soundPool.stop(it)}};activeStreams.clear()
@@ -187,12 +187,13 @@ private class MatchAudioEngine(private val context:android.content.Context) {
  }
  private fun startAmbience(){
   if(!audible()||ambiencePlayer!=null)return
-  val player=android.media.MediaPlayer.create(context,de.gruenderelf.app.R.raw.stadium_ambience)?:return
-  player.isLooping=true;player.setVolume(normalAmbience,normalAmbience);ambiencePlayer=player;player.start()
+  val player=runCatching{android.media.MediaPlayer.create(context,de.gruenderelf.app.R.raw.stadium_ambience)}.getOrNull()?:return
+  val started=runCatching{player.isLooping=true;player.setVolume(normalAmbience,normalAmbience);player.start();true}.getOrElse{false}
+  if(started)ambiencePlayer=player else runCatching{player.release()}
  }
  private fun duckAmbience(level:Float,durationMs:Long){
   val player=ambiencePlayer?:return
-  player.setVolume(level,level)
+  runCatching{player.setVolume(level,level)}
   handler.postDelayed({if(audible())restoreAmbience()},durationMs)
  }
  private fun playWhistle(cue:MatchSoundCue){
@@ -202,7 +203,7 @@ private class MatchAudioEngine(private val context:android.content.Context) {
  private fun playSample(key:String,left:Float,right:Float=left,rate:Float=1f){
   if(!audible())return
   val id=sampleIds[key]?:return
-  val stream=soundPool.play(id,left.coerceIn(0f,1f),right.coerceIn(0f,1f),1,0,rate.coerceIn(.5f,2f))
+  val stream=runCatching{soundPool.play(id,left.coerceIn(0f,1f),right.coerceIn(0f,1f),1,0,rate.coerceIn(.5f,2f))}.getOrDefault(0)
   if(stream!=0){activeStreams+=stream;handler.postDelayed({activeStreams.remove(stream)},6500L)}
  }
  private fun later(delay:Long,block:()->Unit){handler.postDelayed({if(audible())block()},delay)}
