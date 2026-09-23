@@ -142,7 +142,7 @@ object SeasonEngine {
   if(top?.id==w.user.playerId&&w.self().stats.goals>0)awards.add("Torjäger: ${w.self().stats.goals} Tore")
   w.history.add(SeasonHistory(w.calendar.season,w.user.clubId,WorldFactory.leagueName(w,tier),rank,row.points,row.goalsFor,outcome,awards))
   for((leagueTier,leagueRows) in tables){leagueRows.firstOrNull()?.let{CompetitionPrizeSystem.award(w,"${w.calendar.season}:league:$leagueTier",it.clubId,CompetitionPrizeSystem.leagueChampionPrize(w,leagueTier))}}
-  val cupWinner=CompetitionPrizeSystem.winnerId(w,CompetitionType.NATIONAL_CUP);if(cupWinner!=0)CompetitionPrizeSystem.award(w,"${w.calendar.season}:cup",cupWinner,if(w.privateTopClubMode)6_000_000L else 500_000L)
+  for((cupId,cupWinner) in CompetitionPrizeSystem.nationalCupWinners(w)){val key=if(cupId.isBlank())"${w.calendar.season}:cup" else "${w.calendar.season}:cup:$cupId";CompetitionPrizeSystem.award(w,key,cupWinner,if(w.privateTopClubMode)6_000_000L else 500_000L)}
   val clWinner=CompetitionPrizeSystem.winnerId(w,CompetitionType.CHAMPIONS_LEAGUE);if(clWinner!=0)CompetitionPrizeSystem.award(w,"${w.calendar.season}:cl",clWinner,25_000_000L)
   val elWinner=CompetitionPrizeSystem.winnerId(w,CompetitionType.EUROPA_LEAGUE);if(elWinner!=0)CompetitionPrizeSystem.award(w,"${w.calendar.season}:el",elWinner,12_000_000L)
   // Im privaten Topclub-Spielstand bleibt die 12er-Eliteliga bewusst stabil. Dadurch werden
@@ -165,7 +165,7 @@ object SeasonEngine {
    }
    w.leagues.filter{it.tier in 1..5}.forEach{l->l.clubIds=w.clubs.values.filter{it.tier==l.tier}.map{it.id}.sorted().toMutableList()}
   }else w.clubs.values.filter{it.tier in 1..10}.forEach{it.form.clear()}
-  if(w.privateTopClubMode)check(w.leagues.all{it.clubIds.size in 18..20&&it.clubIds.size%2==0}) else check(w.leagues.all{it.clubIds.size==12})
+  if(w.privateTopClubMode)check(w.leagues.all{it.clubIds.size in 10..24&&it.clubIds.size%2==0}) else check(w.leagues.all{it.clubIds.size==12})
   w.random{rng->
    for(p in w.players.values.toList()){
     if(p.retired)continue
@@ -181,7 +181,7 @@ object SeasonEngine {
    w.calendar.season++
    YouthEngine.newSeason(w,rng)
    for(c in w.clubs.values){
-    if(c.tier in 1..10)repeat((if(c.stadium.youth>=28)4 else 2)+(if(c.youthPhilosophy=="Breitensport")1 else 0)){WorldFactory.spawnYouth(w,c,rng)}
+    if((w.privateTopClubMode&&w.leagues.any{it.tier==c.tier})||(!w.privateTopClubMode&&c.tier in 1..10))repeat((if(c.stadium.youth>=28)4 else 2)+(if(c.youthPhilosophy=="Breitensport")1 else 0)){WorldFactory.spawnYouth(w,c,rng)}
     if(c.id!=w.user.clubId){w.squad(c.id).filter{it.youth&&w.calendar.season-it.birthYear>=17}.sortedByDescending{it.ca}.take(2).forEach{it.youth=false};val level=if(w.privateTopClubMode)RealModeDatabase.levelForTier(c.tier) else c.tier;while(w.squad(c.id).count{!it.youth}<20){val p=WorldFactory.generatePlayer(w.nextIds.player++,c.id,level,rng.pick(Position.entries),rng,w.calendar.season);w.players[p.id]=p}}
     WorldFactory.autoLineup(w,c.id)
    }
