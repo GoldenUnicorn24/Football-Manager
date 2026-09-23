@@ -135,7 +135,7 @@ object MatchAnalysisSystem {
     )
    }
    .sortedByDescending { it.count }
-   .take(24)
+   .take(22)
 
  /** Original v0.5.18 node positions: average all real pass starts/receipts per player. */
  fun passNetworkNodes(events:List<PassEvent>,clubId:Int):List<PassNetworkNode> {
