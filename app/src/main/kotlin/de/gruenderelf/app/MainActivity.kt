@@ -55,6 +55,43 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
     }
     if(state.busy)LinearProgressIndicator(modifier=Modifier.fillMaxWidth().align(Alignment.TopCenter))
    }}
+   if(w.user.lastSeenChangelogVersion<522){
+    AlertDialog(
+     onDismissRequest={vm.action{it.user.lastSeenChangelogVersion=522}},
+     title={Text("Neu in Gründerelf v0.5.22")},
+     text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){
+      Text("Recovery der ursprünglichen v0.5.18-Systeme abgeschlossen.",color=Grass)
+      Text("• eigene Spieler aktiv mehreren Vereinen anbieten und Angebote getrennt verhandeln")
+      Text("• Bosman-Vorverträge, Vertragsenden und Vertragsverlängerungen")
+      Text("• Jugend-Transfermarkt sowie Profis/U19/U23 als Zielkader")
+      Text("• Medizincheck/Registrierung bleibt bei Blockaden erhalten und kann erneut geprüft werden")
+      Text("• xG-Verlauf, Passnetz und korrigierte Kader-/Mehr-Badges")
+      Text("• zusätzlich bleiben der große Ligen-Ausbau, internationale Qualifikation, Club World Cup und die optionale Krone der Kontinente erhalten",color=Muted)
+     }},
+     confirmButton={Button({vm.action{it.user.lastSeenChangelogVersion=522}}){Text("Verstanden")}}
+    )
+   }else if(w.user.tutorialEnabled&&!w.user.tutorialCompleted){
+    val tutorialStep=w.user.tutorialStep.coerceIn(0,4)
+    val tutorialTitles=listOf("1/5 · Startseite","2/5 · Profikader & Jugend","3/5 · Training & Entwicklung","4/5 · Transfers & Jugendmarkt","5/5 · Live-Spiel")
+    val tutorialTexts=listOf(
+     "Die Startseite ist deine Manager-Zentrale. Prüfe nächstes Spiel, Aufgaben, Finanzen und Fitness. Badges zeigen nur neue Hinweise.",
+     "Im Kader verwaltest du Profis, Rollen und Verträge. U19 und U23 sind eigene Nachwuchsmannschaften; temporär nominierte Jugendspieler kehren nach dem Spiel zurück.",
+     "Training, Co-Trainer-Automatik und gezielte Potenzialförderung beeinflussen aktuelle Stärke und Entwicklung. U20-Spieler profitieren besonders stark.",
+     "Scouting, Merkliste, Jugendmarkt, mehrere Angebote für eigene Spieler, Bosman-Vorverträge sowie Medizincheck und Registrierung greifen hier zusammen.",
+     "Live- und Schnellsimulation nutzen dieselbe Match-KI. Du kannst Taktik, Sofort-Anweisungen und Wechsel steuern; danach stehen xG-Verlauf und Passnetz bereit."
+    )
+    AlertDialog(
+     onDismissRequest={},
+     title={Text(tutorialTitles[tutorialStep])},
+     text={Text(tutorialTexts[tutorialStep])},
+     confirmButton={Button({
+      val nextRoute=when(tutorialStep){0->"kader";1->"training";2->"transfers";3->"spiel";else->null}
+      vm.action{world->if(tutorialStep>=4){world.user.tutorialCompleted=true;world.user.tutorialEnabled=false}else world.user.tutorialStep=tutorialStep+1}
+      nextRoute?.let{nav.navigate(it){launchSingleTop=true}}
+     }){Text(if(tutorialStep>=4)"Tutorial abschließen" else "Weiter")}},
+     dismissButton={TextButton({vm.action{it.user.tutorialCompleted=true;it.user.tutorialEnabled=false}}){Text("Überspringen")}}
+    )
+   }
    BackHandler(route=="home"){exitConfirm=true}
   }
   state.error?.let{AlertDialog(onDismissRequest={vm.clearError()},title={Text("Das hat nicht geklappt")},text={Text(it)},confirmButton={TextButton({vm.clearError()}){Text("Verstanden")}})}
