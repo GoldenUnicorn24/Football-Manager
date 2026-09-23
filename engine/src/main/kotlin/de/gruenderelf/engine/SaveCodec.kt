@@ -24,7 +24,7 @@ object SaveCodec {
   require(w.calendar.matchday in 1..userRounds){"Ungültiger Spieltag."}
   val leagueClubIds=w.leagues.flatMap{it.clubIds}.toSet()
   if(realMode){
-   require(w.leagues.map{it.tier}.toSet()==(1..w.leagues.size).toSet()&&w.leagues.all{it.clubIds.size in 18..20&&it.clubIds.size%2==0}&&leagueClubIds.size==w.leagues.sumOf{it.clubIds.size}&&leagueClubIds.all{it in w.clubs}){"Real-Modus-Ligastruktur beschädigt."}
+   require(w.leagues.map{it.tier}.toSet()==(1..w.leagues.size).toSet()&&w.leagues.all{it.clubIds.size>=10&&it.clubIds.size%2==0}&&leagueClubIds.size==w.leagues.sumOf{it.clubIds.size}&&leagueClubIds.all{it in w.clubs}){"Real-Modus-Ligastruktur beschädigt."}
   }else require(w.leagues.map{it.tier}.toSet()==(1..10).toSet()&&w.leagues.all{it.clubIds.size==12}&&leagueClubIds.size==120&&leagueClubIds.all{it in w.clubs}){"Ligastruktur beschädigt."}
   WorldFactory.migrateGeneratedIdentity(w)
   CompetitionEngine.ensureForLoadedWorld(w)
