@@ -153,10 +153,9 @@ private fun liveDelayMs(phase: LivePhase,speed: MatchSpeed): Long {
 
 @Composable fun MatchScreen(state: GameState,vm: GameViewModel,speed: MatchSpeed){
  val w=state.world?:return;val m=w.live;var running by rememberSaveable{mutableStateOf(true)};var liveTab by rememberSaveable(m?.fixtureId){mutableIntStateOf(0)};var showLiveGraphic by rememberSaveable(m?.fixtureId){mutableStateOf(true)};val lifecycle=LocalLifecycleOwner.current.lifecycle
- DisposableEffect(lifecycle){val observer=LifecycleEventObserver{_,e->if(e==Lifecycle.Event.ON_PAUSE||e==Lifecycle.Event.ON_STOP)running=false};lifecycle.addObserver(observer);onDispose{lifecycle.removeObserver(observer)}}
+ DisposableEffect(lifecycle,m?.fixtureId){val observer=LifecycleEventObserver{_,e->if(e==Lifecycle.Event.ON_PAUSE||e==Lifecycle.Event.ON_STOP){running=false;vm.stopLiveRunner()}};lifecycle.addObserver(observer);onDispose{lifecycle.removeObserver(observer);vm.stopLiveRunner()}}
  LaunchedEffect(m?.incidentPause,m?.assistantSubPending){if(m?.incidentPause==true||m?.assistantSubPending==true)running=false}
- // Der Match-Timer setzt absichtlich keinen globalen busy/loading-Zustand.
- LaunchedEffect(state.revision,running,speed,m?.fixtureId,m?.liveEventSerial){if(m!=null&&running&&!m.finished&&!m.halfTime&&!m.pendingDecision&&!m.incidentPause&&!m.assistantSubPending){delay(liveDelayMs(m.livePhase,speed));vm.liveStep()}}
+ LaunchedEffect(running,m?.fixtureId,m?.finished){if(m!=null&&running&&!m.finished)vm.startLiveRunner() else vm.stopLiveRunner()}
  if(m==null){
   Page("${w.nextFixture()?.let{CompetitionEngine.displayName(w,it.competition)}?:"Spieltag"} ${w.calendar.matchday}","KREIDE AN DEN SCHUHEN"){
    w.nextFixture()?.let{NextGame(w,it,"Anpfiff"){vm.startMatch();running=true}}
@@ -164,7 +163,7 @@ private fun liveDelayMs(phase: LivePhase,speed: MatchSpeed): Long {
    Section("Vor dem Anpfiff"){
     Text("Formation ${w.club().tactics.formation} · Mentalität ${w.club().tactics.mentality}")
     val missing=w.squad().filter{!it.available&&!it.youth};if(missing.isEmpty())Text("Alle Spieler sind verfügbar.",color=Grass)else missing.forEach{Text("${it.name}: ${if(it.injuryWeeks>0)it.injury else it.unavailableReason?.label}",color=Clay)}
-    Text("Live-Match v0.4.67: realistischere Match-KI, nachvollziehbare Angriffsketten und kontextabhängige Stadionkulisse. Beim Wechsel in den Hintergrund pausieren Match und Audio sofort.",color=Muted)
+    Text("Live-Match v0.5.9: eine zentrale Match-Engine liefert Zustand, Takt, Ballposition, Statistik und Analyse. Die Grafik rendert nur noch diesen Zustand; beim Wechsel in den Hintergrund pausieren Match und Audio sofort.",color=Muted)
    }
   };return
  }
