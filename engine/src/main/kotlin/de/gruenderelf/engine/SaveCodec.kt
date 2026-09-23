@@ -12,7 +12,7 @@ object SaveCodec {
   val encoded=json.encodeToString(w)
   if(versionRegex.containsMatchIn(encoded))return encoded
   require(encoded.startsWith("{")&&encoded.endsWith("}")){"Spielstand konnte nicht serialisiert werden."}
-  return if(encoded.length==2) "{\\\"saveVersion\\\":${w.saveVersion}}" else "{\\\"saveVersion\\\":${w.saveVersion},"+encoded.substring(1)
+  return if(encoded.length==2) "{\"saveVersion\":${w.saveVersion}}" else "{\"saveVersion\":${w.saveVersion},"+encoded.substring(1)
  }
  fun copy(w: World)=decode(encode(w))
  fun versionOf(text:String):Int=versionRegex.find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()?:1
