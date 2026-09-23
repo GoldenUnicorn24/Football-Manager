@@ -125,6 +125,23 @@ object MatchAnalysisSystem {
   }.sortedByDescending { it.count }
   return nodes to edges
  }
+ fun xgTimeline(m: MatchRecord, clubId: Int): List<Pair<Int, Double>> {
+  val maxMinute=max(m.shotEvents.maxOfOrNull{it.minute}?:0,90)
+  val checkpoints=(15..maxMinute step 15).toMutableList().also{if(it.lastOrNull()!=maxMinute)it+=maxMinute}
+  return checkpoints.distinct().map{minute->minute to m.shotEvents.filter{it.clubId==clubId&&it.minute<=minute}.sumOf{it.xg}}
+ }
+ fun passNetwork(m: MatchRecord, clubId: Int): Pair<List<PassNetworkNode>, List<PassNetworkEdge>> {
+  val events=m.passEvents.filter{it.clubId==clubId&&it.completed&&it.fromId!=0&&it.toId!=0}
+  val touches=linkedMapOf<Int,MutableList<Pair<Float,Float>>>()
+  events.forEach{e->
+   touches.getOrPut(e.fromId){mutableListOf()}+=e.startX to e.startY
+   touches.getOrPut(e.toId){mutableListOf()}+=e.endX to e.endY
+  }
+  val nodes=touches.map{(id,pts)->PassNetworkNode(id,pts.map{it.first}.average().toFloat(),pts.map{it.second}.average().toFloat(),pts.size)}
+  val edges=events.groupBy{it.fromId to it.toId}.map{(ids,list)->PassNetworkEdge(ids.first,ids.second,list.size,list.map{it.startX}.average().toFloat(),list.map{it.startY}.average().toFloat(),list.map{it.endX}.average().toFloat(),list.map{it.endY}.average().toFloat())}.sortedByDescending{it.count}
+  return nodes to edges
+ }
+
 }
 
 object NotificationSystem {
@@ -229,8 +246,48 @@ object YouthCompetitionSystem {
 }
 
 object OutboundTransferSystem {
+ fun activeOffers(w:World,playerId:Int):List<TransferOffer> = w.negotiations.values
+  .filter{isOutbound(w,it)&&it.playerId==playerId&&it.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED)}
+  .sortedWith(compareByDescending<TransferOffer>{it.fee}.thenByDescending{it.id})
+
+ fun requestOffers(w:World,playerId:Int,type:DealType=DealType.BUY):List<TransferOffer>{
+  require(w.live==null){"Spieler erst außerhalb eines laufenden Spiels anbieten."}
+  require(ScoutingTransferSystem.windowOpen(w)){"Das Transferfenster ist geschlossen."}
+  require(type in listOf(DealType.BUY,DealType.LOAN,DealType.LOAN_OPTION)){"Nur Verkauf oder Leihe können angeboten werden."}
+  val p=w.players.getValue(playerId)
+  require(p.clubId==w.user.clubId&&!p.retired&&p.id!=w.user.playerId&&p.loanParentClubId==0){"Dieser Spieler kann aktuell nicht angeboten werden."}
+  activeOffers(w,playerId).forEach{it.status=NegotiationStatus.REJECTED;it.message="Durch eine neue Angebotsrunde ersetzt."}
+  val value=TransferEngine.marketValue(w,p)
+  val buyers=w.clubs.values.asSequence()
+   .filter{it.id!=w.user.clubId&&it.id!=p.clubId&&it.budget>maxOf(1_000L,value/25)}
+   .map{it to TransferInterestSystem.score(w,p,it.id)}
+   .filter{it.second>=32}
+   .sortedWith(compareByDescending<Pair<Club,Int>>{it.second}.thenByDescending{it.first.reputation}.thenBy{it.first.id})
+   .take(4).toList()
+  val offers=buyers.mapIndexed{index,(buyer,interest)->
+   val actualType=if(type==DealType.LOAN&&index==1&&w.calendar.season-p.birthYear<=25)DealType.LOAN_OPTION else type
+   val cap=maxBuyOffer(w,buyer,p)
+   val fee=when(actualType){
+    DealType.BUY->minOf(cap,(value*(.80+index*.055+interest*.0015)).toLong()).coerceAtLeast(value/3)
+    DealType.LOAN,DealType.LOAN_OPTION->(value*(.035+index*.008+interest*.00025)).toLong().coerceAtLeast(0L)
+    else->0L
+   }.coerceAtMost((buyer.budget*.82).toLong())
+   val offer=TransferOffer(
+    id=w.nextIds.negotiation++,buyerClubId=buyer.id,sellerClubId=w.user.clubId,playerId=p.id,type=actualType,
+    role=if(p.ca>=70)SquadRole.STARTER else if(p.ca>=55)SquadRole.ROTATION else SquadRole.PROSPECT,
+    fee=fee,wage=maxOf(p.wage,(p.wage*(1.04+index*.02)).roundToInt()),
+    buyOption=if(actualType==DealType.LOAN_OPTION)(value*(1.00+index*.04)).toLong() else 0L,
+    status=NegotiationStatus.COUNTER,stage=TransferStage.CLUB,round=0,
+    message="${buyer.name} legt ein Angebot vor."
+   )
+   w.negotiations[offer.id]=offer;offer
+  }
+  if(offers.isEmpty())w.news("Keine Angebote für ${p.name}","Aktuell findet sich kein passender Verein. Eine spätere Angebotsrunde kann anders ausfallen.")
+  else w.news("Angebote für ${p.name}","${offers.size} Vereine haben ein ${type.label.lowercase()}-Angebot abgegeben.","good")
+  return offers
+ }
  fun weekly(w:World,rng:SeededRandom){
-  if(w.calendar.absoluteWeek%2!=0)return
+  if(w.calendar.absoluteWeek%2!=0||!ScoutingTransferSystem.windowOpen(w))return
   val existing=w.negotiations.values.filter{isOutbound(w,it)&&it.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED)}.map{it.playerId}.toSet()
   val candidates=w.squad().filter{it.id!=w.user.playerId&&!it.retired&&!it.youth&&it.id !in existing}.sortedByDescending{(if(it.wantsMove)20 else 0)+(100-it.morale)+it.ca/3}.take(12)
   if(candidates.isEmpty()||!rng.chance(.65))return
@@ -255,6 +312,64 @@ object OutboundTransferSystem {
 }
 
 object TransferV0518System {
+ fun estimatedPrecontractWage(w:World,p:Player):Int=maxOf(5,p.wage,(TransferEngine.marketValue(w,p)/42_000L).toInt())
+ fun canSignPrecontract(w:World,p:Player):Boolean =
+  w.live==null&&!p.retired&&p.clubId!=0&&p.clubId!=w.user.clubId&&p.loanParentClubId==0&&
+   p.contractYears<=1&&p.precontractClubId==0&&w.calendar.matchday>=15&&TransferInterestSystem.score(w,p,w.user.clubId)>=35
+
+ fun signPrecontract(w:World,playerId:Int,years:Int=3){
+  val p=w.players.getValue(playerId);require(canSignPrecontract(w,p)){"Ein Bosman-Vorvertrag ist aktuell nicht möglich."}
+  val wage=(estimatedPrecontractWage(w,p)*1.08).roundToInt().coerceAtLeast(5);val bonus=maxOf(500L,wage*6L)
+  require(w.club().budget>=bonus){"Budget reicht für Handgeld und Vertrag nicht aus."}
+  w.club().budget-=bonus;p.precontractClubId=w.user.clubId;p.precontractSeason=w.calendar.season+1;p.precontractWage=wage;p.precontractYears=years.coerceIn(1,5)
+  w.news("Vorvertrag unterschrieben","${p.name} wechselt zur Saison ${p.precontractSeason} ablösefrei zu ${w.club().name}. Gehalt: ${p.precontractWage} €/Woche.","good")
+ }
+
+ fun extendContract(w:World,playerId:Int,years:Int=3){
+  require(w.live==null){"Verträge erst außerhalb eines laufenden Spiels verlängern."};val p=w.players.getValue(playerId)
+  require(p.clubId==w.user.clubId&&!p.retired&&p.loanParentClubId==0){"Dieser Vertrag kann nicht verlängert werden."}
+  val wage=maxOf(5,(p.wage*1.08).roundToInt(),(TransferEngine.marketValue(w,p)/48_000L).toInt());val bonus=maxOf(250L,wage*4L)
+  require(w.club().budget>=bonus){"Budget reicht für die Verlängerung nicht aus."};w.club().budget-=bonus;p.wage=wage;p.contractYears=years.coerceIn(1,5);p.precontractClubId=0;p.precontractSeason=0;p.precontractWage=0;p.precontractYears=0
+  w.news("Vertrag verlängert","${p.name} verlängert um ${p.contractYears} Saison(en) · ${p.wage} €/Woche.","good")
+ }
+
+ fun setTargetYouthSquad(w:World,offerId:Int,target:YouthSquad?){
+  val o=w.negotiations.getValue(offerId);require(o.buyerClubId==w.user.clubId&&o.status!=NegotiationStatus.COMPLETED){"Zielkader kann nicht geändert werden."};val p=w.players.getValue(o.playerId);val age=w.calendar.season-p.birthYear
+  require(target==null||age<=22&&(target==YouthSquad.U23||age<=19)){"Spieler ist für diesen Jugendkader nicht spielberechtigt."}
+  o.targetYouthSquad=target;o.registrationReady=false;if(o.medicalPassed)o.stage=TransferStage.REGISTRATION
+  o.message=if(target==null)"Zielkader: Profis." else "Zielkader: ${target.label}."
+ }
+
+ fun processSeasonContracts(w:World,rng:SeededRandom){
+  val nextSeason=w.calendar.season+1;val rebuild=linkedSetOf<Int>()
+  for(p in w.players.values.toList()){
+   if(p.retired||p.loanParentClubId!=0)continue
+   if(p.contractYears>0)p.contractYears--
+   if(p.contractYears>0)continue
+   val previous=p.clubId
+   val destination=p.precontractClubId.takeIf{it!=0&&p.precontractSeason<=nextSeason}
+   if(destination!=null&&destination in w.clubs){
+    p.clubId=destination;p.wage=maxOf(5,p.precontractWage);p.contractYears=maxOf(1,p.precontractYears);p.wantsMove=false;p.youth=false;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null
+    p.precontractClubId=0;p.precontractSeason=0;p.precontractWage=0;p.precontractYears=0
+    w.transferHistory.add(0,TransferHistoryEntry(nextSeason,w.calendar.absoluteWeek,p.id,previous,destination,DealType.BUY,0L,"Bosman-Vorvertrag"))
+    rebuild+=previous;rebuild+=destination
+    if(destination==w.user.clubId)w.news("Bosman-Transfer vollzogen","${p.name} ist nach seinem Vorvertrag ablösefrei angekommen.","good")
+    else if(previous==w.user.clubId)w.news("Ablösefreier Abgang","${p.name} wechselt nach Vertragsende zu ${w.clubs[destination]?.name?:"einem neuen Verein"}.","bad")
+    continue
+   }
+   val club=w.clubs[previous];val age=nextSeason-p.birthYear
+   val squadAverage=club?.let{c->w.squad(c.id).filter{!it.retired&&!it.youth}.map{it.ca}.average().takeUnless{it.isNaN()}?:p.ca.toDouble()}?:0.0
+   val aiRenew=club!=null&&previous!=w.user.clubId&&age<=34&&(p.ca>=squadAverage-5||rng.chance(.62))
+   if(aiRenew){
+    p.contractYears=rng.int(1,3);p.wage=maxOf(5,(p.wage*(1.02+rng.nextDouble()*.12)).roundToInt());continue
+   }
+   if(previous!=0){rebuild+=previous;p.clubId=0;p.youth=false;p.wage=0;p.wantsMove=true;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null
+    w.transferHistory.add(0,TransferHistoryEntry(nextSeason,w.calendar.absoluteWeek,p.id,previous,0,DealType.BUY,0L,"Vertrag ausgelaufen"))
+    if(previous==w.user.clubId)w.news("Vertrag ausgelaufen","${p.name} verlässt den Verein ablösefrei.","bad")
+   }
+  }
+  rebuild.filter{it in w.clubs}.forEach{WorldFactory.autoLineup(w,it)}
+ }
  fun reservedBudget(w:World,buyerClubId:Int,exceptOfferId:Int=0):Long = w.negotiations.values.filter{it.id!=exceptOfferId&&it.buyerClubId==buyerClubId&&it.registrationReady&&it.status==NegotiationStatus.AGREED}.sumOf{it.fee+it.signingBonus}
  fun availableBudget(w:World,buyerClubId:Int,exceptOfferId:Int=0):Long=(w.clubs[buyerClubId]?.budget?:0L)-reservedBudget(w,buyerClubId,exceptOfferId)
  private fun youthSlotValid(w:World,o:TransferOffer,p:Player):Boolean{if(o.buyerClubId!=w.user.clubId||o.targetYouthSquad==null)return false;val age=w.calendar.season-p.birthYear;return age<=22&&(o.targetYouthSquad==YouthSquad.U23||age<=19)}
