@@ -98,8 +98,7 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
    }
    competition in cupNames->{
     val cupFixtures=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP&&CompetitionEngine.displayName(w,it)==competition}
-    val participants=cupFixtures.flatMap{listOf(it.homeId,it.awayId)}.distinct().size
-    Section(competition){Text("$participants aktuell angesetzte Teilnehmer · K.-o.-System mit Verlängerung und Elfmeterschießen bei Gleichstand.",color=Muted);val own=cupFixtures.filter{it.homeId==w.user.clubId||it.awayId==w.user.clubId};if(own.isEmpty())Text("Dein Verein ist in dieser Saison nicht in diesem Pokal vertreten.",color=Muted)else Text("Dein Weg: ${own.count{it.played}} von ${own.size} bislang angesetzten Partien.",color=Grass)}
+    Section(competition){Text("K.-o.-Wettbewerb mit Freilosen, falls die Teilnehmerzahl es erfordert. Bei Gleichstand folgen Verlängerung und Elfmeterschießen.",color=Muted);val own=cupFixtures.filter{it.homeId==w.user.clubId||it.awayId==w.user.clubId};if(own.isEmpty())Text("Dein Verein ist in dieser Saison nicht in diesem Pokal vertreten.",color=Muted)else Text("Dein Weg: ${own.count{it.played}} von ${own.size} bislang angesetzten Partien.",color=Grass)}
     val rounds=cupFixtures.groupBy{it.round}.toSortedMap();rounds.forEach{(_,games)->Section(games.first().stage){games.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}}
    }
    else->{
