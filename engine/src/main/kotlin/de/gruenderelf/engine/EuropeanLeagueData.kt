@@ -218,6 +218,25 @@ object EuropeanLeagueData {
         "Sandefjord" to "SAN","Kristiansund BK" to "KBK","Aalesund" to "AAL","IK Start" to "STA"
     )
 
+
+    private val primeraFederacion1=listOf(
+        "AD Merida" to "MER","Arenas Club" to "ARE","Athletic Club B" to "ATHB","Barakaldo CF" to "BAR",
+        "CD Coria" to "COR","CD Extremadura" to "EXT","CD Lugo" to "LUG","CD Mirandes" to "MIR",
+        "CP Cacereno" to "CAC","Cultural Leonesa" to "CUL","Pontevedra CF" to "PON","Racing Ferrol" to "FER",
+        "RC Deportivo Fabril" to "FAB","Real Aviles Industrial" to "AVI","Real Union Club" to "RUN",
+        "SD Ponferradina" to "PONF","UD Logrones" to "LOG","UD Ourense" to "OUR",
+        "Unionistas de Salamanca" to "UNI","Zamora CF" to "ZAM"
+    )
+
+    private val primeraFederacion2=listOf(
+        "AD Alcorcon" to "ALC","Aguilas FC" to "AGU","Algeciras CF" to "ALG","Antequera CF" to "ANT",
+        "Atletico Madrileno" to "ATM2","CD Teruel" to "TER","CE Europa" to "EUR","CF Rayo Majadahonda" to "RMAJ",
+        "FC Cartagena" to "CAR","Gimnastic de Tarragona" to "GIM","Hercules CF" to "HER",
+        "Juventud Torremolinos" to "JUV","Real Jaen CF" to "RJA","Real Madrid Castilla" to "RMC",
+        "Real Murcia CF" to "MUR","Real Zaragoza" to "ZAR","SD Huesca" to "HUE","UD Ibiza" to "IBI",
+        "UE Sant Andreu" to "SAA","Villarreal CF B" to "VILB"
+    )
+
     val leagues:List<RealModeLeagueSeed> by lazy(LazyThreadSafetyMode.PUBLICATION){
         listOf(
             league("Championship","England",10,2,championship),
@@ -239,7 +258,7 @@ object EuropeanLeagueData {
         DomesticCupSeed("DFB_POKAL","Deutschland","DFB-Pokal",maxLevel=5,maxParticipants=64),
         DomesticCupSeed("FA_CUP","England","FA Cup",maxLevel=3),
         DomesticCupSeed("EFL_CUP","England","EFL Cup",maxLevel=3),
-        DomesticCupSeed("COPA_DEL_REY","Spanien","Copa del Rey",maxLevel=2),
+        DomesticCupSeed("COPA_DEL_REY","Spanien","Copa del Rey",maxLevel=3),
         DomesticCupSeed("COPPA_ITALIA","Italien","Coppa Italia",maxLevel=2),
         DomesticCupSeed("COUPE_DE_FRANCE","Frankreich","Coupe de France",maxLevel=2),
         DomesticCupSeed("HRVATSKI_KUP","Kroatien","Hrvatski nogometni kup",maxLevel=1),
