@@ -27,7 +27,7 @@ object SaveCodec {
   fun validPlayer(id:Int)=id==0||id in w.players
   val referenced=buildList{
    add(live.livePlayerId);add(live.incidentPlayerId);add(live.pendingCornerPlayerId);add(live.pendingSetPiecePlayerId);add(live.decisionAssistId);add(live.pendingVarKeeperId);add(live.assistantSubOutId);add(live.assistantSubInId);add(live.assistantSubRejectedOutId);add(live.assistantSubRejectedInId)
-   addAll(live.injured);addAll(live.sentOff);addAll(live.participation);addAll(live.yellows.keys);addAll(live.minutesPlayed.keys);addAll(live.playerPerformance.keys);addAll(live.assistantSubOutIds);addAll(live.assistantSubInIds);addAll(live.assistantSubRejectedPlayers.keys)
+   addAll(live.injured);addAll(live.sentOff);addAll(live.participation);addAll(live.yellows.keys);addAll(live.minutesPlayed.keys);addAll(live.playerPerformance.keys);addAll(live.assistantSubOutIds);addAll(live.assistantSubInIds);addAll(live.assistantSubRejectedPlayers)
    live.goals.forEach{g->add(g.playerId);add(g.assistId)}
    live.penaltyShootout.forEach{k->add(k.playerId);add(k.keeperId)}
   }
