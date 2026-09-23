@@ -159,12 +159,12 @@ object WorldFactory {
 
  private fun realBaseRating(level:Int)=when(level){1->74;2->68;3->62;4->55;else->49}
 
- fun createRealModeWorld(seed: Long,clubKey: String,person: PlayerDraft): World {
+ fun createRealModeWorld(seed: Long,clubKey: String,person: PlayerDraft,fantasyCupEnabled:Boolean=true): World {
   validateDraft(person,"Dein Spieler")
   val selected=RealModeDatabase.requireClub(clubKey)
   val selectedLeague=RealModeDatabase.leagueForClub(clubKey)
   val rng=SeededRandom(seed)
-  val w=World(seed=seed,user=User(0,0,Difficulty.SANDBOX),privateTopClubMode=true)
+  val w=World(seed=seed,user=User(0,0,Difficulty.SANDBOX),privateTopClubMode=true,fantasyCupEnabled=fantasyCupEnabled)
   var nextClubId=1
   for(leagueSeed in RealModeDatabase.leagues){
    val league=League(leagueSeed.tier,leagueSeed.name);w.leagues.add(league)
@@ -221,9 +221,9 @@ object WorldFactory {
   return result
  }
 
- fun createCustomClubWorld(seed:Long,slotClubKey:String,draft:ClubDraft,person:PlayerDraft,players:List<PlayerDraft>):World{
+ fun createCustomClubWorld(seed:Long,slotClubKey:String,draft:ClubDraft,person:PlayerDraft,players:List<PlayerDraft>,fantasyCupEnabled:Boolean=true):World{
   require(draft.name.trim().length in 3..40){"Vereinsname: 3 bis 40 Zeichen."};require(draft.shortName.trim().length in 2..4){"Kürzel: 2 bis 4 Zeichen."};require(draft.founded in 1850..2026&&draft.city.isNotBlank()){ "Ort oder Gründungsjahr ist ungültig." };require(draft.capacity in 100..100000){"Stadionkapazität ungültig."};validateDraft(person,"Dein Spieler");require(players.size<=19){"Maximal 19 zusätzliche selbst erstellte Spieler."}
-  val league=RealModeDatabase.leagueForClub(slotClubKey);val w=createRealModeWorld(seed,slotClubKey,person);val c=w.club();val rng=SeededRandom(w.rngState);val selfId=w.user.playerId
+  val league=RealModeDatabase.leagueForClub(slotClubKey);val w=createRealModeWorld(seed,slotClubKey,person,fantasyCupEnabled);val c=w.club();val rng=SeededRandom(w.rngState);val selfId=w.user.playerId
   w.players.values.filter{it.clubId==c.id&&it.id!=selfId}.map{it.id}.forEach{w.players.remove(it)}
   c.name=draft.name.trim();c.shortName=draft.shortName.trim().uppercase();c.city=draft.city.trim();c.founded=draft.founded;c.primary=draft.primary;c.secondary=draft.secondary;c.logo=draft.logo.copy(letters=c.shortName);c.kits=draft.kits;c.stadium=Stadium(name=draft.stadiumName.trim().ifEmpty{"Stadion ${c.name}"},capacity=draft.capacity,pitchQuality=(92-(league.level-1)*5).coerceAtLeast(68),surface=Surface.GRASS,floodlights=league.level<=4,training=(84-(league.level-1)*8).coerceAtLeast(42),youth=(78-(league.level-1)*8).coerceAtLeast(38),medicine=(80-(league.level-1)*7).coerceAtLeast(40));c.philosophy=draft.philosophy;c.playPhilosophy=draft.playPhilosophy;c.youthPhilosophy=draft.youthPhilosophy;c.reputation=(88-(league.level-1)*10).coerceAtLeast(42);c.budget=((when(league.level){1->28_000_000L;2->10_000_000L;3->3_000_000L;4->800_000L;else->280_000L})*draft.difficulty.money).toLong();c.members=when(league.level){1->18000;2->9000;3->4200;4->1600;else->650};w.user.difficulty=draft.difficulty
   val me=w.self();applyDraft(me,person,true,0);me.clubId=c.id;me.hidden.potential=(me.ca+12).coerceAtMost(99)
