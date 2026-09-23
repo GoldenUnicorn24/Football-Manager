@@ -31,13 +31,14 @@ object CompetitionPrizeSystem {
    6 -> 120_000L; 7 -> 50_000L; 8 -> 20_000L; 9 -> 8_000L; else -> 3_000L
   }
   val league = w.leagues.firstOrNull { it.tier == tier }?.name.orEmpty()
-  return when (league) {
-   "Bundesliga", "Premier League", "Serie A", "La Liga", "Ligue 1" -> 20_000_000L
-   "2. Bundesliga" -> 5_000_000L
-   "3. Liga" -> 1_500_000L
-   "Regionalliga Nord" -> 350_000L
-   "Oberliga Hamburg" -> 150_000L
-   else -> 1_000_000L
+  val level=WorldFactory.leagueLevel(w,tier)
+  return when {
+   league in setOf("Bundesliga","Premier League","Serie A","La Liga","Ligue 1")->20_000_000L
+   level==1->8_000_000L
+   level==2->5_000_000L
+   level==3->1_500_000L
+   level==4->350_000L
+   else->150_000L
   }
  }
 
@@ -58,7 +59,7 @@ object CompetitionRulesEngine {
  fun rules(w: World, m: LiveMatch): CompetitionRuleSet {
   val fixture = w.fixtures.firstOrNull { it.id == m.fixtureId } ?: return CompetitionRuleSet()
   val league = w.leagues.firstOrNull { fixture.homeId in it.clubIds || fixture.awayId in it.clubIds }
-  val level = league?.tier ?: fixture.tier.coerceAtLeast(1)
+  val level = league?.let{WorldFactory.leagueLevel(w,it.tier)} ?: WorldFactory.leagueLevel(w,fixture.tier.coerceAtLeast(1))
   return when (fixture.competition) {
    CompetitionType.LEAGUE -> CompetitionRuleSet(extraTimeAdditionalSubstitution = false, varEnabled = !(w.privateTopClubMode && level > 2))
    else -> CompetitionRuleSet(extraTimeAdditionalSubstitution = true, varEnabled = true)
@@ -140,7 +141,7 @@ object ScoutingTransferSystem {
  private fun regionMultiplier(region: ScoutRegion) = when (region) { ScoutRegion.DOMESTIC -> 1.0; ScoutRegion.DACH -> 1.15; ScoutRegion.EUROPE -> 1.35; ScoutRegion.SOUTH_AMERICA -> 1.55; ScoutRegion.WORLD -> 1.8 }
  fun windowOpen(w: World) = w.calendar.matchday <= 7 || w.calendar.matchday in 15..17
  fun cost(w: World, player: Player, region: ScoutRegion): Long {
-  val base = player.ca * 22L + 900L + w.club().tier.coerceAtMost(10) * 70L
+  val base = player.ca * 22L + 900L + WorldFactory.leagueLevel(w,w.club().tier).coerceAtMost(10) * 70L
   return (base * regionMultiplier(region)).roundToInt().toLong().coerceAtLeast(250L)
  }
  fun report(w: World, playerId: Int): ScoutReport? {
