@@ -384,8 +384,10 @@ object TransferV0518System {
   val rosterOk=youthSlotValid(w,o,p)||w.squad(o.buyerClubId).count{!it.youth&&!it.retired}<32
   val budgetOk=availableBudget(w,o.buyerClubId,o.id)>=o.fee+o.signingBonus
   o.registrationReady=rosterOk&&budgetOk
-  o.status=if(o.registrationReady)NegotiationStatus.AGREED else NegotiationStatus.COUNTER
-  o.message=when{!budgetOk->"Registrierung blockiert: reserviertes Budget reicht nicht aus.";!rosterOk->"Registrierung blockiert: Profikader ist voll.";else->"Medizincheck bestanden. Registrierung ist vorbereitet."}
+  // Eine Grundsatzeinigung bleibt auch bei vorübergehend blockierter Registrierung bestehen.
+  // So springt der Deal nach dem Medizincheck nicht zurück in die Verhandlung.
+  o.status=NegotiationStatus.AGREED
+  o.message=when{!budgetOk->"Registrierung wartet: frei verfügbares Budget reicht aktuell nicht. Der ausgehandelte Deal bleibt bestehen und kann erneut geprüft werden.";!rosterOk->"Registrierung wartet: Der Profikader hat bereits 32 Spieler. U19 und U23 zählen nicht zu dieser Grenze. Der Deal bleibt bestehen und kann nach einem freien Profiplatz erneut geprüft werden.";else->"Registrierung freigegeben – Budget und Kaderplatz sind reserviert."}
   return o.registrationReady
  }
  fun withdraw(w:World,offerId:Int){val o=w.negotiations.getValue(offerId);require(o.buyerClubId==w.user.clubId){"Nur eigene Verhandlungen können zurückgezogen werden."};require(o.status!=NegotiationStatus.COMPLETED){"Abgeschlossene Transfers können nicht zurückgezogen werden."};o.registrationReady=false;o.status=NegotiationStatus.REJECTED;o.message="Verhandlung zurückgezogen; reserviertes Budget ist wieder frei."}
