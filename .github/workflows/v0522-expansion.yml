@@ -19,6 +19,7 @@ jobs:
       - name: Engine tests
         run: |
           chmod +x gradlew
+          set +e
           ./gradlew --no-daemon -PgruenderelfKeystorePassword=ci-placeholder :engine:test \
             --tests 'de.gruenderelf.engine.EngineTest.realModeCanStartInEveryPackedLeagueAndUsesDynamicLeagueLength' \
             --tests 'de.gruenderelf.engine.EngineTest.modernUefaAdvancesThroughPlayoffsTwoLeggedRoundsAndFinal' \
@@ -29,3 +30,6 @@ jobs:
             --tests 'de.gruenderelf.engine.RealismV05Test.modernUefaDrawUsesPotsAndAssociationLimits' \
             --tests 'de.gruenderelf.engine.V0514EconomyPotentialTest.leagueCupAndChampionsLeagueTitlesPayExtraPrizeMoneyExactlyOnce' \
             --stacktrace
+          code=$?
+          if [ $code -ne 0 ]; then grep -R -n -A8 -B2 '<failure' engine/build/test-results/test/*.xml || true; fi
+          exit $code
