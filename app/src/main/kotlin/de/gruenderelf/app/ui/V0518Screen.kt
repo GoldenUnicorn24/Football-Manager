@@ -12,8 +12,8 @@ import de.gruenderelf.engine.*
 @Composable fun V0518Screen(w:World,vm:GameViewModel,onProfile:(Int)->Unit){
  var scoutId by rememberSaveable{mutableIntStateOf(w.watchlist.firstOrNull()?:w.players.values.firstOrNull{!it.retired&&it.clubId!=w.user.clubId}?.id?:0)}
  var scoutRegion by rememberSaveable{mutableStateOf(ScoutRegion.DOMESTIC)}
- var tacticName by rememberSaveable{mutableStateOf("Mein Matchplan")}
- Page("Manager-Zentrale","GRÜNDERELF · v0.5.21"){
+ var tacticName by rememberSaveable{mutableStateOf("Mein Matchplan")}\n var outboundPlayerId by rememberSaveable{mutableIntStateOf(w.squad().firstOrNull{!it.retired&&it.id!=w.user.playerId&&it.loanParentClubId==0}?.id?:0)}\n var outboundType by rememberSaveable{mutableStateOf(DealType.BUY)}
+ Page("Manager-Zentrale","GRÜNDERELF · v0.5.22"){
   Section("Changelog & erneuertes Tutorial"){
    Text("v0.5.18 stellt die in der aktuellen APK enthaltenen Manager-Systeme wieder her.",color=Grass)
    Text("Neu bzw. wiederhergestellt: U19/U23-Spielbetrieb, Potenzialtraining, Scouting-Zentrale und Watchlist, Verkauf/Verleih eigener Spieler, Medizincheck & Registrierung, Transferhistorie, Konkurrenzangebote, Co-Trainer-Profile, Benachrichtigungen, Taktik-Zentrale sowie Matchanalyse mit Passdaten.",color=Muted)
@@ -52,10 +52,32 @@ import de.gruenderelf.engine.*
     val bids=ScoutingTransferSystem.activeCompetingBids(w,p.id);if(bids.isNotEmpty())Text("Konkurrenz: "+bids.joinToString{b->"${w.clubs[b.clubId]?.shortName?:"Club"} ${euros(b.fee)}"},color=Gold)
    }
   }
-  val outbound=w.negotiations.values.filter{OutboundTransferSystem.isOutbound(w,it)&&it.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED)}.sortedByDescending{it.id}
-  Section("Verkaufsliste & Angebote"){
-   if(outbound.isEmpty())Text("Derzeit liegt kein aktives Angebot für einen eigenen Spieler vor. KI-Clubs prüfen den Kader regelmäßig.",color=Muted)
-   outbound.forEach{o->val p=w.players[o.playerId]?:return@forEach;Text("${p.name} · ${w.clubs[o.buyerClubId]?.name?:"Verein"}",style=MaterialTheme.typography.titleMedium);Text("${o.type.label} · ${euros(o.fee)}${if(o.buyOption>0)" · Kaufoption ${euros(o.buyOption)}" else ""}",color=Muted);Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){TextButton({vm.action{OutboundTransferSystem.negotiate(it,o.id,"fee")}}){Text("Nachverhandeln")};TextButton({vm.action{OutboundTransferSystem.accept(it,o.id)}}){Text("Annehmen")};TextButton({vm.action{OutboundTransferSystem.reject(it,o.id)}}){Text("Ablehnen")}};HorizontalDivider()}
+  Section("Eigene Spieler verkaufen & verleihen"){
+   val offerable=w.squad().filter{!it.retired&&it.id!=w.user.playerId&&it.loanParentClubId==0}.sortedByDescending{TransferEngine.marketValue(w,it)}
+   if(offerable.isEmpty())Text("Aktuell ist kein eigener Spieler für Verkauf oder Leihe verfügbar.",color=Muted) else {
+    if(offerable.none{it.id==outboundPlayerId})outboundPlayerId=offerable.first().id
+    Pick("Eigener Spieler",outboundPlayerId,offerable.map{it.id},{id->w.players[id]?.name?:"Spieler"}){outboundPlayerId=it}
+    Pick("Angebotsart",outboundType,listOf(DealType.BUY,DealType.LOAN,DealType.LOAN_OPTION),{it.label}){outboundType=it}
+    val open=ScoutingTransferSystem.windowOpen(w)
+    Action("Mehrere Angebote einholen",w.live==null&&open){vm.action{OutboundTransferSystem.requestOffers(it,outboundPlayerId,outboundType)}}
+    Text(if(open)"Der Spieler wird aktiv mehreren passenden Vereinen angeboten. Angebote bleiben getrennt und können einzeln verhandelt werden." else "Das Transferfenster ist geschlossen.",color=Muted)
+   }
+  }
+  val outbound=OutboundTransferSystem.activeOffers(w)
+  Section("Angebote für unsere Spieler"){
+   if(outbound.isEmpty())Text("Derzeit liegt kein aktives Angebot für einen eigenen Spieler vor.",color=Muted)
+   outbound.forEach{o->
+    val p=w.players[o.playerId]?:return@forEach
+    Text("${p.name} · ${w.clubs[o.buyerClubId]?.name?:"Verein"}",style=MaterialTheme.typography.titleMedium)
+    Text("${o.type.label} · ${euros(o.fee)}${if(o.buyOption>0)" · Kaufoption ${euros(o.buyOption)}" else ""} · ${o.message}",color=Muted)
+    Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
+     TextButton({vm.action{OutboundTransferSystem.negotiate(it,o.id,"fee")}},enabled=o.status==NegotiationStatus.COUNTER){Text(if(o.type==DealType.BUY)"Ablöse +" else "Leihgebühr +")}
+     if(o.type==DealType.LOAN_OPTION)TextButton({vm.action{OutboundTransferSystem.negotiate(it,o.id,"option")}},enabled=o.status==NegotiationStatus.COUNTER){Text("Kaufoption +")}
+     TextButton({vm.action{OutboundTransferSystem.negotiate(it,o.id,"sellon")}},enabled=o.status==NegotiationStatus.COUNTER){Text("Weiterverkauf +")}
+    }
+    Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){TextButton({vm.action{OutboundTransferSystem.accept(it,o.id)}}){Text("Annehmen")};TextButton({vm.action{OutboundTransferSystem.reject(it,o.id)}}){Text("Ablehnen")};TextButton({onProfile(p.id)}){Text("Profil")}}
+    HorizontalDivider()
+   }
   }
   Section("Medizincheck & Registrierung"){
    val incoming=w.negotiations.values.filter{it.buyerClubId==w.user.clubId&&it.status==NegotiationStatus.AGREED&&it.stage in listOf(TransferStage.MEDICAL,TransferStage.REGISTRATION)}
