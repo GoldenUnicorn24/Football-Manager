@@ -38,7 +38,7 @@ abstract class SaveDatabase: RoomDatabase(){
  abstract fun saves(): SaveDao
  companion object {
   val MIGRATION_1_2=object: Migration(1,2){override fun migrate(db: SupportSQLiteDatabase){db.execSQL("ALTER TABLE savegames ADD COLUMN saveVersion INTEGER NOT NULL DEFAULT 2")}}
-  fun open(context: Context,name: String="gruenderelf.db")=Room.databaseBuilder(context,SaveDatabase::class.java,name).setJournalMode(JournalMode.WRITE_AHEAD_LOGGING).addMigrations(MIGRATION_1_2).addCallback(object: Callback(){override fun onOpen(db: SupportSQLiteDatabase){super.onOpen(db);db.execSQL("PRAGMA synchronous=FULL")}}).build()
+  fun open(context: Context,name: String="gruenderelf.db")=Room.databaseBuilder(context,SaveDatabase::class.java,name).setJournalMode(JournalMode.WRITE_AHEAD_LOGGING).addMigrations(MIGRATION_1_2).addCallback(object: Callback(){override fun onOpen(db: SupportSQLiteDatabase){super.onOpen(db);db.execSQL("PRAGMA synchronous=NORMAL")}}).build()
  }
 }
 private const val SAVE_STORAGE_PREFIX="gz1:"
@@ -66,10 +66,13 @@ class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.
  suspend fun load(slot: Int): World=withContext(Dispatchers.IO){
   require(slot in 1..5)
   val row=db.saves().get(slot)?:error("Dieser Speicherplatz ist leer.")
+  val compressed=row.worldJson.startsWith(SAVE_STORAGE_PREFIX)
   val raw=decodeStoredWorld(row.worldJson)
+  val sourceVersion=SaveCodec.versionOf(raw)
   val w=SaveCodec.decode(raw)
-  val canonical=SaveCodec.encode(w)
-  if(row.saveVersion!=SAVE_VERSION||!row.worldJson.startsWith(SAVE_STORAGE_PREFIX)||raw!=canonical)save(slot,w)
+  // Aktuelle komprimierte Saves nicht direkt nach dem Laden erneut komplett serialisieren.
+  // Das war bei großen Welten eine zweite Vollwelt-Serialisierung plus GZIP direkt im Startpfad.
+  if(row.saveVersion!=SAVE_VERSION||!compressed||sourceVersion!=SAVE_VERSION)save(slot,w)
   settings.edit{it[lastKey]=slot};w
  }
  suspend fun save(slot: Int,w: World)=withContext(Dispatchers.IO+NonCancellable){
