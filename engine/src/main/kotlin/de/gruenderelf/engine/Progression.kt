@@ -201,6 +201,7 @@ object SeasonEngine {
   }
   if(w.privateTopClubMode)check(w.leagues.all{it.clubIds.size in 6..24&&it.clubIds.size%2==0}) else check(w.leagues.all{it.clubIds.size==12})
   w.random{rng->
+   TransferV0518System.processSeasonContracts(w,rng)
    for(p in w.players.values.toList()){
     if(p.retired)continue
     if(p.stats.appearances>0)p.career.add(PlayerSeason(w.calendar.season,w.clubs[p.clubId]?.name?:"Vereinslos",p.stats.copy()))
