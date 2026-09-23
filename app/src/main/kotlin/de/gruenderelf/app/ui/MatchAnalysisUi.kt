@@ -66,28 +66,32 @@ private fun MatchAnalysisContent(w:World,s:AnalysisSnapshot,title:String){
 private fun XgTimelineCard(s:AnalysisSnapshot,home:Club,away:Club){
  val homeLine=MatchAnalysisSystem.xgTimeline(s.minute,s.shots,s.homeId)
  val awayLine=MatchAnalysisSystem.xgTimeline(s.minute,s.shots,s.awayId)
- val maxXg=max(1.0,max(homeLine.maxOfOrNull{it.second}?:0.0,awayLine.maxOfOrNull{it.second}?:0.0)*1.08)
- val maxMinute=max(1,max(homeLine.lastOrNull()?.first?:s.minute,awayLine.lastOrNull()?.first?:s.minute))
  Section("xG-Verlauf"){
-  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
-   Text("${home.shortName} · ${String.format(java.util.Locale.GERMANY,"%.2f",s.home.xg)}",color=Color(home.primary),fontWeight=FontWeight.Bold)
-   Text("${away.shortName} · ${String.format(java.util.Locale.GERMANY,"%.2f",s.away.xg)}",color=Color(away.primary),fontWeight=FontWeight.Bold)
-  }
-  Canvas(Modifier.fillMaxWidth().height(180.dp)){
-   val left=22.dp.toPx();val right=size.width-8.dp.toPx();val top=10.dp.toPx();val bottom=size.height-24.dp.toPx()
-   drawLine(Muted.copy(alpha=.45f),Offset(left,bottom),Offset(right,bottom),1.dp.toPx())
-   drawLine(Muted.copy(alpha=.45f),Offset(left,top),Offset(left,bottom),1.dp.toPx())
-   for(i in 1..4){val y=bottom-(bottom-top)*i/4f;drawLine(Muted.copy(alpha=.13f),Offset(left,y),Offset(right,y),1.dp.toPx())}
-   fun point(v:Pair<Int,Double>)=Offset(left+(right-left)*(v.first.toFloat()/maxMinute),bottom-(bottom-top)*(v.second/maxXg).toFloat())
-   fun series(values:List<Pair<Int,Double>>,color:Color){
-    var previous=Offset(left,bottom)
-    values.forEach{v->val p=point(v);drawLine(color,previous,p,2.4.dp.toPx());drawCircle(color,3.2.dp.toPx(),p);previous=p}
+  if(homeLine.isEmpty()&&awayLine.isEmpty())Text("Noch keine xG-Daten.",color=Muted)
+  else{
+   val count=maxOf(homeLine.size,awayLine.size)
+   repeat(count){i->
+    val homePoint=homeLine.getOrNull(i)?:homeLine.lastOrNull()?:return@repeat
+    val awayPoint=awayLine.getOrNull(i)?:awayLine.lastOrNull()
+    val minute=homePoint.first
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+     Text("$minute'",color=Muted,modifier=Modifier.width(44.dp))
+     Text("${home.shortName} ${String.format(java.util.Locale.GERMANY,"%.2f",homePoint.second)}",color=Color(home.primary),fontWeight=FontWeight.Bold,modifier=Modifier.weight(1f))
+     Text("${away.shortName} ${String.format(java.util.Locale.GERMANY,"%.2f",awayPoint?.second?:0.0)}",color=Color(away.primary),fontWeight=FontWeight.Bold)
+    }
    }
-   series(homeLine,Color(home.primary));series(awayLine,Color(away.primary))
   }
-  Text("Kumulierte Chancenqualität aus den tatsächlich protokollierten Abschlüssen.",color=Muted,style=MaterialTheme.typography.bodySmall)
  }
 }
+
+private fun shotResultText(o:ShotOutcome)=when(o){
+ ShotOutcome.GOAL->"Tor"
+ ShotOutcome.SAVED,ShotOutcome.DEFLECTED,ShotOutcome.CORNER,ShotOutcome.REBOUND->"aufs Tor"
+ ShotOutcome.WOODWORK->"Aluminium"
+ else->"daneben/kein SOT"
+}
+
+private fun isShotOnTarget(o:ShotOutcome)=o in listOf(ShotOutcome.GOAL,ShotOutcome.SAVED,ShotOutcome.DEFLECTED,ShotOutcome.CORNER,ShotOutcome.REBOUND)
 
 private fun shotColor(o:ShotOutcome)=when(o){
  ShotOutcome.GOAL->Grass
