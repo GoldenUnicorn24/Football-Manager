@@ -162,7 +162,7 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
      vm.action("Jugendspieler wurde in die Academy aufgenommen."){CustomYouthSystem.create(it,youthFirst,youthLast,youthNation,youthAge,youthPos,youthFoot,youthBlueprint,youthRole)}
     }
     Action("Jugend-Transfermarkt öffnen",secondary=true){area="Transfers";marketView="Jugend-Transfermarkt"}
-    Text("Dort kannst du U19/U23-Talente anderer Vereine kaufen oder leihen und anschließend gezielt dem Nachwuchs zuordnen.",color=Muted,style=MaterialTheme.typography.bodySmall)
+    Text("Dort kannst du reale U19/U23-Talente anderer Vereine kaufen oder leihen und vor Abschluss direkt U19, U23 oder Profikader als Ziel festlegen.",color=Muted,style=MaterialTheme.typography.bodySmall)
    }
 
    YouthSquad.entries.forEach{squad->
@@ -209,12 +209,12 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
      Pick("Spieler",safeId,own.map{it.id},{id->w.players[id]?.let{"${it.name} · ${it.position.label} · Stärke ${it.ca}"}?:"Spieler"}){outboundPlayerId=it}
      Pick("Angebotsart",outboundType,listOf(DealType.BUY,DealType.LOAN,DealType.LOAN_OPTION),{it.label}){outboundType=it}
      Text("Der Spieler wird aktiv mehreren passenden Vereinen angeboten. Angebote bleiben getrennt, damit du vergleichen und mit jedem Verein einzeln verhandeln kannst.",color=Muted)
-     Action("Mehrere Angebote einholen",w.live==null&&ScoutingTransferSystem.windowOpen(w),secondary=true){vm.action{OutboundTransferSystem.solicitOffers(it,safeId,outboundType)}}
+     Action("Mehrere Angebote einholen",w.live==null&&ScoutingTransferSystem.windowOpen(w),secondary=true){vm.action{OutboundTransferSystem.requestOffers(it,safeId,outboundType)}}
      if(!ScoutingTransferSystem.windowOpen(w))Text("Das Transferfenster ist aktuell geschlossen.",color=Muted,style=MaterialTheme.typography.bodySmall)
     }
    }
 
-   val outbound=w.negotiations.values.filter{OutboundTransferSystem.isOutbound(w,it)&&it.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED)}.sortedWith(compareBy<TransferOffer>{it.playerId}.thenByDescending{it.id})
+   val outbound=OutboundTransferSystem.activeOffers(w)
    if(outbound.isNotEmpty())Section("Angebote für eigene Spieler"){
     outbound.forEach{o->
      val p=w.players[o.playerId]?:return@forEach
@@ -256,20 +256,36 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
       TextButton(onClick={vm.action{world->if(!world.watchlist.remove(p.id))world.watchlist.add(p.id)}}){Text(if(p.id in w.watchlist)"Merkliste −" else "Merkliste +")}
       if(p.id !in w.scoutAssignments)TextButton(onClick={vm.action{ScoutingTransferSystem.start(it,p.id,ScoutRegion.DOMESTIC)}},enabled=w.live==null){Text("Scouten")}
      }
-     val existing=w.negotiations.values.filter{it.buyerClubId==w.user.clubId&&it.playerId==p.id&&it.status !in listOf(NegotiationStatus.COMPLETED,NegotiationStatus.REJECTED)}.maxByOrNull{it.id}
+     val existing=w.negotiations.values.filter{it.buyerClubId==w.user.clubId&&it.playerId==p.id&&it.status !in listOf(NegotiationStatus.COMPLETED,NegotiationStatus.REJECTED,NegotiationStatus.WITHDRAWN)}.maxByOrNull{it.id}
      Action(if(existing==null)"Verhandlung starten: ${dealType.label}" else "Verhandlung läuft",existing==null&&w.live==null,secondary=true){
       vm.action{TransferEngine.createOffer(it,it.user.clubId,p.id,dealType,role)}
      }
     }
    }
 
-   val incoming=w.negotiations.values.filter{it.buyerClubId==w.user.clubId&&it.status !in listOf(NegotiationStatus.COMPLETED,NegotiationStatus.REJECTED)}.sortedByDescending{it.id}
+   val incoming=w.negotiations.values.filter{it.buyerClubId==w.user.clubId&&it.status !in listOf(NegotiationStatus.COMPLETED,NegotiationStatus.REJECTED,NegotiationStatus.WITHDRAWN)}.sortedByDescending{it.id}
    if(incoming.isNotEmpty())Section("Aktive Verhandlungen"){
     incoming.forEach{o->
      val p=w.players[o.playerId]?:return@forEach
      Text("${p.name} · ${o.type.label} · Runde ${o.round}",style=MaterialTheme.typography.titleMedium)
      Text(o.message,color=if(o.status==NegotiationStatus.AGREED)Grass else Gold)
      Text("Verein ${o.sellerScore}/100 · Spieler ${o.playerScore}/100 · Berater ${o.agentScore}/100",color=Muted)
+     val age=w.calendar.season-p.birthYear
+     if(age<=22){
+      val targetOptions=buildList{add("Profikader");if(age<=19)add("U19");add("U23")}
+      val currentTarget=o.targetYouthSquad?.label?:"Profikader"
+      Pick("Zielkader nach Abschluss",currentTarget,targetOptions,{it}){target->
+       vm.action{world->world.negotiations[o.id]?.targetYouthSquad=when(target){"U19"->YouthSquad.U19;"U23"->YouthSquad.U23;else->null}}
+      }
+     }
+     if(o.type in listOf(DealType.LOAN,DealType.LOAN_OPTION)){
+      Pick("Leihdauer",o.loanWeeksRequested,listOf(12,24,40),{"$it Wochen"}){weeks->vm.action{world->world.negotiations[o.id]?.loanWeeksRequested=weeks}}
+      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+       Text("Rückrufklausel")
+       Switch(checked=o.recallAllowed,onCheckedChange={allowed->vm.action{world->world.negotiations[o.id]?.recallAllowed=allowed}})
+      }
+      if(o.type==DealType.LOAN_OPTION)Text("Kaufoption ${euros(o.buyOption)} · Rückruf ${if(o.recallAllowed)"möglich" else "ausgeschlossen"}",color=Muted)
+     }
      if(o.status==NegotiationStatus.COUNTER)Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
       TextButton({vm.action{TransferEngine.improve(it,o.id,"fee")}}){Text("Ablöse +")}
       TextButton({vm.action{TransferEngine.improve(it,o.id,"wage")}}){Text("Gehalt +")}
