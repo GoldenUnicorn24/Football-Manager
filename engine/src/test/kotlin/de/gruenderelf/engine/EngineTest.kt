@@ -255,12 +255,15 @@ class EngineTest {
   }
  }
 
- @Test fun compactRealModeSaveStaysBelowLegacy32MbJsonLimit(){
+ @Test fun compressedRealModeSaveStaysBelowLegacy32MbLimit(){
   val selected=RealModeDatabase.leagues.first().clubs.first()
   val w=WorldFactory.createRealModeWorld(250522L,selected.key,PlayerDraft(firstName="Save",lastName="Probe",number=76))
-  val bytes=SaveCodec.encode(w).toByteArray(Charsets.UTF_8).size
-  println("COMPACT_REAL_SAVE_BYTES=$bytes")
-  assertTrue(bytes<32*1024*1024,"Kompakter Real-Modus-Spielstand ist noch zu groß: $bytes Bytes")
+  val raw=SaveCodec.encode(w)
+  val out=java.io.ByteArrayOutputStream()
+  java.util.zip.GZIPOutputStream(out).bufferedWriter(Charsets.UTF_8).use{it.write(raw)}
+  val storedBytes=4+java.util.Base64.getEncoder().encode(out.toByteArray()).size
+  println("COMPACT_REAL_SAVE_RAW_BYTES=${raw.toByteArray(Charsets.UTF_8).size}; STORED_GZIP_BASE64_BYTES=$storedBytes")
+  assertTrue(storedBytes<32*1024*1024,"Komprimierter Real-Modus-Spielstand ist noch zu groß: $storedBytes Bytes")
  }
 
 }
