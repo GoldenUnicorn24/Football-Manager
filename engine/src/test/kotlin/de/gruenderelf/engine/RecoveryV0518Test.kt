@@ -37,4 +37,42 @@ class RecoveryV0518Test {
   val w=WorldFactory.createWorld(51806L);val tired=w.squad().first{!it.youth};tired.fitness=50.0;tired.contractYears=1;assertTrue(tired.id in NotificationSystem.unreadTired(w));assertTrue(tired.id in NotificationSystem.unreadExpiring(w));NotificationSystem.markTiredSeen(w);NotificationSystem.markContractsSeen(w);assertFalse(tired.id in NotificationSystem.unreadTired(w));assertFalse(tired.id in NotificationSystem.unreadExpiring(w))
   val m=MatchEngine.start(w);m.minute=31;m.shotEvents+=ShotEvent(10,w.user.clubId,tired.id,xg=.25);m.shotEvents+=ShotEvent(30,w.user.clubId,tired.id,xg=.40);m.passEvents+=PassEvent(12,w.user.clubId,tired.id,w.user.playerId,true,.2f,.3f,.4f,.5f);MatchAnalysisSystem.recordTacticChange(w,m,w.user.clubId,"Pressing erhöht");val timeline=MatchAnalysisSystem.xgTimeline(m,w.user.clubId);assertTrue(timeline.last().second>=.65);val network=MatchAnalysisSystem.passNetwork(m,w.user.clubId);assertTrue(network.first.isNotEmpty());assertTrue(network.second.single().count==1);assertEquals(1,m.tacticChanges.size)
  }
+
+ @Test fun manualOutboundRoundCreatesSeveralIndependentOffers(){
+  val w=WorldFactory.createWorld(51807L);w.calendar.matchday=1
+  val p=w.squad().first{it.id!=w.user.playerId&&!it.retired&&it.loanParentClubId==0};p.wantsMove=true;p.hidden.ambition=90;p.hidden.loyalty=20
+  w.clubs.values.filter{it.id!=w.user.clubId}.forEach{it.budget=100_000_000L;it.reputation=90}
+  val offers=OutboundTransferSystem.requestOffers(w,p.id,DealType.BUY)
+  assertTrue(offers.size>=2);assertEquals(offers.size,offers.map{it.buyerClubId}.distinct().size);assertEquals(offers.map{it.id}.toSet(),OutboundTransferSystem.activeOffers(w,p.id).map{it.id}.toSet())
+  val replaced=offers.map{it.id}.toSet();val next=OutboundTransferSystem.requestOffers(w,p.id,DealType.LOAN)
+  assertTrue(next.isNotEmpty());assertTrue(w.negotiations.values.filter{it.id in replaced}.all{it.status==NegotiationStatus.REJECTED})
+ }
+
+ @Test fun bosmanPrecontractMovesPlayerAtSeasonBoundaryWithoutFee(){
+  val w=WorldFactory.createWorld(51808L);w.calendar.matchday=15;w.club().budget=100_000_000L;w.club().reputation=100
+  val p=w.players.values.filter{!it.retired&&it.clubId!=0&&it.clubId!=w.user.clubId&&it.loanParentClubId==0}.maxBy{TransferInterestSystem.score(w,it,w.user.clubId)}
+  p.contractYears=1;p.wantsMove=true;p.hidden.ambition=90;p.hidden.loyalty=10
+  assertTrue(TransferV0518System.canSignPrecontract(w,p));val previous=p.clubId
+  TransferV0518System.signPrecontract(w,p.id,3);assertEquals(w.user.clubId,p.precontractClubId)
+  TransferV0518System.processSeasonContracts(w,SeededRandom(518080L))
+  assertEquals(w.user.clubId,p.clubId);assertEquals(3,p.contractYears);assertEquals(0,p.precontractClubId)
+  assertTrue(w.transferHistory.any{it.playerId==p.id&&it.fromClubId==previous&&it.toClubId==w.user.clubId&&it.fee==0L&&it.note.contains("Bosman")})
+ }
+
+ @Test fun incomingYoungPlayerCanBeRegisteredDirectlyForU19(){
+  val w=WorldFactory.createWorld(51809L);w.club().budget=100_000_000L
+  val p=w.players.values.first{!it.retired&&it.clubId!=0&&it.clubId!=w.user.clubId};p.birthYear=w.calendar.season-18;p.hidden.injuryProneness=5;p.injuryWeeks=0
+  val previous=p.clubId;val o=TransferOffer(id=w.nextIds.negotiation++,buyerClubId=w.user.clubId,sellerClubId=previous,playerId=p.id,type=DealType.BUY,role=SquadRole.PROSPECT,fee=1_000L,wage=maxOf(5,p.wage),status=NegotiationStatus.AGREED,stage=TransferStage.MEDICAL);w.negotiations[o.id]=o
+  TransferV0518System.setTargetYouthSquad(w,o.id,YouthSquad.U19);assertEquals(YouthSquad.U19,o.targetYouthSquad)
+  assertTrue(TransferV0518System.medicalAndRegistration(w,o));TransferEngine.complete(w,o.id)
+  assertTrue(p.youth);assertEquals(YouthSquad.U19,p.youthSquad);assertEquals(w.user.clubId,p.clubId)
+ }
+
+ @Test fun savedMatchAnalysisExposesTimelineAndPassNetwork(){
+  val w=WorldFactory.createWorld(51810L);val live=MatchEngine.start(w);val id=w.user.clubId;val p=w.squad().first{!it.youth}
+  live.minute=90;live.shotEvents+=ShotEvent(12,id,p.id,xg=.20);live.shotEvents+=ShotEvent(67,id,p.id,xg=.55);live.passEvents+=PassEvent(20,id,p.id,w.user.playerId,true,.2f,.3f,.5f,.4f)
+  MatchEngine.record(w,live);val rec=w.matches.values.maxBy{it.fixtureId};val timeline=MatchAnalysisSystem.xgTimeline(rec,id);val network=MatchAnalysisSystem.passNetwork(rec,id)
+  assertTrue(timeline.last().second>=.75);assertTrue(network.first.isNotEmpty());assertEquals(1,network.second.single().count)
+ }
+
 }
