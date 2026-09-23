@@ -249,85 +249,195 @@ object NotificationSystem {
 }
 
 object ScoutingTransferSystem {
- private fun regionMultiplier(region: ScoutRegion) = when (region) { ScoutRegion.DOMESTIC -> 1.0; ScoutRegion.DACH -> 1.15; ScoutRegion.EUROPE -> 1.35; ScoutRegion.SOUTH_AMERICA -> 1.55; ScoutRegion.WORLD -> 1.8 }
- fun windowOpen(w: World) = w.calendar.matchday <= 7 || w.calendar.matchday in 15..17
- fun cost(w: World, player: Player, region: ScoutRegion): Long {
-  val tier=if(w.privateTopClubMode)RealModeDatabase.levelForTier(w.club().tier) else w.club().tier.coerceAtMost(10)
-  val base = player.ca * 22L + 900L + tier * 70L
-  return (base * regionMultiplier(region)).roundToInt().toLong().coerceAtLeast(250L)
+ private fun regionMultiplier(region:ScoutRegion)=when(region){ScoutRegion.DOMESTIC->1.0;ScoutRegion.DACH->1.15;ScoutRegion.EUROPE->1.35;ScoutRegion.SOUTH_AMERICA->1.55;ScoutRegion.WORLD->1.8}
+ fun transferWindowOpen(w:World):Boolean=w.calendar.matchday<=7||w.calendar.matchday in 15..17
+ fun windowOpen(w:World)=transferWindowOpen(w)
+ fun transferWindowLabel(w:World):String=when{
+  w.calendar.matchday<=7->"Sommerfenster offen · Deadline nach Spieltag 7"
+  w.calendar.matchday in 15..17->"Winterfenster offen · Deadline nach Spieltag 17"
+  w.calendar.matchday<15->"Transferfenster geschlossen · Winterfenster ab Spieltag 15"
+  else->"Transferfenster geschlossen · neues Sommerfenster zum Saisonstart"
  }
- fun report(w: World, playerId: Int): ScoutReport? {
-  val p = w.players[playerId] ?: return null
-  if (p.clubId == w.user.clubId) return ScoutReport(p.id,100,p.ca,p.ca,p.hidden.potential,p.hidden.potential,true,true,w.calendar.absoluteWeek,"Eigener Spieler – vollständige Daten")
-  return w.scoutReports[playerId]
+ fun toggleWatchlist(w:World,playerId:Int){
+  if(playerId in w.watchlist)w.watchlist.remove(playerId)
+  else{require(playerId in w.players&&w.players[playerId]?.clubId!=w.user.clubId);w.watchlist.add(playerId)}
  }
- fun start(w: World, playerId: Int, region: ScoutRegion, weeks: Int = 3) {
-  require(w.live == null) { "Scouting-Aufträge außerhalb eines laufenden Spiels starten." }
-  val p = w.players[playerId] ?: error("Spieler nicht gefunden.")
-  require(p.clubId != w.user.clubId && !p.retired) { "Nur externe aktive Spieler können gescoutet werden." }
-  val price = cost(w,p,region); require(w.club().budget >= price) { "Vereinskasse reicht für den Scouting-Auftrag nicht aus." }
-  w.club().budget -= price
-  w.scoutAssignments[playerId] = ScoutAssignment(playerId,region,weeks.coerceIn(1,6),w.calendar.absoluteWeek,price)
-  w.scoutReports.putIfAbsent(playerId, ScoutReport(playerId,0,1,99,1,99,false,false,w.calendar.absoluteWeek,"Scouting gestartet"))
-  if (playerId !in w.watchlist) w.watchlist += playerId
+ fun scoutCost(w:World,p:Player,region:ScoutRegion):Long{
+  val level=if(w.privateTopClubMode)RealModeDatabase.levelForTier(w.club().tier) else w.club().tier.coerceAtMost(10)
+  return ((900L+p.ca*22L+level.coerceAtMost(10)*70L)*regionMultiplier(region)).toLong()
  }
- fun weekly(w: World, rng: SeededRandom) {
-  val quality = w.club().dynamics.staffQuality/8 + w.club().academy.scouting/4 + 26
-  for ((playerId,a) in w.scoutAssignments.toMap()) {
-   val p=w.players[playerId]
-   if (p == null) { w.scoutAssignments.remove(playerId); continue }
-   val r=w.scoutReports.getOrPut(playerId){ScoutReport(playerId)}
-   val gain=(quality+rng.int(-4,4)).coerceIn(28,55);r.progress=(r.progress+gain).coerceAtMost(100);r.lastUpdatedWeek=w.calendar.absoluteWeek
-   val error=((100-r.progress)/9+1).coerceAtLeast(1)
-   r.caMin=(p.ca-error).coerceAtLeast(1);r.caMax=(p.ca+error).coerceAtMost(99)
-   val potError=((100-r.progress)/7+2).coerceAtLeast(1);r.potentialMin=(p.hidden.potential-potError).coerceAtLeast(p.ca);r.potentialMax=(p.hidden.potential+potError).coerceAtMost(99)
-   r.personalityKnown=r.progress>=70;r.medicalKnown=r.progress>=88
-   r.note=when { r.progress>=100->"Scouting abgeschlossen";r.progress>=70->"Persönlichkeit und Rolle weitgehend bekannt";r.progress>=40->"Leistungsbild wird belastbar";else->"Erste Beobachtungen" }
-   a.weeksRemaining--
-   if(a.weeksRemaining<=0||r.progress>=100)w.scoutAssignments.remove(playerId)
-  }
-  w.competingBids.removeAll{it.expiresWeek<w.calendar.absoluteWeek}
-  if(w.calendar.absoluteWeek%2==0){
-   for(id in w.watchlist.distinct().take(20)){
-    val p=w.players[id]?:continue;if(p.retired||p.clubId==w.user.clubId||w.competingBids.any{it.playerId==id&&it.expiresWeek>=w.calendar.absoluteWeek})continue
-    if(!rng.chance(.18))continue
-    val clubs=w.clubs.values.filter{it.id!=w.user.clubId&&it.id!=p.clubId&&it.budget>TransferEngine.marketValue(w,p)/2}.sortedByDescending{it.reputation}.take(12)
-    if(clubs.isNotEmpty()){val c=rng.pick(clubs);w.competingBids+=CompetingBid(id,c.id,(TransferEngine.marketValue(w,p)*(.75+rng.nextDouble()*.35)).toLong(),w.calendar.absoluteWeek+2)}
+ fun cost(w:World,p:Player,region:ScoutRegion)=scoutCost(w,p,region)
+ fun startScouting(w:World,playerId:Int,region:ScoutRegion=ScoutRegion.DOMESTIC){
+  require(w.live==null){"Scouting-Aufträge außerhalb eines laufenden Spiels starten."}
+  val p=w.players.getValue(playerId);require(p.clubId!=w.user.clubId&&!p.retired){"Eigene Spieler müssen nicht extern gescoutet werden."};require(playerId !in w.scoutAssignments){"Dieser Spieler wird bereits beobachtet."}
+  val price=scoutCost(w,p,region);require(w.club().budget>=price){"Budget für den Scoutingauftrag reicht nicht."};w.club().budget-=price
+  val weeks=when(region){ScoutRegion.DOMESTIC,ScoutRegion.DACH->2;ScoutRegion.EUROPE->3;ScoutRegion.SOUTH_AMERICA,ScoutRegion.WORLD->4}
+  w.scoutAssignments[playerId]=ScoutAssignment(playerId,region,weeks,w.calendar.absoluteWeek,price)
+  w.scoutReports.putIfAbsent(playerId,ScoutReport(playerId=playerId,progress=5,caMin=(p.ca-16).coerceAtLeast(1),caMax=(p.ca+16).coerceAtMost(99),potentialMin=(p.ca-4).coerceAtLeast(1),potentialMax=99,note="Scout beobachtet den Spieler."))
+  if(playerId !in w.watchlist)w.watchlist.add(playerId)
+ }
+ fun start(w:World,playerId:Int,region:ScoutRegion,weeks:Int=0){
+  startScouting(w,playerId,region)
+  if(weeks>0)w.scoutAssignments[playerId]?.weeksRemaining=weeks.coerceIn(1,6)
+ }
+ fun report(w:World,p:Player):ScoutReport?=if(p.clubId==w.user.clubId)ScoutReport(p.id,100,p.ca,p.ca,p.hidden.potential,p.hidden.potential,true,true,w.calendar.absoluteWeek,"Vollständige interne Daten") else w.scoutReports[p.id]
+ fun report(w:World,playerId:Int):ScoutReport?=w.players[playerId]?.let{report(w,it)}
+ fun strengthLabel(w:World,p:Player):String{val r=report(w,p);return if(r==null)ClubActions.scouting(w,p) else if(r.progress>=95)"${p.ca}" else "${r.caMin}–${r.caMax}"}
+ fun potentialLabel(w:World,p:Player):String{val r=report(w,p)?:return "noch offen";return if(r.progress>=95)"${p.hidden.potential}" else "${r.potentialMin}–${r.potentialMax}"}
+ fun competition(w:World,playerId:Int)=w.competingBids.filter{it.playerId==playerId&&it.expiresWeek>=w.calendar.absoluteWeek}
+ fun activeCompetingBids(w:World,playerId:Int)=competition(w,playerId)
+ fun bosmanEligible(w:World,p:Player):Boolean{
+  val age=w.calendar.season-p.birthYear
+  return p.clubId!=0&&p.clubId!=w.user.clubId&&!p.retired&&p.loanParentClubId==0&&age>=18&&p.contractYears<=1&&w.calendar.matchday>=18&&p.precontractClubId==0
+ }
+ fun precontractDemand(w:World,p:Player):Pair<Int,Long>{
+  val interest=TransferInterestSystem.score(w,p,w.user.clubId);val relation=w.agentRelations[p.agentId]?:50
+  val wage=maxOf(p.wage+1,(p.wage*(1.12+(65-interest).coerceAtLeast(0)*.004)).roundToInt(),(TransferEngine.marketValue(w,p)/43000L).toInt())
+  val signing=(wage*(10+(60-relation).coerceAtLeast(0)/8)).toLong().coerceAtLeast(1000L)
+  return wage to signing
+ }
+ fun signPrecontract(w:World,playerId:Int,years:Int=3){
+  val p=w.players.getValue(playerId);require(bosmanEligible(w,p)){"Ein Bosman-Vorvertrag ist aktuell nicht möglich."}
+  val interest=TransferInterestSystem.score(w,p,w.user.clubId);require(interest>=56){"Der Spieler möchte aktuell keinen Vorvertrag unterschreiben."}
+  val (wage,bonus)=precontractDemand(w,p);require(w.club().budget>=bonus){"Budget für das Handgeld reicht nicht."}
+  w.club().budget-=bonus;p.precontractClubId=w.user.clubId;p.precontractSeason=w.calendar.season+1;p.precontractWage=wage;p.precontractYears=years
+  w.news("Vorvertrag unterschrieben","${p.name} kommt zur Saison ${p.precontractSeason} ablösefrei. Gehalt $wage €/Woche · Handgeld $bonus €.","good")
+ }
+ fun extendContract(w:World,playerId:Int,years:Int){
+  val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&!p.retired&&playerId!=w.user.playerId){"Verlängerung nicht möglich."};require(years in 2..5)
+  val newWage=maxOf(p.wage+1,(p.wage*1.08).roundToInt());val bonus=(newWage*6L).coerceAtLeast(400L);require(w.club().budget>=bonus){"Budget für Handgeld reicht nicht."}
+  w.club().budget-=bonus;p.contractYears=years;p.wage=newWage;p.precontractClubId=0;p.precontractSeason=0;p.precontractWage=0;p.precontractYears=0
+  w.news("Vertrag verlängert","${p.name} unterschreibt für $years Jahre · $newWage €/Woche.","good")
+ }
+ fun recallLoan(w:World,playerId:Int){
+  val p=w.players.getValue(playerId);require(p.loanParentClubId==w.user.clubId&&p.clubId!=w.user.clubId&&p.loanRecallAllowed){"Diese Leihe kann aktuell nicht zurückgerufen werden."}
+  val loanClub=p.clubId;p.clubId=w.user.clubId;p.youth=p.loanReturnYouth;if(p.youth)p.youthSquad=p.loanReturnYouthSquad
+  p.loanParentClubId=0;p.loanBuyerClubId=0;p.loanWeeks=0;p.loanOptionFee=0;p.loanRecallAllowed=true;p.loanReturnYouth=false;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null
+  WorldFactory.autoLineup(w,w.user.clubId);w.clubs[loanClub]?.let{WorldFactory.autoLineup(w,it.id)}
+  w.news("Leihe beendet","${p.name} kehrt vorzeitig zurück${if(p.youth)" in ${p.youthSquad.label}" else ""}.","normal")
+ }
+ private fun updateReport(w:World,a:ScoutAssignment){
+  val p=w.players[a.playerId]?:return;val r=w.scoutReports.getOrPut(p.id){ScoutReport(playerId=p.id)}
+  val gain=(26+w.club().academy.scouting/4+w.club().dynamics.staffQuality/8).coerceIn(28,55);r.progress=(r.progress+gain).coerceAtMost(100);r.lastUpdatedWeek=w.calendar.absoluteWeek
+  val spread=((100-r.progress)/6+1).coerceIn(1,17);r.caMin=(p.ca-spread).coerceAtLeast(1);r.caMax=(p.ca+spread).coerceAtMost(99)
+  val pSpread=((100-r.progress)/4+2).coerceIn(2,24);r.potentialMin=(p.hidden.potential-pSpread).coerceAtLeast(p.ca);r.potentialMax=(p.hidden.potential+pSpread).coerceAtMost(99)
+  r.personalityKnown=r.progress>=70;r.medicalKnown=r.progress>=88;r.note=when{r.progress>=100->"Scouting abgeschlossen";r.progress>=70->"Charakter und Rollenprofil sind belastbar";else->"Beobachtung läuft"}
+ }
+ private fun refreshCompetingBids(w:World,rng:SeededRandom){
+  w.competingBids.removeAll{it.expiresWeek<w.calendar.absoluteWeek||w.players[it.playerId]?.retired!=false}
+  for(pid in w.watchlist.toList().take(30)){
+   val p=w.players[pid]?:continue;if(p.clubId==0||p.clubId==w.user.clubId||w.competingBids.any{it.playerId==pid})continue
+   if(rng.chance(.10+(p.ca-60).coerceAtLeast(0)*.003)){
+    val candidates=w.clubs.values.filter{it.id!=w.user.clubId&&it.id!=p.clubId&&it.reputation>=((w.clubs[p.clubId]?.reputation?:30)-12)}
+    if(candidates.isNotEmpty()){val club=rng.pick(candidates);val fee=(TransferEngine.marketValue(w,p)*(90+rng.int(0,28))/100).coerceAtLeast(500);w.competingBids.add(CompetingBid(pid,club.id,fee,w.calendar.absoluteWeek+4))}
    }
   }
  }
- fun activeCompetingBids(w:World,playerId:Int)=w.competingBids.filter{it.playerId==playerId&&it.expiresWeek>=w.calendar.absoluteWeek}
+ fun weekly(w:World,rng:SeededRandom){
+  for(a in w.scoutAssignments.values.toList()){updateReport(w,a);a.weeksRemaining--;if(a.weeksRemaining<=0||w.scoutReports[a.playerId]?.progress==100)w.scoutAssignments.remove(a.playerId)}
+  if(w.calendar.absoluteWeek%2==0)refreshCompetingBids(w,rng)
+ }
+ fun newSeason(w:World){
+  val newSeason=w.calendar.season
+  for(p in w.players.values.toList()){
+   if(p.retired||p.youth||p.id==w.user.playerId)continue
+   if(p.precontractClubId!=0&&p.precontractSeason<=newSeason){
+    val from=p.clubId;val to=p.precontractClubId;p.clubId=to;p.wage=p.precontractWage;p.contractYears=maxOf(2,p.precontractYears);p.precontractClubId=0;p.precontractSeason=0;p.precontractWage=0;p.precontractYears=0;p.wantsMove=false
+    w.transferHistory.add(0,TransferHistoryEntry(newSeason,w.calendar.absoluteWeek,p.id,from,to,DealType.BUY,0,"Bosman / Vorvertrag"));WorldFactory.autoLineup(w,to);if(from in w.clubs)WorldFactory.autoLineup(w,from)
+    if(to==w.user.clubId)w.news("Bosman-Transfer vollzogen","${p.name} ist ablösefrei zum Verein gestoßen.","good")
+    continue
+   }
+   if(p.clubId!=0){
+    p.contractYears=(p.contractYears-1).coerceAtLeast(0)
+    if(p.contractYears==0){
+     val from=p.clubId;p.clubId=0;p.wage=0;p.wantsMove=true
+     w.transferHistory.add(0,TransferHistoryEntry(newSeason,w.calendar.absoluteWeek,p.id,from,0,DealType.BUY,0,"Vertragsende"))
+     if(from==w.user.clubId)w.news("Vertrag ausgelaufen","${p.name} verlässt den Verein ablösefrei.","bad")
+    }
+   }
+  }
+  w.competingBids.clear();w.scoutAssignments.clear()
+ }
 }
-
 object YouthCompetitionSystem {
- fun assign(w:World,playerId:Int,squad:YouthSquad){
-  require(w.live==null){"Kaderzuordnung erst außerhalb eines laufenden Spiels ändern."};val p=w.players.getValue(playerId);val age=w.calendar.season-p.birthYear
-  require(!p.retired&&p.clubId==w.user.clubId&&p.loanParentClubId==0&&p.id!=w.user.playerId&&age<=22&&(squad==YouthSquad.U23||age<=19)){"Dieser Spieler ist für ${squad.label} nicht einsatzberechtigt."}
-  p.youth=true;p.youthSquad=squad;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false;p.youthProfile.confidence=(p.youthProfile.confidence+2).coerceAtMost(100);w.training.extra.removeAll{it.playerId==p.id};WorldFactory.autoLineup(w,w.user.clubId);w.news("${p.name} in ${squad.label}","Der Spieler gehört jetzt fest zum ${squad.label}-Kader und erhält dort Nachwuchsspielpraxis und den Academy-Entwicklungsweg.")
+ fun eligible(w:World,p:Player,squad:YouthSquad):Boolean{
+  val age=w.calendar.season-p.birthYear
+  return !p.retired&&p.clubId==w.user.clubId&&p.loanParentClubId==0&&p.id!=w.user.playerId&&when(squad){YouthSquad.U19->age<=19;YouthSquad.U23->age<=22}
  }
- fun move(w:World,playerId:Int,squad:YouthSquad){require(w.players.getValue(playerId).youth){"Nur Jugendspieler können zwischen U19 und U23 verschoben werden."};assign(w,playerId,squad)}
- fun callUp(w:World,playerId:Int){
-  require(w.live==null){"Notfall-Nominierung erst außerhalb eines laufenden Spiels."};val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.youth&&!p.retired&&p.loanParentClubId==0){"Nur eigene Jugendspieler können vorübergehend hochgezogen werden."}
-  p.temporarySeniorCallUp=true;p.temporaryReturnSquad=p.youthSquad;p.youth=false;p.youthProfile.seniorTraining=true;p.morale=(p.morale+2).coerceAtMost(100);WorldFactory.rebuildBench(w,w.club());val target=p.temporaryReturnSquad?.label?:p.youthSquad.label;w.news("Notfall-Nominierung","${p.name} steht für das nächste Profispiel zur Verfügung und kehrt danach automatisch in $target zurück.")
+ fun normalizeSquad(w:World,p:Player){
+  if(!p.youth)return
+  val age=w.calendar.season-p.birthYear;p.youthSquad=if(age<=18)YouthSquad.U19 else YouthSquad.U23
  }
- fun returnToYouth(w:World,playerId:Int){
-  val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.temporarySeniorCallUp){"Keine vorübergehende Jugend-Nominierung aktiv."};val target=p.temporaryReturnSquad?:if(w.calendar.season-p.birthYear<=19)YouthSquad.U19 else YouthSquad.U23
-  p.youth=true;p.youthSquad=target;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false;WorldFactory.autoLineup(w,w.user.clubId);w.news("Zurück im ${target.label}","${p.name} kehrt nach der Profikader-Nominierung in den Nachwuchs zurück.")
+ fun assignToYouth(w:World,playerId:Int,squad:YouthSquad){
+  require(w.live==null){"Kaderzuordnung erst außerhalb eines laufenden Spiels ändern."}
+  val p=w.players.getValue(playerId);require(eligible(w,p,squad)){"Dieser Spieler ist für ${squad.label} nicht einsatzberechtigt."}
+  p.youth=true;p.youthSquad=squad;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false
+  p.youthProfile.confidence=(p.youthProfile.confidence+2).coerceAtMost(100);w.training.extra.removeAll{it.playerId==p.id}
+  WorldFactory.autoLineup(w,w.user.clubId);w.news("${p.name} in ${squad.label}","Der Spieler gehört jetzt fest zum ${squad.label}-Kader und erhält dort Nachwuchsspielpraxis und den Academy-Entwicklungsweg.","normal")
  }
- private fun goals(rng:SeededRandom,edge:Double):Int{val p=(.18+edge*.012).coerceIn(.06,.48);var goals=0;repeat(5){i->if(rng.chance(p*(1-i*.08)))goals++};return goals}
+ fun assign(w:World,playerId:Int,squad:YouthSquad)=assignToYouth(w,playerId,squad)
+ fun move(w:World,playerId:Int,squad:YouthSquad){val p=w.players.getValue(playerId);require(p.youth){"Nur Jugendspieler können zwischen U19 und U23 verschoben werden."};assignToYouth(w,playerId,squad)}
+ fun temporaryCallUp(w:World,playerId:Int){
+  require(w.live==null){"Notfall-Nominierung erst außerhalb eines laufenden Spiels."}
+  val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.youth&&!p.retired&&p.loanParentClubId==0){"Nur eigene Jugendspieler können vorübergehend hochgezogen werden."}
+  p.temporarySeniorCallUp=true;p.temporaryReturnSquad=p.youthSquad;p.youth=false;p.youthProfile.seniorTraining=true;p.morale=(p.morale+2).coerceAtMost(100)
+  WorldFactory.rebuildBench(w,w.club());w.news("Notfall-Nominierung","${p.name} steht für das nächste Profispiel zur Verfügung und kehrt danach automatisch in ${p.temporaryReturnSquad?.label?:p.youthSquad.label} zurück.","normal")
+ }
+ fun callUp(w:World,playerId:Int)=temporaryCallUp(w,playerId)
+ fun returnTemporary(w:World,playerId:Int,announce:Boolean=true){
+  val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.temporarySeniorCallUp){"Keine vorübergehende Jugend-Nominierung aktiv."}
+  val target=p.temporaryReturnSquad?:if(w.calendar.season-p.birthYear<=19)YouthSquad.U19 else YouthSquad.U23
+  p.youth=true;p.youthSquad=target;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false
+  if(announce)w.news("Zurück im ${target.label}","${p.name} kehrt nach der Profikader-Nominierung in den Nachwuchs zurück.","normal")
+  WorldFactory.autoLineup(w,w.user.clubId)
+ }
+ fun returnToYouth(w:World,playerId:Int)=returnTemporary(w,playerId,true)
+ fun makeTemporaryPermanent(w:World,playerId:Int){
+  require(w.live==null){"Kaderstatus erst außerhalb eines laufenden Spiels ändern."}
+  val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.temporarySeniorCallUp){"Keine vorübergehende Jugend-Nominierung aktiv."}
+  p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youth=false;p.youthProfile.seniorTraining=false
+  w.news("Dauerhaft im Profikader","${p.name} bleibt nach seiner Notfall-Nominierung dauerhaft bei den Profis.","good")
+ }
+ fun returnTemporaryAfterMatch(w:World,m:LiveMatch){
+  if(w.user.clubId !in listOf(m.homeId,m.awayId))return
+  w.squad(w.user.clubId).filter{it.temporarySeniorCallUp}.map{it.id}.toList().forEach{if(w.players[it]?.temporarySeniorCallUp==true)returnTemporary(w,it,true)}
+ }
+ private fun goalsFor(rng:SeededRandom,advantage:Double):Int{var goals=0;val base=(.18+advantage*.012).coerceIn(.06,.48);repeat(5){if(rng.chance(base*(1.0-it*.08)))goals++};return goals}
  private fun simulate(w:World,c:Club,squad:YouthSquad,rng:SeededRandom){
-  val players=w.squad(c.id).filter{it.youth&&it.youthSquad==squad&&!it.retired}.sortedByDescending{it.ca}.take(11);if(players.isEmpty())return
-  val quality=if(squad==YouthSquad.U19)c.academy.u19Quality else c.academy.u23Quality;val own=(players.map{it.ca}.average().takeUnless{it.isNaN()}?:30.0)+quality*.12+c.dynamics.staffQuality*.04;val opponent=own+rng.int(-8,8);val gf=goals(rng,own-opponent);val ga=goals(rng,opponent-own)
-  val season=if(squad==YouthSquad.U19)c.academy.u19Season else c.academy.u23Season;season.played++;season.goalsFor+=gf;season.goalsAgainst+=ga;season.lastResult="$gf:$ga";when{gf>ga->{season.wins++;season.points+=3};gf==ga->{season.draws++;season.points++};else->season.losses++}
-  players.forEach{p->val s=p.youthTeamStats;s.appearances++;val rating=(6.15+(p.ca-own)*.012+(gf-ga)*.16+rng.int(-5,5)*.04).coerceIn(4.8,9.4);s.averageRating=(s.averageRating*(s.appearances-1)+rating)/s.appearances;p.trainingProgress+=.018*(.7+p.youthProfile.learning/140.0)*(if(squad==YouthSquad.U23)1.12 else 1.0)}
-  repeat(gf){val scorer=players.maxByOrNull{it.attributes.finishing+rng.int(0,35)}?:return@repeat;scorer.youthTeamStats.goals++;players.filter{it.id!=scorer.id}.maxByOrNull{it.attributes.passing+it.attributes.vision+rng.int(0,35)}?.youthTeamStats?.let{it.assists++}}
+  val roster=w.squad(c.id).filter{it.youth&&it.youthSquad==squad&&!it.retired};if(roster.isEmpty())return
+  val quality=if(squad==YouthSquad.U19)c.academy.u19Quality else c.academy.u23Quality
+  val team=roster.sortedByDescending{it.ca}.take(11)
+  val strength=(team.map{it.ca}.average().takeIf{!it.isNaN()}?:30.0)+quality*.12+c.dynamics.staffQuality*.04
+  val opponent=strength+rng.int(-8,8);val gf=goalsFor(rng,strength-opponent);val ga=goalsFor(rng,opponent-strength)
+  val season=if(squad==YouthSquad.U19)c.academy.u19Season else c.academy.u23Season
+  season.played++;season.goalsFor+=gf;season.goalsAgainst+=ga;season.lastResult="$gf:$ga"
+  when{gf>ga->{season.wins++;season.points+=3};gf==ga->{season.draws++;season.points++};else->season.losses++}
+  team.forEach{p->
+   val y=p.youthTeamStats;y.appearances++;val rating=(6.15+(gf-ga)*.16+(p.ca-strength)*.012+rng.int(-5,5)*.04).coerceIn(4.8,9.4)
+   y.averageRating=((y.averageRating*(y.appearances-1)+rating)/y.appearances)
+   p.trainingProgress+=.018*(if(squad==YouthSquad.U23)1.12 else 1.0)*(0.7+p.youthProfile.learning/140.0)
+  }
+  repeat(gf){
+   val scorer=team.maxByOrNull{it.attributes.finishing+rng.int(0,35)}?:return@repeat;scorer.youthTeamStats.goals++
+   val assister=team.filter{it.id!=scorer.id}.maxByOrNull{it.attributes.passing+it.attributes.vision+rng.int(0,35)}
+   if(assister!=null&&rng.chance(.72))assister.youthTeamStats.assists++
+  }
  }
  fun weekly(w:World,rng:SeededRandom){
-  for(p in w.players.values){if(!p.youth)continue;val age=w.calendar.season-p.birthYear;if(age>=23)p.youth=false else if(age>=19&&p.youthSquad==YouthSquad.U19)p.youthSquad=YouthSquad.U23}
-  if(w.calendar.absoluteWeek%2==0)for(c in w.clubs.values){simulate(w,c,YouthSquad.U19,rng);simulate(w,c,YouthSquad.U23,rng)}
+  for(c in w.clubs.values){
+   w.squad(c.id).filter{it.youth}.forEach{p->
+    val age=w.calendar.season-p.birthYear
+    if(age>=23){p.youth=false;p.youthProfile.seniorTraining=false}
+    else if(age>=19&&p.youthSquad==YouthSquad.U19)p.youthSquad=YouthSquad.U23
+   }
+   if(w.calendar.absoluteWeek%2==0){simulate(w,c,YouthSquad.U19,rng);simulate(w,c,YouthSquad.U23,rng)}
+  }
+ }
+ fun newSeason(w:World){
+  for(c in w.clubs.values){c.academy.u19Season=AcademyTeamSeason();c.academy.u23Season=AcademyTeamSeason()}
+  w.players.values.filter{it.youth&&!it.retired}.forEach{normalizeSquad(w,it);it.youthTeamStats=YouthTeamStats()}
  }
 }
-
 object OutboundTransferSystem {
  fun isOutbound(w:World,o:TransferOffer)=o.sellerClubId==w.user.clubId&&o.buyerClubId!=w.user.clubId
  fun activeOffers(w:World)=w.negotiations.values
