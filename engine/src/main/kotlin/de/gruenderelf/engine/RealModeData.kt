@@ -102,7 +102,8 @@ object RealModeDatabase {
   RealModePlayerSeed("Serge Gnabry","Germany",1995,Position.LA,7,82),
   RealModePlayerSeed("Luis Díaz","Colombia",1997,Position.LA,14,85),
   RealModePlayerSeed("Michael Olise","France",2001,Position.RA,17,86),
-  RealModePlayerSeed("Harry Kane","England",1993,Position.ST,9,89)
+  RealModePlayerSeed("Harry Kane","England",1993,Position.ST,9,89),
+  RealModePlayerSeed("Bastian Assomo","Germany",2010,Position.ST,33,64)
  ))
  private fun club1_4()=RealModeClubSeed("bundesliga-124-borussia-dortmund","Borussia Dortmund","BVB",
 "Bundesliga","Deutschland",0xFFFFEE00,0xFF272726,listOf(
