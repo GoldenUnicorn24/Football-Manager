@@ -24,8 +24,8 @@ class GameViewModel(application: Application): AndroidViewModel(application){
   finally{mutable.update{it.copy(busy=false)}}
  }}}
  fun create(seed: Long,c: ClubDraft,p: PlayerDraft,slot: Int,sandboxPlayers: List<PlayerDraft> = emptyList())=work{val w=withContext(Dispatchers.Default){WorldFactory.createWorld(seed,c,p,sandboxPlayers)};repo.save(slot,w);mutable.value=GameState(w,slot,revision=mutable.value.revision+1)}
- fun createRealMode(seed: Long,clubKey: String,p: PlayerDraft,slot: Int)=work{val w=withContext(Dispatchers.Default){WorldFactory.createRealModeWorld(seed,clubKey,p)};repo.save(slot,w);mutable.value=GameState(w,slot,revision=mutable.value.revision+1)}
- fun createCustomReal(seed:Long,slotClubKey:String,c:ClubDraft,p:PlayerDraft,players:List<PlayerDraft>,slot:Int)=work{val w=withContext(Dispatchers.Default){WorldFactory.createCustomClubWorld(seed,slotClubKey,c,p,players)};repo.save(slot,w);mutable.value=GameState(w,slot,revision=mutable.value.revision+1)}
+ fun createRealMode(seed: Long,clubKey: String,p: PlayerDraft,slot: Int,fantasyCupEnabled:Boolean=true)=work{val w=withContext(Dispatchers.Default){WorldFactory.createRealModeWorld(seed,clubKey,p,fantasyCupEnabled)};repo.save(slot,w);mutable.value=GameState(w,slot,revision=mutable.value.revision+1)}
+ fun createCustomReal(seed:Long,slotClubKey:String,c:ClubDraft,p:PlayerDraft,players:List<PlayerDraft>,slot:Int,fantasyCupEnabled:Boolean=true)=work{val w=withContext(Dispatchers.Default){WorldFactory.createCustomClubWorld(seed,slotClubKey,c,p,players,fantasyCupEnabled)};repo.save(slot,w);mutable.value=GameState(w,slot,revision=mutable.value.revision+1)}
  fun createTopClub(seed: Long,clubKey: String,p: PlayerDraft,slot: Int)=createRealMode(seed,clubKey,p,slot)
  fun load(slot: Int)=work{val w=repo.load(slot);mutable.value=GameState(w,slot,revision=mutable.value.revision+1)}
  fun delete(slot: Int)=work{repo.delete(slot)}
