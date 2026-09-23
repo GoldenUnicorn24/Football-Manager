@@ -79,6 +79,16 @@ class EngineTest {
   assertEquals(32,fa.size);assertEquals(32,efl.size);assertTrue(fa.all{WorldFactory.leagueCountry(w,w.clubs.getValue(it.homeId).tier)=="England"&&WorldFactory.leagueCountry(w,w.clubs.getValue(it.awayId).tier)=="England"})
   assertEquals("Deutschland",WorldFactory.leagueCountry(w,1));assertEquals("England",WorldFactory.leagueCountry(w,6));assertEquals("DFB-Pokal",CompetitionEngine.displayName(w,CompetitionType.NATIONAL_CUP))
  }
+ @Test fun domesticCupRoundsAdvanceIndependently(){
+  val selected=RealModeDatabase.leagues.first().clubs.first()
+  val w=WorldFactory.createRealModeWorld(9459L,selected.key,PlayerDraft(firstName="Cup",lastName="Probe",number=70,position=Position.ZM))
+  val fa=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP&&it.round==1&&CompetitionEngine.cupId(w,it)=="FA_CUP"}.toList()
+  assertEquals(32,fa.size);assertEquals(0,w.fixtures.count{it.competition==CompetitionType.NATIONAL_CUP&&it.round==2&&CompetitionEngine.cupId(w,it)=="FA_CUP"})
+  fa.forEach{f->f.played=true;f.winnerId=f.homeId;CompetitionEngine.afterRecorded(w,f)}
+  assertEquals(16,w.fixtures.count{it.competition==CompetitionType.NATIONAL_CUP&&it.round==2&&CompetitionEngine.cupId(w,it)=="FA_CUP"})
+  assertEquals(0,w.fixtures.count{it.competition==CompetitionType.NATIONAL_CUP&&it.round==2&&CompetitionEngine.cupId(w,it)=="EFL_CUP"})
+  assertEquals(32,w.fixtures.count{it.competition==CompetitionType.NATIONAL_CUP&&it.round==1&&CompetitionEngine.cupId(w,it)=="EFL_CUP"})
+ }
  @Test fun modernUefaAdvancesThroughPlayoffsTwoLeggedRoundsAndFinal(){
   val selected=RealModeDatabase.leagues.first().clubs.first();val w=WorldFactory.createRealModeWorld(9461L,selected.key,PlayerDraft(firstName="Euro",lastName="Test",number=72,position=Position.ZM))
   val type=CompetitionType.CHAMPIONS_LEAGUE
