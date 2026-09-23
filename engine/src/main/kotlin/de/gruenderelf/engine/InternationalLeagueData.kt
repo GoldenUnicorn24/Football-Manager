@@ -10,8 +10,8 @@ package de.gruenderelf.engine
  */
 object InternationalLeagueData {
  private val colors=listOf(
-  "#0B3D91" to "#FFFFFF","#A50044" to "#FFFFFF","#111111" to "#FFFFFF",
-  "#0057B8" to "#FFD700","#B00020" to "#FFFFFF","#146B3A" to "#FFFFFF"
+  0xFF0B3D91 to 0xFFFFFFFF,0xFFA50044 to 0xFFFFFFFF,0xFF111111 to 0xFFFFFFFF,
+  0xFF0057B8 to 0xFFFFD700,0xFFB00020 to 0xFFFFFFFF,0xFF146B3A to 0xFFFFFFFF
  )
 
  private fun league(name:String,country:String,tier:Int,level:Int,prefix:String,names:List<String>): RealModeLeagueSeed {
