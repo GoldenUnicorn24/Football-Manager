@@ -251,7 +251,7 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
    Action("Individuellen Verein erstellen",!busy,secondary=true){mode="custom"}
   }
   Section("Enthaltene Ligen"){
-   Text("Deutschland: Bundesliga bis Oberliga Hamburg. Zusätzlich: Premier League, La Liga, Serie A und Ligue 1.",color=Muted)
+   Text("${RealModeDatabase.countries.size} Länder mit ${RealModeDatabase.leagues.size} spielbaren Ligen. Topligen mit hinterlegten Realkadern; bei noch nicht vollständig gepflegten Ligen werden fehlende Kader klar als simuliert gekennzeichnet.",color=Muted)
   }
   Action("Zurück zum Start",!busy,secondary=true){onBack()}
  }
