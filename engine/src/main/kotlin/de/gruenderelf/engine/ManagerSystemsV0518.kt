@@ -37,8 +37,14 @@ object CompetitionPrizeSystem {
 
  fun awardSeasonPrizes(w: World, leagueWinnerId: Int, tier: Int) {
   award(w, "${w.calendar.season}:league:$tier", leagueWinnerId, leagueChampionPrize(w, tier))
-  val cup = winnerId(w, CompetitionType.NATIONAL_CUP)
-  if (cup != 0) award(w, "${w.calendar.season}:cup", cup, if (w.privateTopClubMode) 6_000_000L else 500_000L)
+  if (w.privateTopClubMode) {
+   CompetitionEngine.domesticCupWinners(w).forEach { (spec, winner) ->
+    award(w, "${w.calendar.season}:cup:${spec.id}", winner, spec.winnerPrize)
+   }
+  } else {
+   val cup = winnerId(w, CompetitionType.NATIONAL_CUP)
+   if (cup != 0) award(w, "${w.calendar.season}:cup", cup, 500_000L)
+  }
   val cl = winnerId(w, CompetitionType.CHAMPIONS_LEAGUE)
   if (cl != 0) award(w, "${w.calendar.season}:cl", cl, 25_000_000L)
   val el = winnerId(w, CompetitionType.EUROPA_LEAGUE)
