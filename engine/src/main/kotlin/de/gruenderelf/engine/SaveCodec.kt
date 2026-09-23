@@ -3,8 +3,15 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.*
 object SaveCodec {
- val json=Json{encodeDefaults=true;ignoreUnknownKeys=true;coerceInputValues=true}
- fun encode(w: World)=json.encodeToString(w)
+ val json=Json{encodeDefaults=false;ignoreUnknownKeys=true;coerceInputValues=true}
+ private val versionRegex=Regex("\\\"saveVersion\\\"\\s*:\\s*(\\d+)")
+ fun encode(w: World):String{
+  val encoded=json.encodeToString(w)
+  if(versionRegex.containsMatchIn(encoded))return encoded
+  require(encoded.startsWith("{")&&encoded.endsWith("}")){"Spielstand konnte nicht serialisiert werden."}
+  return if(encoded.length==2) "{\"saveVersion\":${w.saveVersion}}" else "{\"saveVersion\":${w.saveVersion},"+encoded.substring(1)
+ }
+ fun versionOf(text:String):Int=versionRegex.find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()?:1
  /**
   * Leichte Laufzeitprüfung für Zustände, die direkt an die UI veröffentlicht oder als
   * Live-Checkpoint gespeichert werden. Sie prüft nur Referenzen und Match-Invarianten
@@ -36,14 +43,6 @@ object SaveCodec {
  }
  /** Interne Kopien bleiben schnell, werden aber vor Veröffentlichung leichtgewichtig geprüft. */
  fun copy(w: World):World=json.decodeFromString<World>(encode(w)).also(::requireRuntimeIntegrity)
- private fun encodedVersion(text:String):Int {
-  val key="\"saveVersion\"";val start=text.indexOf(key);if(start<0)return 1
-  var i=text.indexOf(':',start+key.length);if(i<0)return 1;i++
-  while(i<text.length&&text[i].isWhitespace())i++
-  var value=0;var found=false
-  while(i<text.length&&text[i].isDigit()){found=true;value=value*10+(text[i]-'0');i++}
-  return if(found)value else 1
- }
  private fun compactFinishedMatchHistory(w:World){
   // Live-Analyse benutzt ausschließlich World.live. Tausende Pass-/Schussframes abgeschlossener
   // Partien wurden nie wieder angezeigt, blähten aber jeden Save und jede In-Memory-Kopie auf.
@@ -52,7 +51,7 @@ object SaveCodec {
  }
  fun decode(text: String): World {
   require(text.length<=128*1024*1024){"Spielstand ist zu groß (maximal 128 MB)."}
-  val version=encodedVersion(text);val legacyVersion=version<=3
+  val version=versionOf(text);val legacyVersion=version<=3
   require(version in 1..SAVE_VERSION){"Dieser Spielstand benötigt eine neuere Gründerelf-Version."}
   val w=if(version==SAVE_VERSION){
    // Aktuelle Saves direkt dekodieren: kein zweiter kompletter JSON-Baum im RAM.
@@ -73,16 +72,15 @@ object SaveCodec {
   compactFinishedMatchHistory(w)
   // IDs zuerst stabilisieren, damit alte Spielstände gefahrlos um neue Gastvereine/Wettbewerbe ergänzt werden können.
   w.nextIds.player=maxOf(w.nextIds.player,(w.players.keys.maxOrNull()?:0)+1);w.nextIds.fixture=maxOf(w.nextIds.fixture,(w.fixtures.maxOfOrNull{it.id}?:0)+1)
-  val realMode=w.privateTopClubMode&&w.leagues.size in 5..9
-  val legacyTopclub=w.privateTopClubMode&&w.leagues.size==10
-  require((realMode&&w.clubs.size>=w.leagues.sumOf{it.clubIds.size})||((!realMode)&&w.leagues.size==10&&w.clubs.size>=120)){"Keine vollständige Welt im Spielstand."}
+  val realMode=w.privateTopClubMode
+  require((realMode&&w.leagues.isNotEmpty()&&w.clubs.size>=w.leagues.sumOf{it.clubIds.size})||((!realMode)&&w.leagues.size==10&&w.clubs.size>=120)){"Keine vollständige Welt im Spielstand."}
   require(w.user.clubId in w.clubs&&w.user.playerId in w.players&&w.self().clubId==w.user.clubId){"Verein oder Spielertrainer fehlt."}
   val userLeague=w.leagues.firstOrNull{w.user.clubId in it.clubIds}?:error("Nutzerliga fehlt.")
   val userRounds=(userLeague.clubIds.size-1)*2
   require(w.calendar.matchday in 1..userRounds){"Ungültiger Spieltag."}
   val leagueClubIds=w.leagues.flatMap{it.clubIds}.toSet()
   if(realMode){
-   require(w.leagues.map{it.tier}.toSet()==(1..w.leagues.size).toSet()&&w.leagues.all{it.clubIds.size in 18..20&&it.clubIds.size%2==0}&&leagueClubIds.size==w.leagues.sumOf{it.clubIds.size}&&leagueClubIds.all{it in w.clubs}){"Real-Modus-Ligastruktur beschädigt."}
+   require(w.leagues.map{it.tier}.toSet().size==w.leagues.size&&w.leagues.all{it.clubIds.size in 6..24&&it.clubIds.size%2==0}&&leagueClubIds.size==w.leagues.sumOf{it.clubIds.size}&&leagueClubIds.all{it in w.clubs}){"Real-Modus-Ligastruktur beschädigt."}
   }else require(w.leagues.map{it.tier}.toSet()==(1..10).toSet()&&w.leagues.all{it.clubIds.size==12}&&leagueClubIds.size==120&&leagueClubIds.all{it in w.clubs}){"Ligastruktur beschädigt."}
   WorldFactory.migrateGeneratedIdentity(w)
   CompetitionEngine.ensureForLoadedWorld(w)
@@ -92,7 +90,7 @@ object SaveCodec {
   val maxLeagueRound=w.leagues.maxOf{(it.clubIds.size-1)*2}
   val maxFixtureDay=maxOf(maxLeagueRound,w.fixtures.maxOfOrNull{it.matchday}?:maxLeagueRound)
   require(leagueFixtures.size==expectedLeagueFixtures&&w.fixtures.map{it.id}.toSet().size==w.fixtures.size&&w.fixtures.all{it.homeId in w.clubs&&it.awayId in w.clubs&&it.homeId!=it.awayId&&it.matchday in 1..maxFixtureDay&&(!it.played||it.id in w.matches)}){"Spielplan oder Ergebnisse unvollständig."}
-  for(c in w.clubs.values){require(c.tier in 0..10&&c.stadium.capacity>0){"Vereinsdaten beschädigt."};if(c.tactics.formation !in Formations.all)c.tactics.formation="4-4-2";if(c.tactics.xi.size!=11||c.tactics.xi.any{it!=0&&w.players[it]?.clubId!=c.id})WorldFactory.autoLineup(w,c.id)}
+  for(c in w.clubs.values){require(c.tier>=0&&c.stadium.capacity>0){"Vereinsdaten beschädigt."};if(c.tactics.formation !in Formations.all)c.tactics.formation="4-4-2";if(c.tactics.xi.size!=11||c.tactics.xi.any{it!=0&&w.players[it]?.clubId!=c.id})WorldFactory.autoLineup(w,c.id)}
   if(w.training.days.size!=7)w.training.days=TrainingPlan().days
   w.training.extra=w.training.extra.filter{w.players[it.playerId]?.clubId==w.user.clubId}.distinctBy{it.playerId}.take(if(w.assistantCoach.autoSeniorTraining||w.assistantCoach.autoYouthTraining)6 else if(w.privateTopClubMode)4 else if(w.club().tier>=7)2 else 4).toMutableList()
   w.live?.let{live->
