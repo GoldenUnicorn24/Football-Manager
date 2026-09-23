@@ -13,7 +13,10 @@ class EuropeanExpansionTest {
    assertTrue(league.clubs.size>=2,"${league.name} hat zu wenige Vereine")
    assertEquals(0,league.clubs.size%2,"${league.name} muss fuer den Rundenspielplan eine gerade Vereinszahl haben")
   }
-  assertEquals(10,RealModeDatabase.leaguesForCountry("Kroatien").first{it.level==1}.clubs.size)
+  val spanishThird=RealModeDatabase.leaguesForCountry("Spanien").filter{it.level==3}
+  assertEquals(2,spanishThird.size)
+  assertTrue(spanishThird.all{it.clubs.size==20})
+    assertEquals(10,RealModeDatabase.leaguesForCountry("Kroatien").first{it.level==1}.clubs.size)
   assertEquals(16,RealModeDatabase.leaguesForCountry("Russland").first{it.level==1}.clubs.size)
   assertEquals(18,RealModeDatabase.leaguesForCountry("Niederlande").first{it.level==1}.clubs.size)
   assertEquals(18,RealModeDatabase.leaguesForCountry("Belgien").first{it.level==1}.clubs.size)
