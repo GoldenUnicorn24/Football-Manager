@@ -24,7 +24,7 @@ import kotlin.math.roundToInt
 private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position==target->Grass;p.fit(target)>=.92->Blue;p.fit(target)>=.84->Gold;else->Clay}
 @Composable fun FormDot(result: String){Box(Modifier.size(28.dp).background(when(result){"S"->Grass;"N"->Clay;else->Muted},RoundedCornerShape(5.dp)),contentAlignment=Alignment.Center){Text(result,color=Ink,style=MaterialTheme.typography.labelMedium)}}
 @Composable fun NextGame(w: World,f: Fixture,label: String=if(w.live==null)"Zum Spiel" else "Partie fortsetzen",onGame: ()->Unit){val home=f.homeId==w.user.clubId;val opponent=w.clubs.getValue(if(home)f.awayId else f.homeId);val host=w.clubs.getValue(f.homeId)
- Section{Text((if(f.competition!=CompetitionType.LEAGUE)"${CompetitionEngine.displayName(w,f.competition).uppercase()} · ${f.stage.uppercase()} · " else "")+(if(w.isDerby(f.homeId,f.awayId)&&f.competition==CompetitionType.LEAGUE)"DERBY · " else "")+(if(home)"ZU HAUSE" else "AUSWÄRTS"),color=Grass,style=MaterialTheme.typography.labelMedium,letterSpacing=1.sp);Row(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically){Crest(opponent.logo,opponent.primary,opponent.secondary,Modifier.size(74.dp));Column(Modifier.weight(1f)){Text("${opponent.name} (${opponent.shortName})",style=MaterialTheme.typography.headlineMedium);Text(host.stadium.name,color=Muted);Text("${host.stadium.surface.label} · ${host.stadium.capacity} Plätze",color=Muted,style=MaterialTheme.typography.bodySmall)}};if(opponent.form.isNotEmpty())Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Text("Gegnerform",color=Muted);opponent.form.forEach{FormDot(it)}};Action(label,onClick=onGame)}
+ Section{Text((if(f.competition!=CompetitionType.LEAGUE)"${CompetitionEngine.displayName(w,f).uppercase()} · ${f.stage.uppercase()} · " else "")+(if(w.isDerby(f.homeId,f.awayId)&&f.competition==CompetitionType.LEAGUE)"DERBY · " else "")+(if(home)"ZU HAUSE" else "AUSWÄRTS"),color=Grass,style=MaterialTheme.typography.labelMedium,letterSpacing=1.sp);Row(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically){Crest(opponent.logo,opponent.primary,opponent.secondary,Modifier.size(74.dp));Column(Modifier.weight(1f)){Text("${opponent.name} (${opponent.shortName})",style=MaterialTheme.typography.headlineMedium);Text(host.stadium.name,color=Muted);Text("${host.stadium.surface.label} · ${host.stadium.capacity} Plätze",color=Muted,style=MaterialTheme.typography.bodySmall)}};if(opponent.form.isNotEmpty())Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Text("Gegnerform",color=Muted);opponent.form.forEach{FormDot(it)}};Action(label,onClick=onGame)}
 }
 @Composable fun HomeScreen(w: World,onGame: ()->Unit,onProfile: ()->Unit){val c=w.club();val p=w.self()
  Page(c.name,"SAISON ${w.calendar.season}/${(w.calendar.season+1)%100} · SPIELTAG ${w.calendar.matchday}"){
@@ -77,10 +77,10 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
 @Composable fun LeagueScreen(w: World){
  val real=w.privateTopClubMode;val cupName=CompetitionEngine.displayName(w,CompetitionType.NATIONAL_CUP)
  val ownLeague=w.leagues.first{w.user.clubId in it.clubIds};val ownCountry=WorldFactory.leagueCountry(w,ownLeague.tier)
- val competitionOptions=if(real)listOf("Liga",cupName,CompetitionType.CHAMPIONS_LEAGUE.label,CompetitionType.EUROPA_LEAGUE.label) else listOf("Liga",cupName,CompetitionType.EURO_ELITE.label)
+ val competitionOptions=if(real)listOf("Liga")+cupNames+listOf(CompetitionType.CHAMPIONS_LEAGUE.label,CompetitionType.EUROPA_LEAGUE.label) else listOf("Liga",cupName,CompetitionType.EURO_ELITE.label)
  var competition by rememberSaveable{mutableStateOf("Liga")};var country by rememberSaveable(w.user.clubId,w.calendar.season){mutableStateOf(ownCountry)};var tier by rememberSaveable(w.user.clubId,w.calendar.season){mutableIntStateOf(ownLeague.tier)};var day by rememberSaveable(w.calendar.season){mutableIntStateOf(w.calendar.matchday)};var fullTable by rememberSaveable{mutableStateOf(false)};var group by rememberSaveable{mutableStateOf("A")};var euroRound by rememberSaveable(w.calendar.season){mutableIntStateOf(1)}
  if(competition !in competitionOptions)competition="Liga"
- val eyebrow=if(real)"LIGEN · DFB-POKAL · CHAMPIONS LEAGUE · EUROPA LEAGUE" else "LIGA · GRÜNDERPOKAL · EUROPA-ELITELIGA"
+ val eyebrow=if(real)"LIGEN · NATIONALE POKALE · CHAMPIONS LEAGUE · EUROPA LEAGUE" else "LIGA · GRÜNDERPOKAL · EUROPA-ELITELIGA"
  Page("Wettbewerbe",eyebrow){
   Pick("Wettbewerb",competition,competitionOptions,{it}){competition=it}
   when(competition){
@@ -96,10 +96,11 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
     Pick("Spieltag",day,(1..rounds).toList(),{"Spieltag $it"}){day=it}
     w.fixtures.filter{it.competition==CompetitionType.LEAGUE&&it.tier==tier&&it.matchday==day}.forEach{f->Section{CompetitionResultRow(w,f)}}
    }
-   cupName->{
-    val count=w.fixtures.count{it.competition==CompetitionType.NATIONAL_CUP&&it.round==1}
-    Section(cupName){Text("${count*2} Vereine · sechs K.-o.-Runden · jede Runde ein Spiel. Bei Gleichstand folgen Verlängerung und Elfmeterschießen.",color=Muted);if(real)Text("Im DFB-Pokal starten 64 deutsche Vereine aus dem im Spiel enthaltenen Ligabaum.",color=Grass);val own=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP&&(it.homeId==w.user.clubId||it.awayId==w.user.clubId)};if(own.isEmpty())Text("Dein Verein ist in dieser Saison nicht qualifiziert.",color=Muted)else Text("Dein Weg: ${own.count{it.played}} von ${own.size} bislang angesetzten Partien.",color=Grass)}
-    val rounds=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP}.groupBy{it.round}.toSortedMap();rounds.forEach{(_,games)->Section(games.first().stage){games.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}}
+   competition in cupNames->{
+    val cupFixtures=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP&&CompetitionEngine.displayName(w,it)==competition}
+    val participants=cupFixtures.flatMap{listOf(it.homeId,it.awayId)}.distinct().size
+    Section(competition){Text("$participants aktuell angesetzte Teilnehmer · K.-o.-System mit Verlängerung und Elfmeterschießen bei Gleichstand.",color=Muted);val own=cupFixtures.filter{it.homeId==w.user.clubId||it.awayId==w.user.clubId};if(own.isEmpty())Text("Dein Verein ist in dieser Saison nicht in diesem Pokal vertreten.",color=Muted)else Text("Dein Weg: ${own.count{it.played}} von ${own.size} bislang angesetzten Partien.",color=Grass)}
+    val rounds=cupFixtures.groupBy{it.round}.toSortedMap();rounds.forEach{(_,games)->Section(games.first().stage){games.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}}
    }
    else->{
     val type=when(competition){CompetitionType.CHAMPIONS_LEAGUE.label->CompetitionType.CHAMPIONS_LEAGUE;CompetitionType.EUROPA_LEAGUE.label->CompetitionType.EUROPA_LEAGUE;else->CompetitionType.EURO_ELITE}
@@ -152,7 +153,7 @@ private fun liveDelayMs(phase: LivePhase,speed: MatchSpeed): Long {
  // Der Match-Timer setzt absichtlich keinen globalen busy/loading-Zustand.
  LaunchedEffect(state.revision,running,speed,m?.fixtureId,m?.liveEventSerial){if(m!=null&&running&&!m.finished&&!m.halfTime&&!m.pendingDecision&&!m.incidentPause&&!m.assistantSubPending){delay(liveDelayMs(m.livePhase,speed));vm.liveStep()}}
  if(m==null){
-  Page("${w.nextFixture()?.let{CompetitionEngine.displayName(w,it.competition)}?:"Spieltag"} ${w.calendar.matchday}","KREIDE AN DEN SCHUHEN"){
+  Page("${w.nextFixture()?.let{CompetitionEngine.displayName(w,it)}?:"Spieltag"} ${w.calendar.matchday}","KREIDE AN DEN SCHUHEN"){
    w.nextFixture()?.let{NextGame(w,it,"Anpfiff"){vm.startMatch();running=true}}
    Section("Vor dem Anpfiff"){
     Text("Formation ${w.club().tactics.formation} · Mentalität ${w.club().tactics.mentality}")
