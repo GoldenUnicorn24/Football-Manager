@@ -20,6 +20,11 @@ object CompetitionPrizeSystem {
  fun nationalCupPrize(w:World):Long=if(w.privateTopClubMode)6_000_000L else 500_000L
  fun championsLeaguePrize(w:World):Long=25_000_000L
 
+ fun award(w:World,key:String,clubId:Int,amount:Long):Boolean=pay(w,key,clubId,amount)
+ fun europaLeaguePrize(w:World):Long=12_000_000L
+ fun clubWorldCupPrize(w:World):Long=40_000_000L
+ fun eternalCrownPrize(w:World):Long=50_000_000L
+
  private fun pay(w:World,key:String,clubId:Int,amount:Long):Boolean{
   if(clubId==0||amount<=0||key in w.paidSeasonPrizes)return false
   val c=w.clubs[clubId]?:return false;c.budget+=amount;w.paidSeasonPrizes.add(key);return true
