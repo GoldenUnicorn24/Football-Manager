@@ -70,7 +70,7 @@ class RecoveryV0518Test {
 
  @Test fun savedMatchAnalysisExposesTimelineAndPassNetwork(){
   val w=WorldFactory.createWorld(51810L);val live=MatchEngine.start(w);val id=w.user.clubId;val p=w.squad().first{!it.youth}
-  live.minute=90;live.shotEvents+=ShotEvent(12,id,p.id,xg=.20);live.shotEvents+=ShotEvent(67,id,p.id,xg=.55);live.passEvents+=PassEvent(20,id,p.id,w.user.playerId,true,.2f,.3f,.5f,.4f)
+  live.minute=90;live.shotEvents+=ShotEvent(12,id,p.id,xg=.20);live.shotEvents+=ShotEvent(67,id,p.id,xg=.55);live.passEvents+=PassEvent(20,id,p.id,w.user.playerId,true,.2f,.3f,.5f,.4f);live.finished=true
   MatchEngine.record(w,live);val rec=w.matches.values.maxBy{it.fixtureId};val timeline=MatchAnalysisSystem.xgTimeline(rec,id);val network=MatchAnalysisSystem.passNetwork(rec,id)
   assertTrue(timeline.last().second>=.75);assertTrue(network.first.isNotEmpty());assertEquals(1,network.second.single().count)
  }
