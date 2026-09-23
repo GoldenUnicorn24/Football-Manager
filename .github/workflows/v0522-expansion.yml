@@ -21,7 +21,7 @@ jobs:
           chmod +x gradlew
           set +e
           ./gradlew --no-daemon -PgruenderelfKeystorePassword=ci-placeholder :engine:test \
-            --tests 'de.gruenderelf.engine.EngineTest.realModeCanStartInEveryPackedLeagueAndUsesDynamicLeagueLength' \
+            --tests 'de.gruenderelf.engine.EngineTest.realModeRepresentativeStartsUseDynamicLeagueLength' \
             --tests 'de.gruenderelf.engine.EngineTest.modernUefaAdvancesThroughPlayoffsTwoLeggedRoundsAndFinal' \
             --tests 'de.gruenderelf.engine.EngineTest.realModeUefaUsesModernLeaguePhaseAndDfbHas64GermanClubs' \
             --tests 'de.gruenderelf.engine.EngineTest.realModeContainsOriginalGamePlusExpandedLeaguesAndCompetitions' \
