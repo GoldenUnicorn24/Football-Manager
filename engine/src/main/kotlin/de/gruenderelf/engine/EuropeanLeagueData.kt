@@ -250,7 +250,19 @@ object EuropeanLeagueData {
             league("Jupiler Pro League","Belgien",18,1,belgium),
             league("ADMIRAL Bundesliga","Österreich",19,1,austria),
             league("Ekstraklasa","Polen",20,1,poland),
-            league("Allsvenskan","Schweden",21,1,sweden)
+            league("Allsvenskan","Schweden",21,1,sweden),
+            league("Primeira Liga","Portugal",22,1,portugal),
+            league("Trendyol Süper Lig","Türkei",23,1,turkey),
+            league("Brack Super League","Schweiz",24,1,switzerland),
+            league("Scottish Premiership","Schottland",25,1,scotland),
+            league("Stoiximan Super League","Griechenland",26,1,greece),
+            league("Chance Liga","Tschechien",27,1,czechia),
+            league("Danish Superliga","Dänemark",28,1,denmark),
+            league("SuperLiga Srbije","Serbien",29,1,serbia),
+            league("Ukrainian Premier League","Ukraine",30,1,ukraine),
+            league("Eliteserien","Norwegen",31,1,norway),
+            league("Primera Federación Grupo 1","Spanien",32,3,primeraFederacion1),
+            league("Primera Federación Grupo 2","Spanien",33,3,primeraFederacion2)
         )
     }
 
@@ -267,7 +279,17 @@ object EuropeanLeagueData {
         DomesticCupSeed("CROKY_CUP","Belgien","Croky Cup",maxLevel=1),
         DomesticCupSeed("OFB_CUP","Österreich","ÖFB-Cup",maxLevel=1),
         DomesticCupSeed("PUCHAR_POLSKI","Polen","Puchar Polski",maxLevel=1),
-        DomesticCupSeed("SVENSKA_CUPEN","Schweden","Svenska Cupen",maxLevel=1)
+        DomesticCupSeed("SVENSKA_CUPEN","Schweden","Svenska Cupen",maxLevel=1),
+        DomesticCupSeed("TACA_PORTUGAL","Portugal","Taça de Portugal",maxLevel=1),
+        DomesticCupSeed("TURKIYE_KUPASI","Türkei","Ziraat Türkiye Kupası",maxLevel=1),
+        DomesticCupSeed("SCHWEIZER_CUP","Schweiz","Schweizer Cup",maxLevel=1),
+        DomesticCupSeed("SCOTTISH_CUP","Schottland","Scottish Cup",maxLevel=1),
+        DomesticCupSeed("KYPELLO_ELLADAS","Griechenland","Kypello Elladas",maxLevel=1),
+        DomesticCupSeed("MOL_CUP","Tschechien","MOL Cup",maxLevel=1),
+        DomesticCupSeed("DBU_POKALEN","Dänemark","DBU Pokalen",maxLevel=1),
+        DomesticCupSeed("KUP_SRBIJE","Serbien","Kup Srbije",maxLevel=1),
+        DomesticCupSeed("UKRAINIAN_CUP","Ukraine","Ukrainian Cup",maxLevel=1),
+        DomesticCupSeed("NM_CUPEN","Norwegen","NM Cupen",maxLevel=1)
     )
 
     fun cupById(id:String)=domesticCups.firstOrNull{it.id==id}
