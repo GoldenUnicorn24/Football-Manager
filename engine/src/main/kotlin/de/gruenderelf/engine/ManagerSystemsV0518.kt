@@ -114,15 +114,62 @@ object CompetitionRulesEngine {
  fun goalkeeperViolation(seconds:Int,rules:CompetitionRuleSet=CompetitionRuleSet())=seconds>rules.goalkeeperControlSeconds
 }
 object TacticalInstructionSystem {
- fun forPlayer(club: Club, playerId: Int): List<PlayerInstruction> = club.tactics.instructions[playerId]?.toList() ?: emptyList()
- fun has(club: Club, playerId: Int, instruction: PlayerInstruction) = instruction in forPlayer(club, playerId)
- fun toggle(club: Club, playerId: Int, instruction: PlayerInstruction) {
-  val list = club.tactics.instructions.getOrPut(playerId) { mutableListOf() }
-  if (!list.remove(instruction)) list += instruction
-  if (list.isEmpty()) club.tactics.instructions.remove(playerId)
+ fun instructions(c:Club,playerId:Int):List<PlayerInstruction> = c.tactics.instructions[playerId]?:emptyList()
+ fun forPlayer(c:Club,playerId:Int)=instructions(c,playerId)
+ fun has(c:Club,playerId:Int,i:PlayerInstruction)=i in instructions(c,playerId)
+ fun set(w:World,playerId:Int,i:PlayerInstruction,enabled:Boolean){
+  val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId){"Nur eigene Spieler erhalten Anweisungen."};require(w.live==null){"Individuelle Anweisungen vor dem Spiel festlegen."}
+  val list=w.club().tactics.instructions.getOrPut(playerId){mutableListOf()}
+  if(enabled){
+   if(i==PlayerInstruction.PRESS_MORE)list.remove(PlayerInstruction.PRESS_LESS)
+   if(i==PlayerInstruction.PRESS_LESS)list.remove(PlayerInstruction.PRESS_MORE)
+   require(i in list||list.size<3){"Maximal drei individuelle Anweisungen pro Spieler."}
+   if(i !in list)list.add(i)
+  }else list.remove(i)
+  if(list.isEmpty())w.club().tactics.instructions.remove(playerId)
  }
+ fun toggle(c:Club,playerId:Int,i:PlayerInstruction){
+  val list=c.tactics.instructions.getOrPut(playerId){mutableListOf()}
+  if(!list.remove(i)){
+   if(i==PlayerInstruction.PRESS_MORE)list.remove(PlayerInstruction.PRESS_LESS)
+   if(i==PlayerInstruction.PRESS_LESS)list.remove(PlayerInstruction.PRESS_MORE)
+   if(list.size<3)list.add(i)
+  }
+  if(list.isEmpty())c.tactics.instructions.remove(playerId)
+ }
+ fun teamFactor(c:Club,ids:List<Int>,attack:Boolean):Double{
+  var bonus=0.0
+  ids.forEach{id->instructions(c,id).forEach{i->
+   bonus+=if(attack)when(i){
+    PlayerInstruction.RUN_IN_BEHIND->.008;PlayerInstruction.OVERLAP->.006;PlayerInstruction.CUT_INSIDE->.006
+    PlayerInstruction.RISKY_PASSES->.004;PlayerInstruction.SHOOT_MORE->.005;PlayerInstruction.HOLD_POSITION->-.004
+    else->0.0
+   }else when(i){
+    PlayerInstruction.HOLD_POSITION->.007;PlayerInstruction.TIGHT_MARKING->.008;PlayerInstruction.PRESS_MORE->.006
+    PlayerInstruction.PRESS_LESS->-.004;PlayerInstruction.OVERLAP->-.003;else->0.0
+   }
+  }}
+  return (1.0+bonus).coerceIn(.92,1.12)
+ }
+ fun fitnessFactor(c:Club,id:Int):Double{
+  var v=1.0
+  for(i in instructions(c,id))v*=when(i){
+   PlayerInstruction.PRESS_MORE->1.12;PlayerInstruction.OVERLAP->1.08;PlayerInstruction.RUN_IN_BEHIND->1.06
+   PlayerInstruction.PRESS_LESS->.92;PlayerInstruction.HOLD_POSITION->.95;else->1.0
+  }
+  return v.coerceIn(.82,1.28)
+ }
+ fun shooterWeight(c:Club,p:Player):Int{
+  val x=instructions(c,p.id)
+  return (if(PlayerInstruction.SHOOT_MORE in x)5 else 0)+(if(PlayerInstruction.RUN_IN_BEHIND in x)3 else 0)+(if(PlayerInstruction.CUT_INSIDE in x&&p.position in listOf(Position.LA,Position.RA))3 else 0)
+ }
+ fun creatorWeight(c:Club,p:Player):Int{
+  val x=instructions(c,p.id)
+  return (if(PlayerInstruction.RISKY_PASSES in x)5 else 0)+(if(PlayerInstruction.OVERLAP in x)2 else 0)
+ }
+ fun offsideExtra(c:Club,id:Int)=if(has(c,id,PlayerInstruction.RUN_IN_BEHIND)).012 else 0.0
+ fun riskyPass(c:Club,id:Int)=has(c,id,PlayerInstruction.RISKY_PASSES)
 }
-
 object MatchAnalysisSystem {
  fun recordTacticChange(w: World, m: LiveMatch, clubId: Int, label: String) {
   val stats = if (clubId == m.homeId) m.home else m.away
