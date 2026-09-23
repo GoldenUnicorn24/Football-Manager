@@ -182,6 +182,11 @@ private fun liveDelayMs(phase: LivePhase,speed: MatchSpeed): Long {
    if(!m.finished){
     if(m.halfTime)Action(MatchEngine.breakActionLabel(m),true){vm.secondHalf();running=true}
     else if(!m.incidentPause)Action(if(running)"Pause" else "Live fortsetzen",true){running=!running}
+    if(!m.halfTime&&!m.incidentPause){
+     if(m.period==1)Action("Bis Halbzeit",!state.busy,true){running=false;vm.simulateToHalf()}
+     Action("Spiel simulieren",!state.busy,true){running=false;vm.simulateMatch()}
+     Text("Schnellsimulation verwendet dieselbe Match-KI, Taktik, Fitness-, Karten- und Verletzungslogik wie das Live-Spiel.",color=Muted,style=MaterialTheme.typography.bodySmall)
+    }
     Pick("Spieltempo",speed,MatchSpeed.entries.toList(),{it.label}){vm.setMatchSpeed(it)}
     Text(when(speed){MatchSpeed.SLOW->"Langsam: mehr Zeit für jede Ballbewegung und Szene.";MatchSpeed.NORMAL->"Normal: ungefähr 2–2,5 Sekunden pro gewöhnlicher Spielminute.";MatchSpeed.FAST->"Schnell: kürzere Abläufe, wichtige Ereignisse bleiben vollständig sichtbar."},color=Muted,style=MaterialTheme.typography.bodySmall)
    }else Action(if(w.fixtures.firstOrNull{it.id==m.fixtureId}?.competition==CompetitionType.LEAGUE)"Spieltag bestätigen & weiter" else "Pokalpartie bestätigen & weiter",!state.busy){running=false;vm.finishWeek()}
