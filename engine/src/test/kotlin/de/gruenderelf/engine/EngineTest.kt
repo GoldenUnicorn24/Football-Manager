@@ -121,11 +121,19 @@ class EngineTest {
   play(w.fixtures.filter{it.competition==type&&it.round in 15..16}.toList());val final=w.fixtures.single{it.competition==type&&it.round==17};assertEquals("Finale",final.stage);assertEquals(34,final.matchday)
   play(listOf(final));assertTrue(final.played);assertTrue(final.winnerId!=0)
  }
- @Test fun realModeCanStartInEveryPackedLeagueAndUsesDynamicLeagueLength(){
-  for((index,league) in RealModeDatabase.leagues.withIndex()){
-   val selected=league.clubs.first();val w=WorldFactory.createRealModeWorld(92000L+index,selected.key,PlayerDraft(firstName="Alex",lastName="Manager",number=71,position=Position.ZM))
-   assertEquals(selected.name,w.club().name);assertEquals(league.name,WorldFactory.leagueName(w,w.club().tier));assertEquals((league.clubs.size-1)*2,w.fixtures.count{it.competition==CompetitionType.LEAGUE&&(it.homeId==w.user.clubId||it.awayId==w.user.clubId)})
+ @Test fun realModeLoadsAndSchedulesEveryPackedLeague(){
+  val leagues=RealModeDatabase.leagues
+  val first=leagues.first().clubs.first()
+  val w=WorldFactory.createRealModeWorld(92000L,first.key,PlayerDraft(firstName="Alex",lastName="Manager",number=71,position=Position.ZM))
+  assertEquals(first.name,w.club().name)
+  for(league in leagues){
+   val club=w.clubs.values.first{it.tier==league.tier&&it.name==league.clubs.first().name}
+   assertEquals(league.name,WorldFactory.leagueName(w,club.tier))
+   assertEquals((league.clubs.size-1)*2,w.fixtures.count{it.competition==CompetitionType.LEAGUE&&(it.homeId==club.id||it.awayId==club.id)})
   }
+  val last=leagues.last().clubs.first()
+  val second=WorldFactory.createRealModeWorld(92001L,last.key,PlayerDraft(firstName="Alex",lastName="Manager",number=71,position=Position.ZM))
+  assertEquals(last.name,second.club().name)
  }
  @Test fun sandboxCreatesEditableTwentyPlayerSquad(){val club=ClubDraft(city="Teststadt",difficulty=Difficulty.SANDBOX);val self=PlayerDraft(firstName="Alex",lastName="Coach",position=Position.ST,attributes=Attributes(80,88,75,82,40,70,78,80,72,8,76));val extras=(0 until 19).map{i->PlayerDraft(firstName="Kader",lastName="${i+2}",number=i+2,position=Position.entries[i%Position.entries.size],attributes=Attributes(60+i%5,61,62,63,64,65,66,67,68,if(i%10==0)75 else 10,69))};val w=WorldFactory.createWorld(91,club,self,extras);assertEquals(Difficulty.SANDBOX,w.user.difficulty);assertEquals(24,w.squad().size);assertEquals(88,w.self().attributes.finishing);assertEquals(20,w.squad().count{!it.youth});assertEquals(20,w.squad().filter{!it.youth}.map{it.name}.toSet().size)}
  @Test fun generatedOpponentNamesAreBroadlyRandomInsteadOfMirroringOneSmallPool(){

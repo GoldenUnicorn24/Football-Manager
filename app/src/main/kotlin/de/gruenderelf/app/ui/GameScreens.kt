@@ -98,7 +98,7 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
     Pick("Spieltag",day,(1..rounds).toList(),{"Spieltag $it"}){day=it}
     w.fixtures.filter{it.competition==CompetitionType.LEAGUE&&it.tier==tier&&it.matchday==day}.forEach{f->Section{CompetitionResultRow(w,f)}}
    }
-   competition in cupOptions->{
+   in cupOptions->{
     val cupCountry=competition.removePrefix("Pokal · ");val games=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP&&CompetitionEngine.cupGroup(w,it)==cupCountry}
     Section(CompetitionEngine.cupName(w,cupCountry)){TrophyIllustration(Modifier.size(70.dp));Text("${games.filter{it.round==games.minOfOrNull{g->g.round}}.size*2} Vereine · K.-o.-Runden mit Verlängerung und Elfmeterschießen.",color=Muted);val own=games.filter{it.homeId==w.user.clubId||it.awayId==w.user.clubId};if(own.isEmpty())Text("Dein Verein ist in dieser Saison nicht im Wettbewerb.",color=Muted)else Text("Dein Weg: ${own.count{it.played}} von ${own.size} angesetzten Partien.",color=Grass)}
     games.groupBy{it.round}.toSortedMap().forEach{(_,round)->Section(round.first().stage){round.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}}
