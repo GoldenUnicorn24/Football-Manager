@@ -186,7 +186,7 @@ object WorldFactory {
      }
     }else{
      val positions=Formations.positions("4-2-3-1")+listOf(Position.TW,Position.IV,Position.LV,Position.RV,Position.DM,Position.ZM,Position.OM,Position.LA,Position.RA,Position.ST,Position.ST)
-     positions.forEach{pos->val p=generatePlayer(w.nextIds.player++,id,leagueSeed.level,pos,rng,2026);p.number=(1..99).first{n->w.squad(id).none{it.number==n}};p.nationality="Deutschland";w.players[p.id]=p}
+     positions.forEach{pos->val p=generatePlayer(w.nextIds.player++,id,leagueSeed.level,pos,rng,2026);p.number=(1..99).first{n->w.squad(id).none{it.number==n}};p.nationality=clubSeed.country;w.players[p.id]=p}
     }
    }
   }
@@ -205,8 +205,8 @@ object WorldFactory {
   val result=w.copy(user=User(selectedId,me.id,Difficulty.SANDBOX),privateTopClubMode=true)
   makeSchedule(result)
   result.news("Verein übernommen","Du übernimmst ${userClub.name} in der ${leagueName(result,userClub.tier)}. Dein eigener Spieler wurde zusätzlich in den Kader aufgenommen.","good")
-  result.news("Deutscher Ligabaum","Bundesliga, 2. Bundesliga, 3. Liga, Regionalliga Nord und Oberliga Hamburg sind als 2026/27-Ligen enthalten.","normal")
-  result.news("Datenhinweis","Topligen nutzen den vorhandenen 2026/27-Kaderdatenstand. Unterhalb der Bundesliga werden reale Vereinsnamen mit ligaabhängig generierten Spielern verwendet.","normal")
+  result.news("Ligadaten 2026/27","Deutschland bis Oberliga Hamburg sowie erweiterte Ligaebenen in England, Spanien, Italien, Frankreich und weiteren europäischen Ländern sind enthalten.","normal")
+  result.news("Datenhinweis","Topligen nutzen den vorhandenen 2026/27-Kaderdatenstand. Neu ergänzte Ligaebenen nutzen reale Vereinsstrukturen; noch nicht verifizierte Einzelkader werden ligaabhängig generiert.","normal")
   initializeManagerSystems(result)
   return result
  }
