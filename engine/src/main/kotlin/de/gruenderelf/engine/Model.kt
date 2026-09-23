@@ -361,7 +361,8 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP,Compe
 @Serializable data class NewsItem(val id: Int,val week: Int,val title: String,val text: String,val tone: String="normal")
 @Serializable data class WorldEvent(val week: Int,val type: String,val playerId: Int=0,val amount: Int=0,val description: String="")
 @Serializable data class Rivalry(val a: Int,val b: Int,var intensity: Int=35)
-@Serializable data class SeasonHistory(val season: Int,val clubId: Int,val league: String,val rank: Int,val points: Int,val goals: Int,val outcome: String,val awards: List<String> = emptyList())\n@Serializable data class Trophy(val season:Int,val competition:String,val clubId:Int,val prize:Long)
+@Serializable data class SeasonHistory(val season: Int,val clubId: Int,val league: String,val rank: Int,val points: Int,val goals: Int,val outcome: String,val awards: List<String> = emptyList())
+@Serializable data class Trophy(val season:Int,val competition:String,val clubId:Int,val prize:Long)
 @Serializable data class NextIds(var player: Int=1,var fixture: Int=1,var news: Int=1,var construction: Int=1,var negotiation:Int=1,var sponsor:Int=1)
 @Serializable data class NotificationState(
  var tiredSeenWeek:Int=-1,
