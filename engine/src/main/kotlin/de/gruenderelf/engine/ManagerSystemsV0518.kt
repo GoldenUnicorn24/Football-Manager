@@ -233,12 +233,12 @@ object YouthCompetitionSystem {
  fun assign(w:World,playerId:Int,squad:YouthSquad){
   require(w.live==null){"Kaderzuordnung erst außerhalb eines laufenden Spiels ändern."};val p=w.players.getValue(playerId);val age=w.calendar.season-p.birthYear
   require(!p.retired&&p.clubId==w.user.clubId&&p.loanParentClubId==0&&p.id!=w.user.playerId&&age<=22&&(squad==YouthSquad.U23||age<=19)){"Dieser Spieler ist für ${squad.label} nicht einsatzberechtigt."}
-  p.youth=true;p.youthSquad=squad;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false;WorldFactory.autoLineup(w,w.user.clubId);w.news("${p.name} in ${squad.label}","Der Spieler gehört jetzt fest zum ${squad.label}-Kader und erhält dort Nachwuchsspielpraxis.")
+  p.youth=true;p.youthSquad=squad;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false;p.youthProfile.confidence=(p.youthProfile.confidence+2).coerceAtMost(100);w.training.extra.removeAll{it.playerId==p.id};WorldFactory.autoLineup(w,w.user.clubId);w.news("${p.name} in ${squad.label}","Der Spieler gehört jetzt fest zum ${squad.label}-Kader und erhält dort Nachwuchsspielpraxis und den Academy-Entwicklungsweg.")
  }
  fun move(w:World,playerId:Int,squad:YouthSquad){require(w.players.getValue(playerId).youth){"Nur Jugendspieler können zwischen U19 und U23 verschoben werden."};assign(w,playerId,squad)}
  fun callUp(w:World,playerId:Int){
-  require(w.live==null){"Nominierung erst außerhalb eines laufenden Spiels."};val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.youth&&!p.retired){"Nur eigene Jugendspieler können vorübergehend hochgezogen werden."}
-  p.temporarySeniorCallUp=true;p.temporaryReturnSquad=p.youthSquad;p.youth=false;p.youthProfile.seniorTraining=true;p.morale=(p.morale+2).coerceAtMost(100);WorldFactory.rebuildBench(w,w.club());w.news("${p.name} bei den Profis","Vorübergehende Nominierung aus ${p.temporaryReturnSquad?.label ?: "der Jugend"}.","good")
+  require(w.live==null){"Notfall-Nominierung erst außerhalb eines laufenden Spiels."};val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.youth&&!p.retired&&p.loanParentClubId==0){"Nur eigene Jugendspieler können vorübergehend hochgezogen werden."}
+  p.temporarySeniorCallUp=true;p.temporaryReturnSquad=p.youthSquad;p.youth=false;p.youthProfile.seniorTraining=true;p.morale=(p.morale+2).coerceAtMost(100);WorldFactory.rebuildBench(w,w.club());val target=p.temporaryReturnSquad?.label?:p.youthSquad.label;w.news("Notfall-Nominierung","${p.name} steht für das nächste Profispiel zur Verfügung und kehrt danach automatisch in $target zurück.")
  }
  fun returnToYouth(w:World,playerId:Int){
   val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.temporarySeniorCallUp){"Keine vorübergehende Jugend-Nominierung aktiv."};val target=p.temporaryReturnSquad?:if(w.calendar.season-p.birthYear<=19)YouthSquad.U19 else YouthSquad.U23
