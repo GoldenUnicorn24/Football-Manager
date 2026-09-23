@@ -169,38 +169,53 @@ private fun ShotMapCard(w:World,s:AnalysisSnapshot,home:Club,away:Club){
 @Composable
 private fun PassNetworkCard(w:World,s:AnalysisSnapshot,clubId:Int){
  val club=w.clubs.getValue(clubId)
- val relevant=s.passes.filter{it.clubId==clubId}
+ val relevant=s.passes.filter{it.clubId==clubId&&it.fromId!=0&&it.toId!=0}
  val completed=relevant.count{it.completed}
- val pct=if(relevant.isEmpty())0 else (100.0*completed/relevant.size).roundToInt()
+ val pct=if(relevant.isEmpty())0 else completed*100/relevant.size
  val nodes=MatchAnalysisSystem.passNetworkNodes(s.passes,clubId)
  val edges=MatchAnalysisSystem.passNetworkEdges(s.passes,clubId)
  Section("Passnetz · ${club.shortName}"){
   Text("$completed/${relevant.size} angekommene Analyse-Pässe · $pct % · Positionen werden aus den tatsächlich protokollierten Pässen gemittelt.",color=Muted,style=MaterialTheme.typography.bodySmall)
-  if(nodes.isEmpty()) Text("Noch nicht genug angekommene Pässe für ein Passnetz.",color=Muted)
+  if(nodes.isEmpty()) Text("Noch zu wenige abgeschlossene Pässe für ein belastbares Netz.",color=Muted)
   else{
    Canvas(Modifier.fillMaxWidth().aspectRatio(1.72f)){
-    val line=Color.White.copy(alpha=.32f)
-    drawRect(Color(0xFF123C2B))
-    drawRect(line,style=Stroke(1.dp.toPx()))
-    drawLine(line,Offset(size.width/2,0f),Offset(size.width/2,size.height),1.dp.toPx())
-    drawCircle(line,size.height*.15f,Offset(size.width/2,size.height/2),style=Stroke(1.dp.toPx()))
-    fun p(x:Float,y:Float)=Offset(y.coerceIn(0f,1f)*size.width,x.coerceIn(0f,1f)*size.height)
+    val pitch=Color(0xFF064A31)
+    val line=Color.White.copy(alpha=.43f)
+    drawRoundRect(pitch,cornerRadius=androidx.compose.ui.geometry.CornerRadius(18.dp.toPx(),18.dp.toPx()))
+    val inset=14.dp.toPx()
+    val l=inset;val t=inset;val r=size.width-inset;val btm=size.height-inset
+    drawRect(line,Offset(l,t),androidx.compose.ui.geometry.Size(r-l,btm-t),style=Stroke(1.2.dp.toPx()))
+    drawLine(line,Offset(size.width/2,t),Offset(size.width/2,btm),1.2.dp.toPx())
+    drawCircle(line,(btm-t)*.15f,Offset(size.width/2,(t+btm)/2),style=Stroke(1.2.dp.toPx()))
+    val boxW=(r-l)*.16f;val boxH=(btm-t)*.55f
+    val sixW=(r-l)*.055f;val sixH=(btm-t)*.27f
+    drawRect(line,Offset(l,(size.height-boxH)/2),androidx.compose.ui.geometry.Size(boxW,boxH),style=Stroke(1.2.dp.toPx()))
+    drawRect(line,Offset(r-boxW,(size.height-boxH)/2),androidx.compose.ui.geometry.Size(boxW,boxH),style=Stroke(1.2.dp.toPx()))
+    drawRect(line,Offset(l,(size.height-sixH)/2),androidx.compose.ui.geometry.Size(sixW,sixH),style=Stroke(1.2.dp.toPx()))
+    drawRect(line,Offset(r-sixW,(size.height-sixH)/2),androidx.compose.ui.geometry.Size(sixW,sixH),style=Stroke(1.2.dp.toPx()))
+    fun p(x:Float,y:Float)=Offset(l+y.coerceIn(0f,1f)*(r-l),t+x.coerceIn(0f,1f)*(btm-t))
+    val teamColor=Color(club.primary)
     edges.forEach{e->
-     val a=p(e.startX,e.startY);val b=p(e.endX,e.endY)
-     val strength=(e.count.coerceAtMost(8)/8f)
-     drawLine(Color(club.primary).copy(alpha=.22f+.55f*strength),a,b,(1f+3f*strength).dp.toPx())
+     val pa=p(e.startX,e.startY);val pb=p(e.endX,e.endY)
+     val strength=e.count.coerceAtMost(8)/8f
+     drawLine(teamColor.copy(alpha=.16f+.42f*strength),pa,pb,(.8f+2.4f*strength).dp.toPx())
     }
+    val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply{color=android.graphics.Color.BLACK;textAlign=Paint.Align.CENTER;textSize=10.dp.toPx();isFakeBoldText=true}
     val maxTouches=(nodes.maxOfOrNull{it.touches}?:1).coerceAtLeast(1)
-    val paint=Paint().apply{color=Color.White.toArgb();textAlign=Paint.Align.CENTER;textSize=11.dp.toPx();isFakeBoldText=true}
     nodes.forEach{n->
-     val c=p(n.x,n.y);val r=(7f+7f*n.touches/maxTouches.toFloat()).dp.toPx()
-     drawCircle(Color(club.primary),r,c);drawCircle(Color.White.copy(alpha=.7f),r,c,style=Stroke(1.dp.toPx()))
+     val center=p(n.x,n.y)
+     val radius=(7.5f+4.5f*n.touches/maxTouches.toFloat()).dp.toPx()
+     drawCircle(Color(0xFFF7F7F2),radius,center)
+     drawCircle(teamColor,radius,center,style=Stroke(2.6.dp.toPx()))
      val label=w.players[n.playerId]?.number?.toString()?:"?"
-     drawContext.canvas.nativeCanvas.drawText(label,c.x,c.y+paint.textSize*.34f,paint)
+     drawContext.canvas.nativeCanvas.drawText(label,center.x,center.y+paint.textSize*.34f,paint)
     }
    }
-   val leaders=nodes.take(6).mapNotNull{n->w.players[n.playerId]?.let{"#${it.number} ${it.lastName} · ${n.touches} Kontakte"}}
-   if(leaders.isNotEmpty())Text(leaders.joinToString("  ·  "),color=Muted,style=MaterialTheme.typography.bodySmall)
+   edges.take(7).forEach{edge->
+    val from=w.players[edge.fromId]?.lastName?:"?"
+    val to=w.players[edge.toId]?.lastName?:"?"
+    Text("$from → $to: ${edge.count}",color=Muted)
+   }
   }
  }
 }
