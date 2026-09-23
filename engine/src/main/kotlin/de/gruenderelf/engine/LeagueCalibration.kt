@@ -7,11 +7,12 @@ package de.gruenderelf.engine
  */
 object LeagueCalibration {
  fun calibration(w:World,m:LiveMatch):MatchCalibration {
-  val fixture=w.fixtures.firstOrNull{it.id==m.fixtureId}?:return MatchCalibration()
+  val fixture=w.fixtures.getOrNull(m.fixtureId-1)?.takeIf{it.id==m.fixtureId}?:w.fixtures.firstOrNull{it.id==m.fixtureId}?:return MatchCalibration()
   if(fixture.competition in setOf(CompetitionType.EURO_ELITE,CompetitionType.CHAMPIONS_LEAGUE,CompetitionType.EUROPA_LEAGUE)){
    return MatchCalibration(1.06,1.02,.97,1.04)
   }
-  val league=w.leagues.firstOrNull{fixture.homeId in it.clubIds||fixture.awayId in it.clubIds}?:return MatchCalibration()
+  val homeTier=w.clubs[fixture.homeId]?.tier;val awayTier=w.clubs[fixture.awayId]?.tier
+  val league=w.leagues.firstOrNull{it.tier==homeTier}?:w.leagues.firstOrNull{it.tier==awayTier}?:w.leagues.firstOrNull{fixture.homeId in it.clubIds||fixture.awayId in it.clubIds}?:return MatchCalibration()
   val country=RealModeDatabase.countryForLeague(league.name)
   val level=RealModeDatabase.levelForTier(league.tier)
   if(w.privateTopClubMode){
