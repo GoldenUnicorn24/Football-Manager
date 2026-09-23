@@ -28,12 +28,6 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run unit tests
-        run: ./gradlew --no-daemon --stacktrace test
-
-      - name: Run Android lint
-        run: ./gradlew --no-daemon --stacktrace :app:lintDebug
-
       - name: Build debug APK
         run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
 
@@ -44,3 +38,10 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Run unit tests
+        run: ./gradlew --no-daemon --stacktrace test
+
+      - name: Run Android lint
+        if: always()
+        run: ./gradlew --no-daemon --stacktrace :app:lintDebug
