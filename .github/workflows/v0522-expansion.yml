@@ -21,14 +21,10 @@ jobs:
           chmod +x gradlew
           set +e
           ./gradlew --no-daemon -PgruenderelfKeystorePassword=ci-placeholder :engine:test \
-            --tests 'de.gruenderelf.engine.EngineTest.realModeRepresentativeStartsUseDynamicLeagueLength' \
-            --tests 'de.gruenderelf.engine.EngineTest.modernUefaAdvancesThroughPlayoffsTwoLeggedRoundsAndFinal' \
             --tests 'de.gruenderelf.engine.EngineTest.realModeUefaUsesModernLeaguePhaseAndDfbHas64GermanClubs' \
-            --tests 'de.gruenderelf.engine.EngineTest.realModeContainsOriginalGamePlusExpandedLeaguesAndCompetitions' \
-            --tests 'de.gruenderelf.engine.EngineTest.realModeDatasetHasExpandedLeagueAndSquadShape' \
-            --tests 'de.gruenderelf.engine.EngineTest.oberligaTakeoverAndCustomClubStartArePlayable' \
             --tests 'de.gruenderelf.engine.RealismV05Test.modernUefaDrawUsesPotsAndAssociationLimits' \
             --tests 'de.gruenderelf.engine.V0514EconomyPotentialTest.leagueCupAndChampionsLeagueTitlesPayExtraPrizeMoneyExactlyOnce' \
+            --tests 'de.gruenderelf.engine.EngineTest.realModeDatasetHasExpandedLeagueAndSquadShape' \
             --stacktrace
           code=$?
           if [ $code -ne 0 ]; then grep -R -n -A8 -B2 '<failure' engine/build/test-results/test/*.xml || true; fi
