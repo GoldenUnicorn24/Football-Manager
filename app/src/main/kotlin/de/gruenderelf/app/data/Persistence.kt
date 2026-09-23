@@ -27,7 +27,7 @@ data class SaveHeader(val id: Int,val slot: Int,val clubName: String,val season:
  @Transaction suspend fun get(slot: Int): Savegame? {
   val h=header(slot)?:return null;val size=jsonSize(slot)?:error("Spielstanddaten fehlen.");require(size in 1..(32*1024*1024)){"Spielstandgröße ungültig."}
   val out=java.io.ByteArrayOutputStream(size);var offset=1
-  while(out.size()<size){val bytes=jsonChunk(slot,offset,262144)?:error("Spielstand unvollständig.");check(bytes.isNotEmpty());out.write(bytes);offset+=bytes.size}
+  while(out.size()<size){val bytes=jsonChunk(slot,offset,1048576)?:error("Spielstand unvollständig.");check(bytes.isNotEmpty());out.write(bytes);offset+=bytes.size}
   return Savegame(h.id,h.slot,h.clubName,h.season,h.matchday,h.leagueName,h.difficulty,h.updatedAt,out.toString("UTF-8"),h.saveVersion)
  }
  @Upsert suspend fun put(save: Savegame)
