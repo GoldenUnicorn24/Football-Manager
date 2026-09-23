@@ -103,39 +103,64 @@ private fun shotColor(o:ShotOutcome)=when(o){
 private fun ShotMapCard(w:World,s:AnalysisSnapshot,home:Club,away:Club){
  Section("Schusskarte · beide Teams"){
   Text("Links greift ${home.shortName} an · rechts greift ${away.shortName} an. Jede Linie zeigt die tatsächliche Schussrichtung bis zum Ziel am Tor.",color=Muted,style=MaterialTheme.typography.bodySmall)
-  Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){Text("● Tor",color=Grass);Text("● aufs Tor",color=Gold);Text("● daneben/kein SOT",color=Clay)}
   if(s.shots.isEmpty()) Text("Noch kein Abschluss im Spiel.",color=Muted)
   else{
    Canvas(Modifier.fillMaxWidth().aspectRatio(1.72f)){
-    val line=Color.White.copy(alpha=.38f)
-    drawRect(Color(0xFF123C2B))
-    drawRect(line,style=Stroke(1.dp.toPx()))
-    drawLine(line,Offset(size.width/2,0f),Offset(size.width/2,size.height),1.dp.toPx())
-    drawCircle(line,size.height*.15f,Offset(size.width/2,size.height/2),style=Stroke(1.dp.toPx()))
-    val boxW=size.width*.16f;val boxH=size.height*.54f
-    drawRect(line,Offset(0f,(size.height-boxH)/2),androidx.compose.ui.geometry.Size(boxW,boxH),style=Stroke(1.dp.toPx()))
-    drawRect(line,Offset(size.width-boxW,(size.height-boxH)/2),androidx.compose.ui.geometry.Size(boxW,boxH),style=Stroke(1.dp.toPx()))
-    fun pos(x:Float,y:Float)=Offset(y.coerceIn(0f,1f)*size.width,x.coerceIn(0f,1f)*size.height)
+    val pitch=Color(0xFF064A31)
+    val line=Color.White.copy(alpha=.43f)
+    drawRoundRect(pitch,cornerRadius=androidx.compose.ui.geometry.CornerRadius(18.dp.toPx(),18.dp.toPx()))
+    val inset=14.dp.toPx()
+    val l=inset;val t=inset;val r=size.width-inset;val btm=size.height-inset
+    drawRect(line,Offset(l,t),androidx.compose.ui.geometry.Size(r-l,btm-t),style=Stroke(1.25.dp.toPx()))
+    drawLine(line,Offset(size.width/2,t),Offset(size.width/2,btm),1.25.dp.toPx())
+    drawCircle(line,(btm-t)*.15f,Offset(size.width/2,(t+btm)/2),style=Stroke(1.25.dp.toPx()))
+    drawCircle(line,2.4.dp.toPx(),Offset(size.width/2,(t+btm)/2))
+    val boxW=(r-l)*.16f;val boxH=(btm-t)*.55f
+    val sixW=(r-l)*.055f;val sixH=(btm-t)*.27f
+    drawRect(line,Offset(l,(size.height-boxH)/2),androidx.compose.ui.geometry.Size(boxW,boxH),style=Stroke(1.25.dp.toPx()))
+    drawRect(line,Offset(r-boxW,(size.height-boxH)/2),androidx.compose.ui.geometry.Size(boxW,boxH),style=Stroke(1.25.dp.toPx()))
+    drawRect(line,Offset(l,(size.height-sixH)/2),androidx.compose.ui.geometry.Size(sixW,sixH),style=Stroke(1.25.dp.toPx()))
+    drawRect(line,Offset(r-sixW,(size.height-sixH)/2),androidx.compose.ui.geometry.Size(sixW,sixH),style=Stroke(1.25.dp.toPx()))
+    fun pos(x:Float,y:Float)=Offset(l+y.coerceIn(0f,1f)*(r-l),t+x.coerceIn(0f,1f)*(btm-t))
+    val textPaint=Paint(Paint.ANTI_ALIAS_FLAG).apply{color=Color.White.toArgb();textSize=10.dp.toPx();isFakeBoldText=true}
     s.shots.forEach{shot->
      val start=pos(shot.x,shot.y)
-     val goalX=if(shot.clubId==s.homeId)0f else size.width
-     val goalY=(.34f+shot.targetX.coerceIn(0f,1f)*.32f)*size.height
+     val team=if(shot.clubId==s.homeId)home else away
+     val teamColor=Color(team.primary)
+     val goalX=if(shot.clubId==s.homeId)l else r
+     val goalY=(size.height*.5f)+(shot.targetX.coerceIn(0f,1f)-.5f)*size.height*.22f
      val end=Offset(goalX,goalY)
-     val color=shotColor(shot.outcome)
-     drawLine(color.copy(alpha=.55f),start,end,(1.1f+(shot.xg*3.4).toFloat()).dp.toPx())
-     val radius=(4.2f+(shot.xg*7.0).toFloat()).dp.toPx()
-     if(shot.outcome==ShotOutcome.GOAL)drawCircle(color,radius,start) else drawCircle(color,radius,start,style=Stroke(2.dp.toPx()))
+     drawLine(teamColor.copy(alpha=.58f),start,end,(1.0f+(shot.xg*2.8).toFloat()).dp.toPx())
+     drawCircle(teamColor,2.3.dp.toPx(),end)
+     val radius=(8f+(shot.xg*4.5).toFloat()).dp.toPx()
+     drawCircle(Color(0xFFF7F7F2),radius,start)
+     drawCircle(teamColor,radius,start,style=Stroke(2.6.dp.toPx()))
+     when{
+      shot.outcome==ShotOutcome.GOAL->{
+       drawCircle(Color.Black,radius*.43f,start,style=Stroke(1.4.dp.toPx()))
+       drawCircle(Color.Black,radius*.12f,start)
+      }
+      isShotOnTarget(shot.outcome)->drawCircle(Color.Black,radius*.15f,start)
+     }
+     val player=w.players[shot.playerId]
+     val label="#${player?.number?:"?"} ${team.shortName}"
+     val labelX=(start.x+radius+4.dp.toPx()).coerceAtMost(size.width-textPaint.measureText(label)-2.dp.toPx())
+     val labelY=(start.y-textPaint.textSize*.55f).coerceAtLeast(textPaint.textSize)
+     drawContext.canvas.nativeCanvas.drawText(label,labelX,labelY,textPaint)
     }
    }
-   Text("Letzte Abschlüsse",fontWeight=FontWeight.Bold)
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(14.dp)){
+    Text("◉ Tor",color=Grass)
+    Text("⊙ aufs Tor",color=Gold)
+    Text("○ daneben/kein SOT",color=Muted)
+   }
    s.shots.takeLast(8).asReversed().forEach{shot->
     val club=w.clubs[shot.clubId]
     val player=w.players[shot.playerId]
     val context=ShotContext(shot.x,shot.y,shot.clubId==s.homeId,shot.type,shot.pressure,shot.defendersNearby,shot.passQuality)
     val clock=shot.clockLabel.ifBlank{"${shot.minute}'"}
     val who=player?.let{"#${it.number} ${it.lastName}"}?:"Spieler"
-    Text("$clock · ${club?.shortName?:"-"} · $who · ${shot.type.label}",fontWeight=FontWeight.Bold,style=MaterialTheme.typography.bodySmall)
-    Text("${ShotModel.locationLabel(context)} · ${shot.targetLabel.ifBlank{shot.outcome.label}} · ${shot.outcome.label} · xG ${String.format(java.util.Locale.GERMANY,"%.2f",shot.xg)}",color=shotColor(shot.outcome),style=MaterialTheme.typography.bodySmall)
+    Text("$clock · ${club?.shortName?:"-"} $who · ${shotResultText(shot.outcome)} · ${ShotModel.locationLabel(context)} · ${shot.targetLabel.ifBlank{shot.outcome.label}} · xG ${String.format(java.util.Locale.GERMANY,"%.1f",shot.xg)}",color=Muted,style=MaterialTheme.typography.bodySmall)
    }
   }
  }
