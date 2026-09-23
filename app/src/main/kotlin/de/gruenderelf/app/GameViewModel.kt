@@ -122,16 +122,25 @@ class GameViewModel(application: Application): AndroidViewModel(application){
    repo.save(mutable.value.slot,next);mutable.update{it.copy(world=next,revision=it.revision+1,error=null)}
   }catch(e: CancellationException){throw e}catch(e: Exception){mutable.update{it.copy(error=if(e is IllegalArgumentException||e is IllegalStateException)e.message?:"Aktion nicht möglich." else "Die Live-Aktion konnte nicht bestätigt werden.")}}
  }}}
- fun simulateToHalf()=work{
+ fun simulateToHalf()=run{stopLiveRunner();work{
   val current=mutable.value.world?:return@work
-  val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->val m=w.live?:error("Keine laufende Partie.");MatchEngine.fastForward(w,m,true)}}
+  val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->
+   val m=w.live?:error("Es läuft kein Spiel.")
+   require(!m.finished){"Das Spiel ist bereits beendet."}
+   require(m.period==1&&!m.halfTime){"Die erste Halbzeit ist bereits vorbei."}
+   MatchEngine.fastForward(w,m,true)
+  }}
   repo.save(mutable.value.slot,next);mutable.update{it.copy(world=next,revision=it.revision+1,message="Bis zur Halbzeit simuliert.")}
- }
- fun simulateMatch()=work{
+ }}
+ fun simulateMatch()=run{stopLiveRunner();work{
   val current=mutable.value.world?:return@work
-  val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->val m=w.live?:error("Keine laufende Partie.");MatchEngine.fastForward(w,m,false)}}
+  val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->
+   val m=w.live?:error("Es läuft kein Spiel.")
+   require(!m.finished){"Das Spiel ist bereits beendet."}
+   MatchEngine.fastForward(w,m,false)
+  }}
   repo.save(mutable.value.slot,next);mutable.update{it.copy(world=next,revision=it.revision+1,message="Spiel vollständig simuliert.")}
- }
+ }}
  fun decide(d: Decision)=liveAction{w->w.live?.let{MatchEngine.decide(w,it,d)}}
  fun changeFormation(formation: String)=liveAction{w->w.live?.let{MatchEngine.changeFormation(w,it,w.user.clubId,formation)}}
  fun setConserveEnergy(enabled: Boolean)=liveAction{w->w.live?.let{MatchEngine.setConserveEnergy(w,it,w.user.clubId,enabled)}}
