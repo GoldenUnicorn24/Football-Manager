@@ -3102,12 +3102,18 @@ object RealModeDatabase {
   RealModePlayerSeed("Enisio Carneiro","Uruguay",1995,Position.ST,41,70)
  ))
  val leagues:List<RealModeLeagueSeed> by lazy(LazyThreadSafetyMode.PUBLICATION){listOf(league1())+GermanLeagueData.leagues+listOf(league2(),league3(),league4(),league5())+InternationalLeagueData.leagues+EuropeanLeagueData.leagues}
- val countries:List<String> get()=leagues.map{it.country}.distinct()
- fun leaguesForCountry(country:String)=leagues.filter{it.country==country}
- fun leagueForTier(tier:Int)=leagues.first{it.tier==tier}
- fun countryForLeague(name:String)=leagues.firstOrNull{it.name==name}?.country
- fun levelForTier(tier:Int)=leagues.firstOrNull{it.tier==tier}?.level?:tier.coerceIn(1,5)
- val options:List<RealModeClubSeed> get()=leagues.flatMap{it.clubs}
- fun requireClub(key:String)=options.firstOrNull{it.key==key}?:error("Real-Modus-Verein nicht gefunden: $key")
- fun leagueForClub(key:String)=leagues.first{league->league.clubs.any{it.key==key}}
+ private val byTier by lazy(LazyThreadSafetyMode.PUBLICATION){leagues.associateBy{it.tier}}
+ private val countryByLeague by lazy(LazyThreadSafetyMode.PUBLICATION){leagues.associate{it.name to it.country}}
+ private val levelByTier by lazy(LazyThreadSafetyMode.PUBLICATION){leagues.associate{it.tier to it.level}}
+ val countries:List<String> by lazy(LazyThreadSafetyMode.PUBLICATION){leagues.map{it.country}.distinct()}
+ private val leaguesByCountry by lazy(LazyThreadSafetyMode.PUBLICATION){leagues.groupBy{it.country}}
+ val options:List<RealModeClubSeed> by lazy(LazyThreadSafetyMode.PUBLICATION){leagues.flatMap{it.clubs}}
+ private val clubByKey by lazy(LazyThreadSafetyMode.PUBLICATION){options.associateBy{it.key}}
+ private val leagueByClubKey by lazy(LazyThreadSafetyMode.PUBLICATION){buildMap{for(league in leagues)for(club in league.clubs)put(club.key,league)}}
+ fun leaguesForCountry(country:String)=leaguesByCountry[country].orEmpty()
+ fun leagueForTier(tier:Int)=byTier[tier]?:error("Liga nicht gefunden: $tier")
+ fun countryForLeague(name:String)=countryByLeague[name]
+ fun levelForTier(tier:Int)=levelByTier[tier]?:tier.coerceIn(1,5)
+ fun requireClub(key:String)=clubByKey[key]?:error("Real-Modus-Verein nicht gefunden: $key")
+ fun leagueForClub(key:String)=leagueByClubKey[key]?:error("Real-Modus-Verein nicht gefunden: $key")
 }
