@@ -36,6 +36,7 @@ object WorldFactory {
  private val legacyLastNames=setOf("Krüger","Neumann","Yilmaz","Schulz","Bauer","Richter","Wagner","Koch","Becker","Hansen","Fischer","Kaya","Wolf","Lorenz","Peters","Jansen","Schmidt","Hoffmann","Brandt","Seeger","Hinsch")
  private fun place(index: Int)=placeStems[(index/6)%placeStems.size]+placeEnds[index%6]
  fun leagueName(w: World,tier: Int)=w.leagues.firstOrNull{it.tier==tier}?.name?:leagueNames.getOrElse((tier-1).coerceAtLeast(0)){"Liga"}
+ fun leagueLevel(w: World,tier: Int)=if(w.privateTopClubMode)RealModeDatabase.levelForTier(tier) else tier
  fun leagueCountry(w: World,tier: Int): String { val league=w.leagues.firstOrNull{it.tier==tier}?:return "Deutschland";return if(w.privateTopClubMode)RealModeDatabase.countryForLeague(league.name)?:"Deutschland" else "Deutschland" }
  private fun lettersOnly(text: String)=text.uppercase().filter{it.isLetter()}
  fun deriveShortName(name: String,used: Set<String> = emptySet()): String {
