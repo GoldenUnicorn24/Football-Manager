@@ -142,34 +142,67 @@ object CompetitionEngine {
  }
 
  internal fun realEuropeanQualificationOrder(w: World): List<Int>{
-  // The preceding season's actual league standings replace reputation after year one.
-  // Russia remains playable domestically, while its clubs are suspended from UEFA.
-  val top=w.leagues.filter{RealModeDatabase.levelForTier(it.tier)==1&&RealModeDatabase.countryForLeague(it.name)!="Russland"}.sortedBy{it.tier}
+  // Ein Verein pro Land/Liga wird nach der Vorjahrestabelle (erste Saison: Reputation)
+  // gerankt. Für jede UEFA-Ligaphase werden höchstens vier Vereine je Verband
+  // zugelassen. Dadurch bleibt die moderne 36er-Auslosung mit zwei Gegnern je Topf
+  // und ohne Duelle aus demselben Verband für jede gepackte Ligenkombination lösbar.
+  // Russland bleibt national spielbar, ist aber von UEFA-Wettbewerben ausgeschlossen.
+  val top=w.leagues
+   .filter{RealModeDatabase.levelForTier(it.tier)==1&&RealModeDatabase.countryForLeague(it.name)!="Russland"}
+   .sortedBy{it.tier}
   val ranked=top.associateWith{league->
    val previous=w.lastLeagueRankings[league.tier].orEmpty().filter{it in league.clubIds}
    (previous+league.clubIds.sortedWith(compareByDescending<Int>{w.clubs.getValue(it).reputation}.thenBy{it})).distinct()
   }
-  // Der Meister jedes vertretenen Landes kommt zuerst. Die übrigen Plätze gehen
-  // zunächst an die besser gesetzten Verbände und danach an weitere Tabellenplätze.
-  val seededCountries=listOf("Deutschland","England","Spanien","Italien","Frankreich","Niederlande","Portugal","Belgien","Österreich","Türkei")
-  val seeded=top.sortedWith(compareBy<League>{seededCountries.indexOf(RealModeDatabase.countryForLeague(it.name)).let{index->if(index<0)Int.MAX_VALUE else index}}.thenBy{it.tier})
-  val candidates=mutableListOf<Int>()
-  top.forEach{ranked.getValue(it).firstOrNull()?.let(candidates::add)}
-  seeded.take(10).forEach{ranked.getValue(it).getOrNull(1)?.let(candidates::add)}
-  seeded.take(5).forEach{ranked.getValue(it).getOrNull(2)?.let(candidates::add)}
-  seeded.take(3).forEach{ranked.getValue(it).getOrNull(3)?.let(candidates::add)}
-  for(rank in 1..3)for(league in seeded)ranked.getValue(league).getOrNull(rank)?.let(candidates::add)
-  val champions=candidates.distinct().take(36)
-  // Pokalsieger starten in der Europa League, sofern sie nicht bereits in der CL sind.
-  val cups=top.mapNotNull{league->
-   val country=RealModeDatabase.countryForLeague(league.name).orEmpty()
-   w.trophies.lastOrNull{it.season==w.calendar.season-1&&it.competition==cupName(w,country)}?.clubId?.takeIf{it in w.clubs&&it !in champions}
-  }
-  val otherChampions=seeded.mapNotNull{ranked.getValue(it).firstOrNull()}.filter{it !in champions}
-  val europa=(otherChampions+cups+seeded.flatMap{ranked.getValue(it)}).distinct().filter{it !in champions}.take(36)
-  return champions+europa+(seeded.flatMap{ranked.getValue(it)}.filter{it !in champions&&it !in europa})
- }
+  val seededCountries=listOf("Deutschland","England","Spanien","Italien","Frankreich","Niederlande","Portugal","Belgien","Österreich","Türkei","Schottland","Griechenland","Kroatien","Schweiz","Dänemark","Norwegen","Schweden","Polen","Tschechien","Serbien","Ukraine")
+  val seeded=top.sortedWith(compareBy<League>{
+   seededCountries.indexOf(RealModeDatabase.countryForLeague(it.name)).let{index->if(index<0)Int.MAX_VALUE else index}
+  }.thenBy{it.tier})
 
+  fun country(league:League)=RealModeDatabase.countryForLeague(league.name).orEmpty()
+  fun selectField(
+   excluded:Set<Int>,
+   preferred:List<Int> = emptyList(),
+   startRank:Int,
+   target:Int=36
+  ):List<Int>{
+   val result=mutableListOf<Int>()
+   val perCountry=mutableMapOf<String,Int>()
+   fun add(id:Int,league:League):Boolean{
+    if(id in excluded||id in result)return false
+    val nation=country(league)
+    if((perCountry[nation]?:0)>=4)return false
+    result+=id;perCountry[nation]=(perCountry[nation]?:0)+1
+    return true
+   }
+   preferred.forEach{id->
+    val league=seeded.firstOrNull{id in it.clubIds}
+    if(league!=null)add(id,league)
+   }
+   var rank=startRank
+   while(result.size<target&&rank<24){
+    for(league in seeded){
+     ranked.getValue(league).getOrNull(rank)?.let{add(it,league)}
+     if(result.size>=target)break
+    }
+    rank++
+   }
+   if(result.size<target){
+    seeded.flatMap{league->ranked.getValue(league).map{id->league to id}}
+     .forEach{(league,id)->if(result.size<target)add(id,league)}
+   }
+   require(result.size==target){"UEFA-Feld konnte nicht auf $target Vereine aufgefüllt werden; gefunden: ${result.size}."}
+   return result
+  }
+
+  val champions=selectField(emptySet(),startRank=0)
+  val cupWinners=seeded.mapNotNull{league->
+   val nation=country(league)
+   w.trophies.lastOrNull{it.season==w.calendar.season-1&&it.competition==cupName(w,nation)}?.clubId
+  }.filter{it !in champions}
+  val europa=selectField(champions.toSet(),preferred=cupWinners,startRank=4)
+  return champions+europa
+ }
  private val globalNames=listOf(
   "Flamengo" to "Brasilien","Palmeiras" to "Brasilien","Fluminense" to "Brasilien","Botafogo" to "Brasilien",
   "River Plate" to "Argentinien","Boca Juniors" to "Argentinien","Inter Miami" to "USA","Seattle Sounders" to "USA",
