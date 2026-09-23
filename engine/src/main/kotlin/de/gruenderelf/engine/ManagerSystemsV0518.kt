@@ -270,8 +270,18 @@ object OutboundTransferSystem {
   w.negotiations[o.id]=o;w.news("Transferangebot für ${p.name}","${buyer.name}: ${type.label} · ${fee} €${if(o.buyOption>0)" · Option ${o.buyOption} €" else ""}.","normal")
  }
  fun isOutbound(w:World,o:TransferOffer)=o.sellerClubId==w.user.clubId&&o.buyerClubId!=w.user.clubId
- fun maxBuyOffer(w:World,buyer:Club,p:Player):Long{val need=positionNeed(w,buyer,p);val age=w.calendar.season-p.birthYear;val upside=(p.hidden.potential-p.ca).coerceAtLeast(0);val repGap=(buyer.reputation-(w.clubs[p.clubId]?.reputation?:buyer.reputation)).coerceIn(-30,30);return (TransferEngine.marketValue(w,p)*(0.72+need*.09+upside*.008+repGap*.006+(if(age<=23).08 else 0.0))).toLong().coerceAtMost((buyer.budget*.8).toLong()).coerceAtLeast(0)}
- private fun positionNeed(w:World,buyer:Club,p:Player):Int{val count=w.squad(buyer.id).count{!it.youth&&!it.retired&&it.position==p.position};return when(count){0->4;1->3;2->2;else->1}}
+ fun maxBuyOffer(w:World,buyer:Club,p:Player):Long{
+  val value=TransferEngine.marketValue(w,p);val need=positionNeed(w,buyer,p);val age=w.calendar.season-p.birthYear
+  val upside=(p.hidden.potential-p.ca).coerceAtLeast(0)
+  val repGap=(buyer.reputation-w.club().reputation).coerceIn(-20,25)
+  val factor=(.78+need*.075+(if(age<=23)upside.coerceAtMost(20)*.008 else 0.0)+repGap*.003).coerceIn(.72,1.30)
+  return minOf((buyer.budget*.78).toLong().coerceAtLeast(0L),(value*factor).toLong()).coerceAtLeast(1_000L)
+ }
+ private fun positionNeed(w:World,buyer:Club,p:Player):Int{
+  val same=w.squad(buyer.id).filter{!it.youth&&!it.retired&&it.position==p.position}
+  val strongest=same.maxOfOrNull{it.ca}?:0
+  return when{same.isEmpty()||strongest+5<=p.ca->4;strongest<p.ca->3;same.size<=2->2;else->1}
+ }
  fun loanFeeLimit(w:World,buyer:Club,p:Player):Long{
   val value=TransferEngine.marketValue(w,p)
   val need=positionNeed(w,buyer,p)
@@ -330,10 +340,16 @@ object OutboundTransferSystem {
   return created
  }
 
- fun reject(w:World,offerId:Int){val o=w.negotiations.getValue(offerId);require(isOutbound(w,o));o.status=NegotiationStatus.REJECTED;o.message="Angebot abgelehnt."}
+ fun reject(w:World,offerId:Int){val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status!=NegotiationStatus.COMPLETED);o.status=NegotiationStatus.REJECTED;o.message="Angebot von dir abgelehnt."}
  fun accept(w:World,offerId:Int){
-  val o=w.negotiations.getValue(offerId);require(isOutbound(w,o));val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId);require(buyer.budget>=o.fee){"Käufer kann den Transfer nicht finanzieren."};require(TransferInterestSystem.score(w,p,buyer.id)>=35){"Der Spieler lehnt den Wechsel ab."}
-  o.status=NegotiationStatus.AGREED;o.stage=TransferStage.REGISTRATION;o.registrationReady=true;TransferEngine.complete(w,o.id);w.negotiations.values.filter{it.id!=o.id&&it.playerId==p.id&&isOutbound(w,it)&&it.status!=NegotiationStatus.COMPLETED}.forEach{it.status=NegotiationStatus.REJECTED}
+  require(w.live==null){"Transfer erst außerhalb eines laufenden Spiels bestätigen."}
+  val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status in listOf(NegotiationStatus.COUNTER,NegotiationStatus.AGREED)){"Dieses Angebot kann nicht angenommen werden."}
+  val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId)
+  if(TransferInterestSystem.score(w,p,buyer.id)<28&&!p.wantsMove){o.status=NegotiationStatus.REJECTED;o.message="${p.name} lehnt den Wechsel zu ${buyer.name} ab.";return}
+  if(buyer.budget<o.fee+o.signingBonus){o.status=NegotiationStatus.REJECTED;o.message="${buyer.name} kann das Angebot finanziell nicht mehr hinterlegen.";return}
+  o.status=NegotiationStatus.AGREED;o.stage=TransferStage.REGISTRATION;o.medicalPassed=true;o.medicalNote="Medizincheck vom aufnehmenden Verein bestanden";o.registrationReady=true
+  TransferEngine.complete(w,o.id)
+  w.negotiations.values.filter{it.id!=o.id&&it.playerId==p.id&&isOutbound(w,it)&&it.status !in listOf(NegotiationStatus.COMPLETED,NegotiationStatus.REJECTED)}.forEach{it.status=NegotiationStatus.REJECTED;it.message="Spieler hat sich für ein anderes Angebot entschieden."}
  }
  fun negotiate(w:World,offerId:Int,kind:String){
   val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED));val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId);o.round++
