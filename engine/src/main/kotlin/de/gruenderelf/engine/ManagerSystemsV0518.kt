@@ -67,29 +67,52 @@ object CompetitionPrizeSystem {
 }
 
 object CompetitionRulesEngine {
- fun rules(w: World, m: LiveMatch): CompetitionRuleSet {
-  val fixture = w.fixtures.firstOrNull { it.id == m.fixtureId } ?: return CompetitionRuleSet()
-  val league = w.leagues.firstOrNull { fixture.homeId in it.clubIds || fixture.awayId in it.clubIds }
-  val level = league?.let{if(w.privateTopClubMode)RealModeDatabase.levelForTier(it.tier) else it.tier} ?: fixture.tier.coerceAtLeast(1)
-  return when (fixture.competition) {
-   CompetitionType.LEAGUE -> CompetitionRuleSet(extraTimeAdditionalSubstitution = false, varEnabled = !(w.privateTopClubMode && level > 2))
-   else -> CompetitionRuleSet(extraTimeAdditionalSubstitution = true, varEnabled = true)
+ fun forFixture(w:World,fixture:Fixture?):CompetitionRuleSet {
+  if(fixture==null)return CompetitionRuleSet()
+  val league=w.leagues.firstOrNull{fixture.homeId in it.clubIds || fixture.awayId in it.clubIds}
+  val level=league?.let{RealModeDatabase.levelForTier(it.tier)}?:fixture.tier.coerceAtLeast(1)
+  return when(fixture.competition){
+   CompetitionType.CHAMPIONS_LEAGUE,CompetitionType.EUROPA_LEAGUE,CompetitionType.EURO_ELITE,
+   CompetitionType.NATIONAL_CUP,CompetitionType.CLUB_WORLD_CUP,CompetitionType.ETERNAL_CROWN->
+    CompetitionRuleSet(varEnabled=true,extraTimeAdditionalSubstitution=true)
+   CompetitionType.LEAGUE->CompetitionRuleSet(varEnabled=!w.privateTopClubMode||level<=2,extraTimeAdditionalSubstitution=false)
   }
  }
- fun maxSubstitutions(w: World, m: LiveMatch) = 5 + if (m.period >= 3 && m.extraTimePlayed && rules(w, m).extraTimeAdditionalSubstitution) 1 else 0
- fun maxWindows(w: World, m: LiveMatch) = 3 + if (m.period >= 3 && m.extraTimePlayed && rules(w, m).extraTimeAdditionalSubstitution) 1 else 0
- fun substitutionBlockReason(w: World, m: LiveMatch, home: Boolean): String? {
-  val used = if (home) m.homeSubs else m.awaySubs
-  if (used >= maxSubstitutions(w, m)) return "Das Auswechselkontingent ist ausgeschöpft."
-  if (m.halfTime) return null
-  val windows = if (home) m.homeSubWindows else m.awaySubWindows
-  val lastMinute = if (home) m.lastHomeSubMinute else m.lastAwaySubMinute
-  val maxWindows = maxWindows(w, m)
-  if (lastMinute != m.minute && windows >= maxWindows) return "Die ${if (maxWindows == 3) "drei" else maxWindows} Wechselgelegenheiten sind bereits verbraucht."
+ fun forMatch(w:World,m:LiveMatch)=forFixture(w,w.fixtures.getOrNull(m.fixtureId-1)?.takeIf{it.id==m.fixtureId}?:w.fixtures.firstOrNull{it.id==m.fixtureId})
+ fun rules(w:World,m:LiveMatch)=forMatch(w,m)
+
+ fun maxSubs(w:World,m:LiveMatch):Int{
+  val r=forMatch(w,m)
+  return r.maxSubstitutions+if(m.period>=3&&m.knockout&&r.extraTimeAdditionalSubstitution)1 else 0
+ }
+ fun maxSubstitutions(w:World,m:LiveMatch)=maxSubs(w,m)
+ fun maxWindows(w:World,m:LiveMatch):Int{
+  val r=forMatch(w,m)
+  return r.substitutionWindows+if(m.period>=3&&m.knockout&&r.extraTimeAdditionalSubstitution)1 else 0
+ }
+ fun substitutionIssue(w:World,m:LiveMatch,home:Boolean):String?{
+  val r=forMatch(w,m)
+  val subs=if(home)m.homeSubs else m.awaySubs
+  if(subs>=maxSubs(w,m))return "Das Auswechselkontingent ist ausgeschöpft."
+  if(m.halfTime&&r.halfTimeIsFreeWindow)return null
+  val windows=if(home)m.homeSubWindows else m.awaySubWindows
+  val lastMinute=if(home)m.lastHomeSubMinute else m.lastAwaySubMinute
+  if(lastMinute==m.minute)return null
+  val limit=maxWindows(w,m)
+  if(windows>=limit)return "Die ${if(limit==3)"drei" else limit.toString()} Wechselgelegenheiten sind bereits verbraucht."
   return null
  }
-}
+ fun substitutionBlockReason(w:World,m:LiveMatch,home:Boolean)=substitutionIssue(w,m,home)
 
+ fun registerSubstitution(m:LiveMatch,home:Boolean,rules:CompetitionRuleSet=CompetitionRuleSet()){
+  if(m.halfTime&&rules.halfTimeIsFreeWindow)return
+  if(home){
+   if(m.lastHomeSubMinute!=m.minute){m.homeSubWindows++;m.lastHomeSubMinute=m.minute}
+  }else if(m.lastAwaySubMinute!=m.minute){m.awaySubWindows++;m.lastAwaySubMinute=m.minute}
+ }
+ fun registerSubstitution(w:World,m:LiveMatch,home:Boolean)=registerSubstitution(m,home,forMatch(w,m))
+ fun goalkeeperViolation(seconds:Int,rules:CompetitionRuleSet=CompetitionRuleSet())=seconds>rules.goalkeeperControlSeconds
+}
 object TacticalInstructionSystem {
  fun forPlayer(club: Club, playerId: Int): List<PlayerInstruction> = club.tactics.instructions[playerId]?.toList() ?: emptyList()
  fun has(club: Club, playerId: Int, instruction: PlayerInstruction) = instruction in forPlayer(club, playerId)
