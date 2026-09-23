@@ -351,11 +351,11 @@ object CompetitionEngine {
     fun rec():Boolean{
      if(unmatched.isEmpty())return true
      val a=unmatched.minWithOrNull(compareBy<Int>{id->unmatched.count{other->other!=id&&canPair(id,other)}}.thenBy{it})?:return false
-     val candidates=unmatched.filter{it!=a&&canPair(a,it)}
-      .sortedWith(compareBy<Int>{b->
+     val shuffledCandidates=shuffle(unmatched.filter{it!=a&&canPair(a,it)},rng)
+     val candidates=shuffledCandidates.sortedWith(compareBy<Int>{b->
        val pa=potOf.getValue(a);val pb=potOf.getValue(b)
        potCounts.getValue(a)[pb]+potCounts.getValue(b)[pa]
-      }.thenBy{rng.int(0,1_000_000)})
+      }.thenBy{it})
      for(b in candidates){
       unmatched-=a;unmatched-=b;add(a,b,round)
       val feasible=(unmatched.all{u->remainingFeasible(u,8-round)}&&remainingFeasible(a,7-round)&&remainingFeasible(b,7-round))
