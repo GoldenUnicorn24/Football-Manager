@@ -17,6 +17,7 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  private val repo=GameRepository(application);private val lock=Mutex();private val mutable=MutableStateFlow(GameState())
  private var liveRunnerJob:Job?=null
  private var decisionJob:Job?=null
+ private var deferredSaveJob:Job?=null
  @Volatile private var liveRunnerEnabled=false
  @Volatile private var liveRunnerFixtureId=0
  @Volatile private var liveRunnerSpeed=MatchSpeed.NORMAL
@@ -29,6 +30,21 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  private fun memoryPressure(){
   liveRunnerEnabled=false;liveRunnerJob?.cancel();liveRunnerJob=null;decisionJob?.cancel();decisionJob=null
   mutable.update{it.copy(error="Zu wenig freier Arbeitsspeicher. Der Vorgang wurde gestoppt, statt die App zu beenden. Bitte erneut laden.")}
+ }
+ private fun scheduleSave(slot:Int){
+  deferredSaveJob?.cancel()
+  deferredSaveJob=viewModelScope.launch{
+   delay(700)
+   lock.withLock{
+    val current=mutable.value
+    val w=current.world
+    if(w!=null&&current.slot==slot){
+     try{repo.save(slot,w)}
+     catch(e:CancellationException){throw e}
+     catch(e:Exception){mutable.update{it.copy(error="Automatisches Speichern fehlgeschlagen.")}}
+    }
+   }
+  }
  }
  private fun work(task: suspend ()->Unit){viewModelScope.launch{lock.withLock{
   mutable.update{it.copy(busy=true,error=null,message=null)}
@@ -52,16 +68,20 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  fun setMatchSpeed(v: MatchSpeed)=preferenceWrite("Das Spieltempo konnte nicht gespeichert werden."){repo.setMatchSpeed(v)}
  fun setSoundsEnabled(enabled: Boolean)=preferenceWrite("Die Sound-Einstellung konnte nicht gespeichert werden."){repo.setSoundsEnabled(enabled)}
  fun markChangelogSeen(version:String=CHANGELOG_VERSION)=preferenceWrite("Der Changelog-Status konnte nicht gespeichert werden."){repo.markChangelogSeen(version)}
- fun action(message: String?=null,block: (World)->Unit)=work{
-  val current=mutable.value.world?:return@work;val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->block(w);SaveCodec.requireRuntimeIntegrity(w)}}
-  repo.checkpoint(mutable.value.slot,next);mutable.update{it.copy(world=next,revision=it.revision+1,message=message)}
+ fun action(message: String?=null,persistNow:Boolean=false,block: (World)->Unit)=work{
+  val current=mutable.value.world?:return@work
+  withContext(Dispatchers.Default){block(current);SaveCodec.requireRuntimeIntegrity(current)}
+  val slot=mutable.value.slot
+  mutable.update{it.copy(world=current,revision=it.revision+1,message=message)}
+  if(persistNow)repo.save(slot,current) else scheduleSave(slot)
  }
- fun startMatch()=action{require(it.live==null){"Das Spiel läuft bereits."};it.live=MatchEngine.start(it)}
+ fun startMatch()=action(persistNow=true){require(it.live==null){"Das Spiel läuft bereits."};it.live=MatchEngine.start(it)}
  fun step(count: Int)=work{
   val current=mutable.value.world?:return@work
-  val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->val m=w.live?:return@also;repeat(count){MatchEngine.step(w,m)}}}
-  val m=next.live;if(m!=null&&(m.minute/10!=(current.live?.minute?:0)/10||m.pendingDecision||m.halfTime||m.finished))repo.checkpoint(mutable.value.slot,next)
-  mutable.update{it.copy(world=next,revision=it.revision+1)}
+  val beforeMinute=current.live?.minute?:0
+  withContext(Dispatchers.Default){current.live?.let{m->repeat(count){if(!m.finished)MatchEngine.step(current,m)}};SaveCodec.requireRuntimeIntegrity(current)}
+  val m=current.live;if(m!=null&&(m.minute/10!=beforeMinute/10||m.pendingDecision||m.halfTime||m.finished))repo.checkpoint(mutable.value.slot,current)
+  mutable.update{it.copy(world=current,revision=it.revision+1)}
  }
  // Der automatische Livetakt nutzt absichtlich nicht den globalen busy-Status.
  // Dadurch bleiben Taktik-, Pause- und Wechselknöpfe zwischen den einzelnen Minuten bedienbar.
@@ -71,14 +91,11 @@ class GameViewModel(application: Application): AndroidViewModel(application){
    try{
     val current=mutable.value.world?:return@withLock
     val beforeMinute=current.live?.minute?:0
-    // Ein Tick arbeitet ausschließlich auf einer Kopie. Erst wenn die Engine fertig ist,
-    // wird der komplette neue Zustand atomar veröffentlicht. Damit lesen Live-Grafik,
-    // Statistik, Analyse und Taktik niemals ein halb mutiertes Match.
-    val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->w.live?.let{m->MatchEngine.step(w,m)};SaveCodec.requireRuntimeIntegrity(w)}}
-    val m=next.live
+    withContext(Dispatchers.Default){current.live?.let{m->MatchEngine.step(current,m)};SaveCodec.requireRuntimeIntegrity(current)}
+    val m=current.live
     val checkpoint=m!=null&&(m.minute/15!=beforeMinute/15||m.pendingDecision||m.halfTime||m.finished||m.incidentPause||m.assistantSubPending)
-    mutable.update{it.copy(world=next,revision=it.revision+1)}
-    if(checkpoint){checkpointSlot=mutable.value.slot;checkpointWorld=next}
+    mutable.update{it.copy(world=current,revision=it.revision+1)}
+    if(checkpoint){checkpointSlot=mutable.value.slot;checkpointWorld=current}
    }catch(e: CancellationException){throw e}catch(_:OutOfMemoryError){memoryPressure()}catch(e: Exception){mutable.update{it.copy(error=if(e is IllegalArgumentException||e is IllegalStateException)e.message?:"Aktion nicht möglich." else "Die Live-Simulation konnte nicht fortgesetzt werden.")}}
   }
   checkpointWorld?.let{snapshot->
@@ -111,34 +128,34 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  }
  fun quickSimulate(toHalfTime:Boolean)=work{
   val current=mutable.value.world?:return@work
-  val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->
-   val m=w.live?:error("Es läuft kein Spiel.")
-   if(toHalfTime)MatchEngine.simulateToHalfTime(w,m) else MatchEngine.simulateRemaining(w,m);SaveCodec.requireRuntimeIntegrity(w)
-  }}
-  repo.checkpoint(mutable.value.slot,next)
-  mutable.update{it.copy(world=next,revision=it.revision+1,message=if(toHalfTime)"Bis zur Halbzeit simuliert." else "Spiel vollständig simuliert.")}
+  withContext(Dispatchers.Default){
+   val m=current.live?:error("Es läuft kein Spiel.")
+   if(toHalfTime)MatchEngine.simulateToHalfTime(current,m) else MatchEngine.simulateRemaining(current,m)
+   SaveCodec.requireRuntimeIntegrity(current)
+  }
+  repo.checkpoint(mutable.value.slot,current)
+  mutable.update{it.copy(world=current,revision=it.revision+1,message=if(toHalfTime)"Bis zur Halbzeit simuliert." else "Spiel vollständig simuliert.")}
  }
  fun liveAction(block: (World)->Unit):Job=viewModelScope.launch{lock.withLock{
   try{
    val current=mutable.value.world?:return@withLock;val slot=mutable.value.slot
-   val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->block(w);w.live?.let{MatchEngine.captureBallFrame(it)};SaveCodec.requireRuntimeIntegrity(w)}}
-   // Erst atomar sichern, dann veröffentlichen. Schlägt der Checkpoint fehl, bleibt die UI
-   // auf dem letzten vollständig gültigen Zustand und die Aktion kann erneut gewählt werden.
-   repo.checkpoint(slot,next)
-   mutable.update{it.copy(world=next,revision=it.revision+1,error=null)}
+   withContext(Dispatchers.Default){block(current);current.live?.let{MatchEngine.captureBallFrame(it)};SaveCodec.requireRuntimeIntegrity(current)}
+   mutable.update{it.copy(world=current,revision=it.revision+1,error=null)}
+   scheduleSave(slot)
   }catch(e: CancellationException){throw e}catch(_:OutOfMemoryError){memoryPressure()}catch(e: Exception){mutable.update{it.copy(error=if(e is IllegalArgumentException||e is IllegalStateException)e.message?:"Aktion nicht möglich." else "Die Live-Aktion konnte nicht bestätigt werden.")}}
  }}
  private fun liveTacticAction(block:(World)->Unit){viewModelScope.launch{lock.withLock{
   try{
    val current=mutable.value.world?:return@withLock
-   val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->
-    val liveBefore=w.live;val t=w.club().tactics;val before=listOf<Any>(t.formation,t.mentality,t.pressing,t.line,t.tempo,t.width,t.buildUp,liveBefore?.homeMentality?:0,liveBefore?.awayMentality?:0)
-    block(w)
-    val t2=w.club().tactics;val liveAfter=w.live;val after=listOf<Any>(t2.formation,t2.mentality,t2.pressing,t2.line,t2.tempo,t2.width,t2.buildUp,liveAfter?.homeMentality?:0,liveAfter?.awayMentality?:0)
-    if(before!=after&&liveAfter!=null)MatchAnalysisSystem.recordTacticChange(w,liveAfter,w.user.clubId,"Live-Taktik angepasst")
-    liveAfter?.let{MatchEngine.captureBallFrame(it)};SaveCodec.requireRuntimeIntegrity(w)
-   }}
-   mutable.update{it.copy(world=next,revision=it.revision+1,error=null)}
+   withContext(Dispatchers.Default){
+    val liveBefore=current.live;val t=current.club().tactics;val before=listOf<Any>(t.formation,t.mentality,t.pressing,t.line,t.tempo,t.width,t.buildUp,liveBefore?.homeMentality?:0,liveBefore?.awayMentality?:0)
+    block(current)
+    val t2=current.club().tactics;val liveAfter=current.live;val after=listOf<Any>(t2.formation,t2.mentality,t2.pressing,t2.line,t2.tempo,t2.width,t2.buildUp,liveAfter?.homeMentality?:0,liveAfter?.awayMentality?:0)
+    if(before!=after&&liveAfter!=null)MatchAnalysisSystem.recordTacticChange(current,liveAfter,current.user.clubId,"Live-Taktik angepasst")
+    liveAfter?.let{MatchEngine.captureBallFrame(it)};SaveCodec.requireRuntimeIntegrity(current)
+   }
+   mutable.update{it.copy(world=current,revision=it.revision+1,error=null)}
+   scheduleSave(mutable.value.slot)
   }catch(e:CancellationException){throw e}catch(_:OutOfMemoryError){memoryPressure()}catch(e:Exception){mutable.update{it.copy(error=e.message?:"Die Live-Taktik konnte nicht geändert werden.")}}
  }}}
  fun decide(d: Decision){
@@ -156,8 +173,9 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  fun resumeIncident()=liveAction{w->w.live?.let{MatchEngine.resumeIncident(w,it)}}
  fun secondHalf()=liveAction{it.live?.let{m->MatchEngine.secondHalf(m)}}
  fun finishWeek()=work{
-  val current=mutable.value.world?:return@work;val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{SeasonEngine.advanceWeek(it)}}
-  repo.save(mutable.value.slot,next);mutable.update{it.copy(world=next,revision=it.revision+1,message="Partie abgeschlossen und gespeichert.")}
+  val current=mutable.value.world?:return@work
+  withContext(Dispatchers.Default){SeasonEngine.advanceWeek(current);SaveCodec.requireRuntimeIntegrity(current)}
+  repo.save(mutable.value.slot,current);mutable.update{it.copy(world=current,revision=it.revision+1,message="Partie abgeschlossen und gespeichert.")}
  }
  fun exportTo(uri: Uri)=work{
   val w=mutable.value.world?:return@work
