@@ -159,7 +159,7 @@ object EuropeanLeagueData {
             league("Russian Premier League","Russland",16,1,russia),
             league("Eredivisie","Niederlande",17,1,netherlands),
             league("Jupiler Pro League","Belgien",18,1,belgium),
-            league("ADMIRAL Bundesliga","Oesterreich",19,1,austria),
+            league("ADMIRAL Bundesliga","Österreich",19,1,austria),
             league("Ekstraklasa","Polen",20,1,poland),
             league("Allsvenskan","Schweden",21,1,sweden)
         )
@@ -176,7 +176,7 @@ object EuropeanLeagueData {
         DomesticCupSeed("RUSSIAN_CUP","Russland","Russian Cup",maxLevel=1),
         DomesticCupSeed("KNVB_BEKER","Niederlande","KNVB Beker",maxLevel=1),
         DomesticCupSeed("CROKY_CUP","Belgien","Croky Cup",maxLevel=1),
-        DomesticCupSeed("OFB_CUP","Oesterreich","OeFB-Cup",maxLevel=1),
+        DomesticCupSeed("OFB_CUP","Österreich","ÖFB-Cup",maxLevel=1),
         DomesticCupSeed("PUCHAR_POLSKI","Polen","Puchar Polski",maxLevel=1),
         DomesticCupSeed("SVENSKA_CUPEN","Schweden","Svenska Cupen",maxLevel=1)
     )
