@@ -37,7 +37,7 @@ class RealismV05Test {
    fun association(id:Int)=w.leagues.firstOrNull{ id in it.clubIds }?.let{RealModeDatabase.countryForLeague(it.name)}
     ?:w.clubs.getValue(id).city.substringAfterLast(", ").ifBlank{"International"}
    assertTrue(ids.map(::association).distinct().size>=8,"$type braucht ein echtes Mehrverbandsfeld")
-   assertTrue(ids.any{it>=1000},"$type braucht Qualifikanten außerhalb der fünf gepackten Topligen")
+   assertTrue(ids.map(::association).any{it !in setOf("Deutschland","England","Spanien","Italien","Frankreich")},"$type braucht Qualifikanten aus den erweiterten europäischen Ligen")
    val pots=ids.sortedWith(compareByDescending<Int>{w.clubs.getValue(it).reputation}.thenBy{it}).chunked(9)
    val potOf=pots.flatMapIndexed{i,pot->pot.map{it to i}}.toMap()
    for(id in ids){
