@@ -18,6 +18,65 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  val lastSlot=repo.lastSlot.stateIn(viewModelScope,SharingStarted.Eagerly,1)
  val matchSpeed=repo.matchSpeed.stateIn(viewModelScope,SharingStarted.Eagerly,MatchSpeed.NORMAL)
  val soundsEnabled=repo.soundsEnabled.stateIn(viewModelScope,SharingStarted.Eagerly,true)
+ private var liveRunnerJob: Job?=null
+ @Volatile private var liveRunnerEnabled=false
+ private fun runnerDelayMs(phase:LivePhase,speed:MatchSpeed):Long {
+  val normal=when(phase){
+   LivePhase.GOAL->4200L
+   LivePhase.SHOT_ON_TARGET,LivePhase.SHOT_OFF_TARGET,LivePhase.WOODWORK->2800L
+   LivePhase.VAR->1600L
+   LivePhase.OFFSIDE,LivePhase.THROW_IN->1800L
+   LivePhase.CORNER->3000L
+   LivePhase.FREE_KICK,LivePhase.DANGEROUS_FREE_KICK,LivePhase.PENALTY->2900L
+   LivePhase.YELLOW_CARD,LivePhase.YELLOW_RED_CARD,LivePhase.RED_CARD,LivePhase.INJURY->2500L
+   LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK->2000L
+   LivePhase.COUNTER->1450L
+   else->2250L
+  }
+  return when(speed){
+   MatchSpeed.SLOW->if(phase==LivePhase.VAR)1900L else (normal*1.45).toLong()
+   MatchSpeed.NORMAL->normal
+   MatchSpeed.FAST->when(phase){LivePhase.GOAL->2300L;LivePhase.SHOT_ON_TARGET,LivePhase.SHOT_OFF_TARGET,LivePhase.WOODWORK->1550L;LivePhase.VAR->1200L;LivePhase.OFFSIDE,LivePhase.THROW_IN->950L;LivePhase.CORNER->1700L;LivePhase.FREE_KICK,LivePhase.DANGEROUS_FREE_KICK,LivePhase.PENALTY->1650L;LivePhase.YELLOW_CARD,LivePhase.YELLOW_RED_CARD,LivePhase.RED_CARD,LivePhase.INJURY->1450L;LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK->1100L;LivePhase.COUNTER->720L;else->850L}
+  }
+ }
+ private fun liveBlocked(m:LiveMatch)=m.finished||m.halfTime||m.pendingDecision||m.incidentPause||m.assistantSubPending
+ fun startLiveRunner(){
+  liveRunnerEnabled=true
+  if(liveRunnerJob?.isActive==true)return
+  liveRunnerJob=viewModelScope.launch{
+   try{
+    while(isActive&&liveRunnerEnabled){
+     val snapshot=mutable.value.world?.live?:break
+     if(snapshot.finished)break
+     if(liveBlocked(snapshot)){delay(120);continue}
+     val fixtureId=snapshot.fixtureId;val serial=snapshot.liveEventSerial
+     delay(runnerDelayMs(snapshot.livePhase,matchSpeed.value))
+     if(!liveRunnerEnabled)break
+     lock.withLock{
+      val current=mutable.value.world?:return@withLock
+      val live=current.live?:return@withLock
+      if(!liveRunnerEnabled||live.fixtureId!=fixtureId||live.liveEventSerial!=serial||liveBlocked(live))return@withLock
+      try{
+       val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->w.live?.let{MatchEngine.step(w,it)}}}
+       val after=next.live
+       val checkpoint=after!=null&&(after.minute/5!=(current.live?.minute?:0)/5||after.pendingDecision||after.halfTime||after.finished||after.incidentPause||after.assistantSubPending)
+       mutable.update{it.copy(world=next,revision=it.revision+1,error=null)}
+       if(checkpoint){
+        try{repo.save(mutable.value.slot,next)}catch(e:CancellationException){throw e}catch(e:Exception){
+         liveRunnerEnabled=false
+         mutable.update{it.copy(error="Der Live-Checkpoint konnte nicht gespeichert werden.")}
+        }
+       }
+      }catch(e:CancellationException){throw e}catch(e:Exception){
+       liveRunnerEnabled=false
+       mutable.update{it.copy(error=if(e is IllegalArgumentException||e is IllegalStateException)e.message?:"Aktion nicht möglich." else "Die Live-Simulation konnte nicht fortgesetzt werden.")}
+      }
+     }
+    }
+   }finally{liveRunnerJob=null}
+  }
+ }
+ fun stopLiveRunner(){liveRunnerEnabled=false;liveRunnerJob?.cancel();liveRunnerJob=null}
  private fun work(task: suspend ()->Unit){viewModelScope.launch{lock.withLock{
   mutable.update{it.copy(busy=true,error=null,message=null)}
   try{task()}catch(e: CancellationException){throw e}catch(e: Exception){mutable.update{it.copy(error=if(e is IllegalArgumentException||e is IllegalStateException)e.message?:"Aktion nicht möglich." else "Aktion konnte nicht bestätigt werden. Bitte erneut versuchen oder den gespeicherten Stand laden.")}}
@@ -27,10 +86,10 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  fun createRealMode(seed: Long,clubKey: String,p: PlayerDraft,slot: Int,fantasyCupEnabled:Boolean=true)=work{val w=withContext(Dispatchers.Default){WorldFactory.createRealModeWorld(seed,clubKey,p,fantasyCupEnabled)};repo.save(slot,w);mutable.value=GameState(w,slot,revision=mutable.value.revision+1)}
  fun createCustomReal(seed:Long,slotClubKey:String,c:ClubDraft,p:PlayerDraft,players:List<PlayerDraft>,slot:Int,fantasyCupEnabled:Boolean=true)=work{val w=withContext(Dispatchers.Default){WorldFactory.createCustomClubWorld(seed,slotClubKey,c,p,players,fantasyCupEnabled)};repo.save(slot,w);mutable.value=GameState(w,slot,revision=mutable.value.revision+1)}
  fun createTopClub(seed: Long,clubKey: String,p: PlayerDraft,slot: Int)=createRealMode(seed,clubKey,p,slot)
- fun load(slot: Int)=work{val w=repo.load(slot);mutable.value=GameState(w,slot,revision=mutable.value.revision+1)}
+ fun load(slot: Int)=run{stopLiveRunner();work{val w=repo.load(slot);mutable.value=GameState(w,slot,revision=mutable.value.revision+1)}}
  fun delete(slot: Int)=work{repo.delete(slot)}
  fun saveAs(slot: Int)=work{val w=mutable.value.world?:return@work;repo.save(slot,w);mutable.update{it.copy(slot=slot,message="In Slot $slot gespeichert.")}}
- fun backToMenu()=work{mutable.value.world?.let{repo.save(mutable.value.slot,it)};mutable.value=GameState()}
+ fun backToMenu()=run{stopLiveRunner();work{mutable.value.world?.let{repo.save(mutable.value.slot,it)};mutable.value=GameState()}}
  fun clearError(){mutable.update{it.copy(error=null)}}
  fun clearMessage(){mutable.update{it.copy(message=null)}}
  fun setMatchSpeed(v: MatchSpeed){viewModelScope.launch{repo.setMatchSpeed(v)}}
