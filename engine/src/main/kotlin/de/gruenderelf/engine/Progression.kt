@@ -37,8 +37,9 @@ object TrainingEngine {
  fun apply(w: World)=TrainingSystems.applyAll(w)
 }
 object ConstructionEngine {
- fun price(w: World,f: Facility)=(f.baseCost*(1+(10-w.club().tier)*.45)).toLong()
- fun weeks(w: World,f: Facility)=f.weeks+(10-w.club().tier)/3
+ private fun leagueLevel(w: World)=if(w.privateTopClubMode)RealModeDatabase.levelForTier(w.club().tier) else w.club().tier
+ fun price(w: World,f: Facility)=(f.baseCost*(1+(10-leagueLevel(w))*.45)).toLong()
+ fun weeks(w: World,f: Facility)=f.weeks+(10-leagueLevel(w))/3
  fun level(s: Stadium,f: Facility): Int=when(f){Facility.PITCH->s.pitchQuality;Facility.TRAINING->s.training;Facility.GYM->s.gym;Facility.MEDICINE->s.medicine;Facility.CABIN->s.cabin;Facility.STAND->s.stand;Facility.CLUBHOUSE->s.clubhouse;Facility.YOUTH->s.youth;Facility.CAPACITY->s.capacity;Facility.FLOODLIGHTS->if(s.floodlights)100 else 0;Facility.ARTIFICIAL->if(s.surface==Surface.ARTIFICIAL)100 else 0}
  fun reason(w: World,f: Facility): String? {val c=w.club();val s=c.stadium;return when{
   w.construction.count{it.clubId==c.id}>=(if(!w.privateTopClubMode&&c.tier>=7)1 else 2)->"Alle Baustellen sind belegt."
