@@ -334,10 +334,9 @@ object CompetitionEngine {
     edges.removeAt(edges.lastIndex)
    }
 
-   fun remainingFeasible(id:Int,round:Int):Boolean{
-    val remaining=8-round
+   fun remainingFeasible(id:Int,remainingGames:Int):Boolean{
     val missing=(0..3).sumOf{pot->2-potCounts.getValue(id)[pot]}
-    if(missing!=remaining)return false
+    if(missing!=remainingGames)return false
     for(pot in 0..3){
      val need=2-potCounts.getValue(id)[pot]
      if(need<=0)continue
@@ -359,8 +358,7 @@ object CompetitionEngine {
       }.thenBy{rng.int(0,1_000_000)})
      for(b in candidates){
       unmatched-=a;unmatched-=b;add(a,b,round)
-      val nextRound=round+1
-      val feasible=(unmatched.all{u->remainingFeasible(u,nextRound)}&&remainingFeasible(a,nextRound)&&remainingFeasible(b,nextRound))
+      val feasible=(unmatched.all{u->remainingFeasible(u,8-round)}&&remainingFeasible(a,7-round)&&remainingFeasible(b,7-round))
       if(feasible&&rec())return true
       remove(a,b);unmatched+=a;unmatched+=b
      }
