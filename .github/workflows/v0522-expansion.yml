@@ -1,0 +1,22 @@
+name: Gründerelf v0.5.22 Expansion CI
+on:
+  push:
+    branches: [ "feat/v0.5.22-expansion" ]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Engine tests
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon -PgruenderelfKeystorePassword=ci-placeholder :engine:test --stacktrace
