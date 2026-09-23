@@ -34,7 +34,7 @@ object SaveCodec {
   val maxLeagueRound=w.leagues.maxOf{(it.clubIds.size-1)*2}
   val maxFixtureDay=maxOf(maxLeagueRound,w.fixtures.maxOfOrNull{it.matchday}?:maxLeagueRound)
   require(leagueFixtures.size==expectedLeagueFixtures&&w.fixtures.map{it.id}.toSet().size==w.fixtures.size&&w.fixtures.all{it.homeId in w.clubs&&it.awayId in w.clubs&&it.homeId!=it.awayId&&it.matchday in 1..maxFixtureDay&&(!it.played||it.id in w.matches)}){"Spielplan oder Ergebnisse unvollständig."}
-  for(c in w.clubs.values){require(c.tier in 0..10&&c.stadium.capacity>0){"Vereinsdaten beschädigt."};if(c.tactics.formation !in Formations.all)c.tactics.formation="4-4-2";if(c.tactics.xi.size!=11||c.tactics.xi.any{it!=0&&w.players[it]?.clubId!=c.id})WorldFactory.autoLineup(w,c.id)}
+  for(c in w.clubs.values){require((c.tier==0||if(realMode)c.tier in 1..w.leagues.size else c.tier in 1..10)&&c.stadium.capacity>0){"Vereinsdaten beschädigt."};if(c.tactics.formation !in Formations.all)c.tactics.formation="4-4-2";if(c.tactics.xi.size!=11||c.tactics.xi.any{it!=0&&w.players[it]?.clubId!=c.id})WorldFactory.autoLineup(w,c.id)}
   if(w.training.days.size!=7)w.training.days=TrainingPlan().days
   w.training.extra=w.training.extra.filter{w.players[it.playerId]?.clubId==w.user.clubId}.distinctBy{it.playerId}.take(if(w.assistantCoach.autoSeniorTraining||w.assistantCoach.autoYouthTraining)6 else if(w.privateTopClubMode)4 else if(w.club().tier>=7)2 else 4).toMutableList()
   w.live?.let{require(w.nextFixture()?.id==it.fixtureId&&it.homeXi.size==11&&it.awayXi.size==11&&it.minute in 0..110){"Laufende Partie beschädigt."}}
