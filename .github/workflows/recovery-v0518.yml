@@ -2,7 +2,7 @@ name: Recovery v0.5.18 CI
 
 on:
   push:
-    branches: [ "recover-v0.5.18" ]
+    branches: [ "recover-v0.5.18", "expand-europe-2026-27" ]
   workflow_dispatch:
 
 jobs:
