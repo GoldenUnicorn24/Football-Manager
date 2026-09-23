@@ -33,10 +33,31 @@ object CompetitionEngine {
  private fun isModernEuropean(type: CompetitionType)=type==CompetitionType.CHAMPIONS_LEAGUE||type==CompetitionType.EUROPA_LEAGUE
 
  fun displayName(w: World,type: CompetitionType)=when{
-  type==CompetitionType.NATIONAL_CUP&&isReal(w)->"DFB-Pokal"
+  type==CompetitionType.NATIONAL_CUP&&isReal(w)->EuropeanLeagueData.cupsForCountry(clubCountry(w,w.user.clubId)).firstOrNull()?.name?:"Nationaler Pokal"
   type==CompetitionType.NATIONAL_CUP->"Gründerpokal"
   else->type.label
  }
+
+ fun displayName(w: World,f: Fixture): String {
+  if(f.competition!=CompetitionType.NATIONAL_CUP)return f.competition.label
+  if(!isReal(w))return "Gründerpokal"
+  return cupForFixture(f)?.name?:"DFB-Pokal"
+ }
+
+ fun domesticCupNames(w: World): List<String> {
+  if(!isReal(w))return listOf("Gründerpokal")
+  return w.fixtures.asSequence().filter{it.season==w.calendar.season&&it.competition==CompetitionType.NATIONAL_CUP}
+   .map{displayName(w,it)}.distinct().sorted().toList()
+ }
+
+ private fun clubCountry(w: World,clubId: Int): String {
+  val league=w.leagues.firstOrNull{clubId in it.clubIds}?:return ""
+  return RealModeDatabase.countryForLeague(league.name)?:""
+ }
+ private fun cupForFixture(f: Fixture): DomesticCupSeed?=
+  EuropeanLeagueData.cupById(f.group)?:if(f.group.isBlank())EuropeanLeagueData.cupById("DFB_POKAL") else null
+ private fun isCupFixture(f: Fixture,cup: DomesticCupSeed)=
+  f.competition==CompetitionType.NATIONAL_CUP&&(f.group==cup.id||(cup.id=="DFB_POKAL"&&f.group.isBlank()))
 
  fun ensureGuestClubs(w: World,rng: SeededRandom=SeededRandom(w.seed xor 0x4555524FL)){
   if(isReal(w))return
@@ -70,9 +91,9 @@ object CompetitionEngine {
 
  fun scheduleSeason(w: World){
   if(isReal(w)){
-   scheduleRealDfbPokal(w)
+   EuropeanLeagueData.domesticCups.forEach{scheduleRealDomesticCup(w,it)}
    val order=realEuropeanQualificationOrder(w)
-   require(order.size>=72){"Für Champions League und Europa League werden mindestens 72 Topliga-Vereine benötigt."}
+   require(order.size>=72){"Für Champions League und Europa League werden mindestens 72 qualifizierbare Topliga-Vereine benötigt."}
    scheduleModernEurope(w,CompetitionType.CHAMPIONS_LEAGUE,order.take(36),0x43484CL)
    scheduleModernEurope(w,CompetitionType.EUROPA_LEAGUE,order.drop(36).take(36),0x45554CL)
   }else{
@@ -83,18 +104,54 @@ object CompetitionEngine {
   }
  }
 
- private fun germanLeagueClubIds(w: World)=w.leagues.filter{RealModeDatabase.countryForLeague(it.name)=="Deutschland"}.flatMap{it.clubIds}.distinct()
- private fun scheduleRealDfbPokal(w: World){
-  if(w.fixtures.any{it.season==w.calendar.season&&it.competition==CompetitionType.NATIONAL_CUP})return
-  val german=germanLeagueClubIds(w)
-  val direct=w.leagues.filter{RealModeDatabase.countryForLeague(it.name)=="Deutschland"&&it.tier<=3}.flatMap{it.clubIds}.distinct()
-  val lower=german.filter{it !in direct}.sortedWith(compareByDescending<Int>{w.clubs.getValue(it).reputation}.thenBy{it})
-  val userGerman=w.user.clubId in german
-  val selected=(direct+lower).distinct().take(64).toMutableList()
-  if(userGerman&&w.user.clubId !in selected){selected[selected.lastIndex]=w.user.clubId}
-  require(selected.size==64){"DFB-Pokal benötigt 64 deutsche Vereine, gefunden: ${selected.size}"}
-  val rng=SeededRandom(w.seed xor w.calendar.season.toLong() xor 0x444642L);val draw=shuffle(selected.distinct(),rng)
-  draw.chunked(2).forEach{pair->addFixture(w,CompetitionType.NATIONAL_CUP,1,realNationalNames[0],realNationalDays[0],pair[0],pair[1])}
+ private fun cupSalt(cup: DomesticCupSeed): Long=cup.id.fold(0x435550L){acc,ch->acc*31L+ch.code}
+ private fun cupCandidates(w: World,cup: DomesticCupSeed): List<Int> =
+  w.leagues.filter{RealModeDatabase.countryForLeague(it.name)==cup.country&&RealModeDatabase.levelForTier(it.tier)<=cup.maxLevel}
+   .sortedWith(compareBy<League>{RealModeDatabase.levelForTier(it.tier)}.thenBy{it.tier})
+   .flatMap{it.clubIds}.distinct()
+
+ private fun selectedCupClubs(w: World,cup: DomesticCupSeed): List<Int>{
+  val candidates=cupCandidates(w,cup)
+  if(candidates.isEmpty())return emptyList()
+  val ordered=candidates.sortedWith(compareByDescending<Int>{w.clubs.getValue(it).reputation}.thenBy{it})
+  if(cup.maxParticipants<=0||ordered.size<=cup.maxParticipants)return ordered
+  val selected=ordered.take(cup.maxParticipants).toMutableList()
+  if(w.user.clubId in candidates&&w.user.clubId !in selected)selected[selected.lastIndex]=w.user.clubId
+  return selected.distinct()
+ }
+
+ private fun highestPowerOfTwoAtMost(value:Int): Int{
+  var p=1
+  while(p*2<=value)p*=2
+  return p
+ }
+ private fun cupFirstDraw(w: World,cup: DomesticCupSeed): MutableList<Int> =
+  shuffle(selectedCupClubs(w,cup),SeededRandom(w.seed xor w.calendar.season.toLong() xor cupSalt(cup)))
+ private fun cupStageName(originalSize:Int,teams:Int,preliminary:Boolean=false): String=when{
+  preliminary->"Vorrunde"
+  teams>=64->"1. Runde"
+  teams==32&&originalSize>=64->"2. Runde"
+  teams==32->"Sechzehntelfinale"
+  teams==16->"Achtelfinale"
+  teams==8->"Viertelfinale"
+  teams==4->"Halbfinale"
+  teams==2->"Finale"
+  else->"K.-o.-Runde"
+ }
+
+ private fun scheduleRealDomesticCup(w: World,cup: DomesticCupSeed){
+  if(w.fixtures.any{it.season==w.calendar.season&&isCupFixture(it,cup)})return
+  val selected=selectedCupClubs(w,cup)
+  if(selected.size<2)return
+  val power=highestPowerOfTwoAtMost(selected.size)
+  val preliminary=power!=selected.size
+  val firstMatchCount=if(preliminary)selected.size-power else selected.size/2
+  val draw=cupFirstDraw(w,cup)
+  val playing=draw.take(firstMatchCount*2)
+  val stage=cupStageName(selected.size,selected.size,preliminary)
+  playing.chunked(2).forEach{pair->
+   addFixture(w,CompetitionType.NATIONAL_CUP,1,stage,realNationalDays[0],pair[0],pair[1],cup.id)
+  }
  }
 
  private fun scheduleFantasyNationalFirstRound(w: World){
@@ -108,7 +165,7 @@ object CompetitionEngine {
  }
 
  private fun realEuropeanQualificationOrder(w: World): List<Int>{
-  val top=w.leagues.filter{RealModeDatabase.levelForTier(it.tier)==1}.sortedBy{it.tier}
+  // Russische Klubs bleiben 2026/27 fuer UEFA-Wettbewerbe suspendiert; die nationale Liga/Pokalwelt laeuft normal.\n  val top=w.leagues.filter{RealModeDatabase.levelForTier(it.tier)==1&&RealModeDatabase.countryForLeague(it.name)!="Russland"}.sortedBy{it.tier}
   require(top.size>=5){"Europapokal benötigt die fünf Topligen."}
   val rotation=(w.calendar.season-top.first().tier).mod(top.size)
   val orderedLeagues=(top.drop(rotation)+top.take(rotation)).map{league->league.clubIds.sortedWith(compareByDescending<Int>{w.clubs.getValue(it).reputation}.thenBy{it})}
@@ -218,7 +275,7 @@ object CompetitionEngine {
   if(f.competition==CompetitionType.LEAGUE)return
   if(isDecisiveKnockoutFixture(w,f))resolveKnockout(w,f)
   when(f.competition){
-   CompetitionType.NATIONAL_CUP->advanceNationalIfReady(w,f.round)
+   CompetitionType.NATIONAL_CUP->advanceNationalIfReady(w,f)
    CompetitionType.CHAMPIONS_LEAGUE,CompetitionType.EUROPA_LEAGUE->if(isReal(w))advanceModernEuroIfReady(w,f,f.competition) else advanceLegacyEuroIfReady(w,f,f.competition)
    CompetitionType.EURO_ELITE->advanceLegacyEuroIfReady(w,f,f.competition)
    CompetitionType.LEAGUE->Unit
@@ -226,14 +283,43 @@ object CompetitionEngine {
   w.fixtures.sortWith(compareBy<Fixture>{it.matchday}.thenBy{it.competition.sortPriority()}.thenBy{it.id})
  }
 
- private fun advanceNationalIfReady(w: World,round: Int){
-  val names=if(isReal(w))realNationalNames else fantasyNationalNames;val days=if(isReal(w))realNationalDays else fantasyNationalDays
-  if(round>=names.size||w.fixtures.any{it.season==w.calendar.season&&it.competition==CompetitionType.NATIONAL_CUP&&it.round==round+1})return
+ private fun advanceNationalIfReady(w: World,last: Fixture){
+  if(!isReal(w)){advanceFantasyNationalIfReady(w,last.round);return}
+  val cup=cupForFixture(last)?:return
+  advanceRealNationalIfReady(w,cup,last.round)
+ }
+
+ private fun advanceFantasyNationalIfReady(w: World,round: Int){
+  if(round>=fantasyNationalNames.size||w.fixtures.any{it.season==w.calendar.season&&it.competition==CompetitionType.NATIONAL_CUP&&it.round==round+1})return
   val current=w.fixtures.filter{it.season==w.calendar.season&&it.competition==CompetitionType.NATIONAL_CUP&&it.round==round}
   if(current.isEmpty()||current.any{!it.played})return
   val winners=current.map{it.winnerId}.filter{it!=0};if(winners.size!=current.size)return
   val rng=SeededRandom(w.seed xor w.calendar.season.toLong() xor (round*991L));val draw=shuffle(winners,rng)
-  draw.chunked(2).forEach{pair->addFixture(w,CompetitionType.NATIONAL_CUP,round+1,names[round],days[round],pair[0],pair[1])}
+  draw.chunked(2).forEach{pair->addFixture(w,CompetitionType.NATIONAL_CUP,round+1,fantasyNationalNames[round],fantasyNationalDays[round],pair[0],pair[1])}
+ }
+
+ private fun advanceRealNationalIfReady(w: World,cup: DomesticCupSeed,round: Int){
+  if(w.fixtures.any{it.season==w.calendar.season&&isCupFixture(it,cup)&&it.round==round+1})return
+  val current=w.fixtures.filter{it.season==w.calendar.season&&isCupFixture(it,cup)&&it.round==round}
+  if(current.isEmpty()||current.any{!it.played})return
+  val winners=current.map{it.winnerId}.filter{it!=0}
+  if(winners.size!=current.size)return
+  val selected=selectedCupClubs(w,cup)
+  val originalSize=selected.size
+  val power=highestPowerOfTwoAtMost(originalSize)
+  val preliminary=power!=originalSize
+  val byes=if(round==1&&preliminary){
+   val draw=cupFirstDraw(w,cup)
+   draw.drop((originalSize-power)*2)
+  }else emptyList()
+  val teams=(winners+byes).distinct()
+  if(teams.size<2)return
+  require(teams.size%2==0){"${cup.name}: ungerade Zahl an Teams in Runde ${round+1}: ${teams.size}"}
+  val rng=SeededRandom(w.seed xor w.calendar.season.toLong() xor cupSalt(cup) xor (round*991L))
+  val draw=shuffle(teams,rng)
+  val stage=cupStageName(originalSize,teams.size,false)
+  val day=realNationalDays.getOrElse(round){realNationalDays.last()+round-realNationalDays.lastIndex}
+  draw.chunked(2).forEach{pair->addFixture(w,CompetitionType.NATIONAL_CUP,round+1,stage,day,pair[0],pair[1],cup.id)}
  }
 
  private fun scheduleTwoLegged(w: World,type: CompetitionType,phase: String,firstRound: Int,days: Pair<Int,Int>,pairings: List<Pair<Int,Int>>){
@@ -295,8 +381,11 @@ object CompetitionEngine {
   if(!isReal(w))ensureGuestClubs(w)
   val seasonExtras=w.fixtures.filter{it.season==w.calendar.season&&it.competition!=CompetitionType.LEAGUE}
   if(isReal(w)&&seasonExtras.isNotEmpty()&&seasonExtras.none{it.played}&&hasLegacyRealCompetitionShape(w)){
-   val ids=seasonExtras.map{it.id}.toSet();w.fixtures.removeAll{it.id in ids};ids.forEach{w.matches.remove(it)};scheduleSeason(w)
-  }else if(seasonExtras.isEmpty())scheduleSeason(w)
+   val ids=seasonExtras.filter{it.competition!=CompetitionType.NATIONAL_CUP||it.group.isBlank()}.map{it.id}.toSet()
+   w.fixtures.removeAll{it.id in ids};ids.forEach{w.matches.remove(it)}
+  }
+  // Die Scheduler sind idempotent: neue Laender/Pokale werden auch in bestehenden Saves nachgetragen.
+  scheduleSeason(w)
   while(true){
    val past=w.fixtures.filter{it.season==w.calendar.season&&it.competition!=CompetitionType.LEAGUE&&!it.played&&it.matchday<w.calendar.matchday}.sortedWith(compareBy<Fixture>{it.matchday}.thenBy{it.id})
    if(past.isEmpty())break
