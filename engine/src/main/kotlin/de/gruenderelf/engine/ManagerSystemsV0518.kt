@@ -203,12 +203,12 @@ object YouthCompetitionSystem {
  fun assign(w:World,playerId:Int,squad:YouthSquad){
   require(w.live==null){"Kaderzuordnung erst außerhalb eines laufenden Spiels ändern."};val p=w.players.getValue(playerId);val age=w.calendar.season-p.birthYear
   require(!p.retired&&p.clubId==w.user.clubId&&p.loanParentClubId==0&&p.id!=w.user.playerId&&age<=22&&(squad==YouthSquad.U23||age<=19)){"Dieser Spieler ist für ${squad.label} nicht einsatzberechtigt."}
-  p.youth=true;p.youthSquad=squad;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false;WorldFactory.autoLineup(w,w.user.clubId);w.news("${p.name} in ${squad.label}","Der Spieler gehört jetzt fest zum ${squad.label}-Kader und erhält dort Nachwuchsspielpraxis.")
+  p.youth=true;p.youthSquad=squad;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false;WorldFactory.autoLineup(w,w.user.clubId);w.news("${p.name} in ${squad.label}","Der Spieler gehört jetzt fest zum ${squad.label}-Kader und erhält dort Nachwuchsspielpraxis und den Academy-Entwicklungsweg.")
  }
  fun move(w:World,playerId:Int,squad:YouthSquad){require(w.players.getValue(playerId).youth){"Nur Jugendspieler können zwischen U19 und U23 verschoben werden."};assign(w,playerId,squad)}
  fun callUp(w:World,playerId:Int){
-  require(w.live==null){"Nominierung erst außerhalb eines laufenden Spiels."};val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.youth&&!p.retired){"Nur eigene Jugendspieler können vorübergehend hochgezogen werden."}
-  p.temporarySeniorCallUp=true;p.temporaryReturnSquad=p.youthSquad;p.youth=false;p.youthProfile.seniorTraining=true;p.morale=(p.morale+2).coerceAtMost(100);WorldFactory.rebuildBench(w,w.club());w.news("${p.name} bei den Profis","Vorübergehende Nominierung aus ${p.temporaryReturnSquad?.label ?: "der Jugend"}.","good")
+  require(w.live==null){"Notfall-Nominierung erst außerhalb eines laufenden Spiels."};val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.youth&&!p.retired){"Nur eigene Jugendspieler können vorübergehend hochgezogen werden."}
+  p.temporarySeniorCallUp=true;p.temporaryReturnSquad=p.youthSquad;p.youth=false;p.youthProfile.seniorTraining=true;p.morale=(p.morale+2).coerceAtMost(100);WorldFactory.rebuildBench(w,w.club());w.news("${p.name} bei den Profis","${p.name} steht für das nächste Profispiel zur Verfügung und kehrt danach automatisch in ${p.temporaryReturnSquad?.label ?: "den Nachwuchs"} zurück.","good")
  }
  fun returnToYouth(w:World,playerId:Int){
   val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.temporarySeniorCallUp){"Keine vorübergehende Jugend-Nominierung aktiv."};val target=p.temporaryReturnSquad?:if(w.calendar.season-p.birthYear<=19)YouthSquad.U19 else YouthSquad.U23
@@ -244,12 +244,21 @@ object OutboundTransferSystem {
  private fun positionNeed(w:World,buyer:Club,p:Player):Int{val count=w.squad(buyer.id).count{!it.youth&&!it.retired&&it.position==p.position};return when(count){0->4;1->3;2->2;else->1}}
  fun reject(w:World,offerId:Int){val o=w.negotiations.getValue(offerId);require(isOutbound(w,o));o.status=NegotiationStatus.REJECTED;o.message="Angebot abgelehnt."}
  fun accept(w:World,offerId:Int){
-  val o=w.negotiations.getValue(offerId);require(isOutbound(w,o));val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId);require(buyer.budget>=o.fee){"Käufer kann den Transfer nicht finanzieren."};require(TransferInterestSystem.score(w,p,buyer.id)>=35){"Der Spieler lehnt den Wechsel ab."}
-  o.status=NegotiationStatus.AGREED;o.stage=TransferStage.REGISTRATION;o.registrationReady=true;TransferEngine.complete(w,o.id);w.negotiations.values.filter{it.id!=o.id&&it.playerId==p.id&&isOutbound(w,it)&&it.status!=NegotiationStatus.COMPLETED}.forEach{it.status=NegotiationStatus.REJECTED}
+  require(w.live==null){"Transfer erst außerhalb eines laufenden Spiels bestätigen."}
+  val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED)){"Dieses Angebot kann nicht angenommen werden."}
+  val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId)
+  if(buyer.budget<o.fee+o.signingBonus){o.status=NegotiationStatus.REJECTED;o.message="${buyer.name} kann das Angebot finanziell nicht mehr hinterlegen.";return}
+  if(TransferInterestSystem.score(w,p,buyer.id)<35){o.status=NegotiationStatus.REJECTED;o.message="${p.name} lehnt den Wechsel zu ${buyer.name} ab.";return}
+  o.stage=TransferStage.MEDICAL;o.medicalRisk=(p.hidden.injuryProneness*.55+p.injuryWeeks*8+(w.calendar.season-p.birthYear-30).coerceAtLeast(0)*2.2).roundToInt().coerceIn(0,100)
+  if(o.medicalRisk>=78){o.medicalPassed=false;o.status=NegotiationStatus.REJECTED;o.medicalNote="Medizincheck beim aufnehmenden Verein nicht bestanden: Risiko ${o.medicalRisk}/100.";o.message=o.medicalNote;return}
+  o.medicalPassed=true;o.medicalNote="Medizincheck vom aufnehmenden Verein bestanden";o.message=o.medicalNote
+  o.status=NegotiationStatus.AGREED;o.stage=TransferStage.REGISTRATION;o.registrationReady=true
+  TransferEngine.complete(w,o.id)
+  w.negotiations.values.filter{it.id!=o.id&&it.playerId==p.id&&isOutbound(w,it)&&it.status!=NegotiationStatus.COMPLETED}.forEach{it.status=NegotiationStatus.REJECTED;it.message="Spieler hat sich für ein anderes Angebot entschieden."}
  }
  fun negotiate(w:World,offerId:Int,kind:String){
   val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED));val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId);o.round++
-  when(kind){"fee"->o.fee=(o.fee*1.08).toLong();"sellon"->o.sellOnPercent=(o.sellOnPercent+5).coerceAtMost(25);"option"->o.buyOption=(o.buyOption*1.08).toLong()}
+  when(kind){"fee"->o.fee=(o.fee*1.08).toLong();"sellon"->o.sellOnPercent=(o.sellOnPercent+5).coerceAtMost(25);"option"->o.buyOption=(o.buyOption*1.08).toLong();else->error("Unbekannter Verhandlungspunkt.")}
   val cap=maxBuyOffer(w,buyer,p);if(o.round>=4&&o.fee>cap*1.08){o.status=NegotiationStatus.REJECTED;o.message="Der Käufer steigt aus."}else if(o.fee<=cap){o.status=NegotiationStatus.AGREED;o.message="Der Käufer akzeptiert die Konditionen."}else{o.status=NegotiationStatus.COUNTER;o.fee=((o.fee+cap)/2);o.message="Der Käufer legt ein Gegenangebot vor."}
  }
 }
