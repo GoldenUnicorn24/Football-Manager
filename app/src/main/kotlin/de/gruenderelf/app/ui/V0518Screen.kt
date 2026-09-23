@@ -19,7 +19,7 @@ import de.gruenderelf.engine.*
   Section("Changelog & erneuertes Tutorial"){
    Text("v0.5.22 schließt die noch fehlenden v0.5.18-Recovery-Funktionen und behält den großen Ligen-Ausbau bei.",color=Grass)
    Text("Wieder vollständig: mehrere Verkaufs-/Leihangebote aktiv einholen, Bosman-Vorverträge, Vertragsverlängerungen, Zielkader U19/U23 bei Transfers sowie xG-Verlauf und echtes Passnetz. Die erweiterten europäischen Ligen, Qualifikationen und Wettbewerbe bleiben erhalten.",color=Muted)
-   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("Tutorial aktiv");Switch(w.user.tutorialEnabled,{v->vm.action{it.user.tutorialEnabled=v;if(v)it.user.tutorialCompleted=false}})}
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("Tutorial aktiv");Switch(w.user.tutorialEnabled,{v->vm.action{it.user.tutorialEnabled=v;if(v){it.user.tutorialCompleted=false;it.user.tutorialStep=0}}})}
    Pick("Karrierefokus",w.user.playerCareerFocus,PlayerCareerFocus.entries.toList(),{it.label}){v->vm.action{it.user.playerCareerFocus=v}}
    Text(w.user.playerCareerFocus.description,color=Muted,style=MaterialTheme.typography.bodySmall)
   }
