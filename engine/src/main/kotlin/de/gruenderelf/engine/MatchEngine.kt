@@ -883,6 +883,7 @@ object MatchEngine {
   }
 
   val home=ownerHome;val c=w.clubs.getValue(clubId(m,home));val opp=w.clubs.getValue(clubId(m,!home));val activeAi=if(home)m.homeAi else m.awayAi
+  val calibration=LeagueCalibration.calibration(w,m)
   if(activeAi.timeWaste>0&&m.minute>=78&&rng.chance(activeAi.timeWaste*.012)){addStoppageTime(m,18);m.chainTicks=(m.chainTicks+1).coerceAtMost(4);if(rng.chance(.35)){log(m,"${c.shortName} nimmt bewusst Tempo aus der Partie.");m.rngState=rng.state;return}}
   val fatigue=(averageFitness(w,m,home)/100.0).coerceIn(.45,1.0)
   val attackRatio=exp((strength(w,m,home,true)-strength(w,m,!home,false))/40).coerceIn(.48,2.15)
@@ -891,8 +892,8 @@ object MatchEngine {
   val modeRisk=when{allOut(m,home)->.036;controlGame(m,home)->-.025;conserve(m,home)->.008;else->0.0}
   val primeCarrier=w.players[m.livePlayerId]?.messiMentored==true
   val patternKey=when(m.livePhase){LivePhase.POSSESSION->"AUFBAU";LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK->if(c.tactics.width>=4)"FLUEGEL" else "HALBRAUM";LivePhase.COUNTER->"DIAGONALE";else->"RESTVERTEIDIGUNG"};val automatismRisk=(1-MatchIntelligence.patternFactor(c,patternKey))*.055
-  val turnoverChance=(when(m.livePhase){LivePhase.POSSESSION->.034;LivePhase.ATTACK->.048;LivePhase.DANGEROUS_ATTACK->.068;LivePhase.COUNTER->.064;else->.075}
-   +buildRisk(c.tactics.buildUp)+(c.tactics.tempo-3)*.006+(mentality-3)*.004-controlEdge*.034+(1-fatigue)*.075+modeRisk+automatismRisk-(if(primeCarrier).040 else 0.0)).coerceIn(if(primeCarrier).006 else .016,.34)
+  val turnoverChance=(calibration.turnover*(when(m.livePhase){LivePhase.POSSESSION->.034;LivePhase.ATTACK->.048;LivePhase.DANGEROUS_ATTACK->.068;LivePhase.COUNTER->.064;else->.075}
+   +buildRisk(c.tactics.buildUp)+(c.tactics.tempo-3)*.006+(mentality-3)*.004-controlEdge*.034+(1-fatigue)*.075+modeRisk+automatismRisk-(if(primeCarrier).040 else 0.0))).coerceIn(if(primeCarrier).006 else .016,.34)
   if(rng.chance(turnoverChance)){
    transferPossession(w,m,!home,if(rng.chance(.55))PossessionChangeReason.INTERCEPTION else PossessionChangeReason.TACKLE,rng,true);m.rngState=rng.state;return
   }
@@ -911,7 +912,7 @@ object MatchEngine {
    LivePhase.POSSESSION->{
     m.chainTicks++
     val modeProgress=when{conserve(m,home)->.62;allOut(m,home)->1.22;controlGame(m,home)->.72;else->1.0}
-    val progress=(.82*attackRatio.coerceIn(.72,1.55)*buildProgress(c.tactics.buildUp)*(.91+c.tactics.tempo*.03)*modeProgress*fatigue).coerceIn(.20,.97)
+    val progress=(calibration.chanceCreation*.82*attackRatio.coerceIn(.72,1.55)*buildProgress(c.tactics.buildUp)*(.91+c.tactics.tempo*.03)*modeProgress*fatigue).coerceIn(.20,.97)
     if(rng.chance(progress)){
      val mover=moverFor(w,m,home,rng);m.chainStep=1;m.chainTicks=0;setBallPhase(m,LivePhase.ATTACK,home,mover,"Aufbau nach vorn");moveBallToward(w,m,home,LivePhase.ATTACK,rng)
     }else{setBallPhase(m,LivePhase.POSSESSION,home,detail=when{conserve(m,home)->"Tiefer Block – auf den Konter warten";controlGame(m,home)->"Ball sichern und Spiel beruhigen";allOut(m,home)->"Sofort wieder nach vorn";else->"Ball zirkuliert"});moveBallToward(w,m,home,LivePhase.POSSESSION,rng)}
@@ -921,7 +922,7 @@ object MatchEngine {
     val flankBonus=if((c.tactics.buildUp==BuildUp.WIDE||c.tactics.width>=4)&&m.ballX !in .24f.. .76f).06 else 0.0
     val modeProgress=when{conserve(m,home)->.78;allOut(m,home)->1.16;controlGame(m,home)->.86;else->1.0}
     val primeProgress=if(w.players[m.livePlayerId]?.messiMentored==true).11 else 0.0
-    val progress=(1.02*attackRatio.coerceIn(.72,1.48)*buildProgress(c.tactics.buildUp)*(.92+c.tactics.tempo*.024)*fatigue*modeProgress+flankBonus+primeProgress).coerceIn(.34,.995)
+    val progress=(calibration.chanceCreation*1.02*attackRatio.coerceIn(.72,1.48)*buildProgress(c.tactics.buildUp)*(.92+c.tactics.tempo*.024)*fatigue*modeProgress+flankBonus+primeProgress).coerceIn(.34,.995)
     if(rng.chance(progress)){
      val mover=moverFor(w,m,home,rng);ensurePerformance(w,m,mover).chancesCreated++;m.chainStep=2;m.chainTicks=0;setBallPhase(m,LivePhase.DANGEROUS_ATTACK,home,mover,if(m.ballX !in .24f.. .76f)"Über außen in Tornähe" else "In Tornähe");moveBallToward(w,m,home,LivePhase.DANGEROUS_ATTACK,rng)
     }else if(m.chainTicks>=3){m.chainStep=0;m.chainTicks=0;setBallPhase(m,LivePhase.POSSESSION,home,detail="Angriff neu aufgebaut");moveBallToward(w,m,home,LivePhase.POSSESSION,rng)}
@@ -930,7 +931,7 @@ object MatchEngine {
    LivePhase.DANGEROUS_ATTACK->{
     m.chainTicks++;moveBallToward(w,m,home,LivePhase.DANGEROUS_ATTACK,rng)
     val modeShot=when{conserve(m,home)->.96;allOut(m,home)->1.16;controlGame(m,home)->.78;else->1.0}
-    val shotChance=(1.04*attackRatio.coerceIn(.74,1.42)*buildShotIntent(c.tactics.buildUp)*fatigue*modeShot).coerceIn(.48,.995)
+    val shotChance=(calibration.chanceCreation*1.04*attackRatio.coerceIn(.74,1.42)*buildShotIntent(c.tactics.buildUp)*fatigue*modeShot).coerceIn(.48,.995)
     if(rng.chance(shotChance)){
      val type=prepareShotLocation(w,m,home,rng);val shooter=selectShooter(w,m,home,rng)
      if(maybeOffside(w,m,home,shooter,type,rng)){m.rngState=rng.state;return}
@@ -1168,7 +1169,7 @@ object MatchEngine {
   val baseGeometry=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home))
   val type=typeHint?:when{baseGeometry.distanceMeters>=23.5->ShotType.LONG_RANGE;baseGeometry.distanceMeters<=8.5->ShotType.CLOSE_RANGE;else->ShotType.BOX_SHOT}
   val context=buildShotContext(w,m,home,p,type,rng,assist);val geometry=ShotModel.geometry(context)
-  val shotXg=ShotModel.xg(context);val goalProbability=ShotModel.goalProbability(shotXg,p,keeper,context)
+  val shotXg=ShotModel.xg(context);val goalProbability=(ShotModel.goalProbability(shotXg,p,keeper,context)*LeagueCalibration.calibration(w,m).conversion).coerceIn(.002,.92)
   val blockProbability=ShotModel.blockProbability(context);val onTargetProbability=ShotModel.onTargetProbability(goalProbability,p,context)
   val savedOnTarget=(onTargetProbability-goalProbability).coerceAtLeast(0.0)
   val woodworkProbability=(.012+shotXg*.060+(if(type in setOf(ShotType.CLOSE_RANGE,ShotType.ONE_ON_ONE)).006 else 0.0)).coerceIn(.010,.052)
