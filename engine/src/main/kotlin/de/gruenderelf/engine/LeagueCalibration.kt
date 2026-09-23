@@ -12,7 +12,7 @@ object LeagueCalibration {
    return MatchCalibration(1.06,1.02,.97,1.04)
   }
   val homeTier=w.clubs[fixture.homeId]?.tier;val awayTier=w.clubs[fixture.awayId]?.tier
-  val league=w.leagues.firstOrNull{it.tier==homeTier}?:w.leagues.firstOrNull{it.tier==awayTier}?:w.leagues.firstOrNull{fixture.homeId in it.clubIds||fixture.awayId in it.clubIds}?:return MatchCalibration()
+  val league=w.leagues.firstOrNull{it.tier==homeTier||it.tier==awayTier}?:w.leagues.firstOrNull{fixture.homeId in it.clubIds||fixture.awayId in it.clubIds}?:return MatchCalibration()
   val country=RealModeDatabase.countryForLeague(league.name)
   val level=RealModeDatabase.levelForTier(league.tier)
   if(w.privateTopClubMode){
