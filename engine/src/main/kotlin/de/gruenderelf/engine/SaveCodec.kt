@@ -4,15 +4,17 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.*
 object SaveCodec {
  val json=Json{encodeDefaults=false;ignoreUnknownKeys=true;coerceInputValues=true}
+ private val versionRegex=Regex("\\\"saveVersion\\\"\\s*:\\s*(\\d+)")
  fun encode(w: World): String {
-  // Standardwerte nicht tausendfach in jeden Spieler/Spielplan schreiben. Die Versionsnummer
-  // bleibt absichtlich explizit, damit kompakte Spielstände weiterhin eindeutig migrierbar sind.
-  val root=json.encodeToJsonElement(w).jsonObject.toMutableMap()
-  root["saveVersion"]=JsonPrimitive(w.saveVersion)
-  return JsonObject(root).toString()
+  // Direkt in einen String serialisieren: ein zusätzlicher JsonElement-Baum kann bei großen
+  // Real-Mode-Welten hunderte MB Peak-RAM kosten. saveVersion wird kompakt vorne ergänzt,
+  // falls encodeDefaults=false den Defaultwert ausgelassen hat.
+  val encoded=json.encodeToString(w)
+  if(versionRegex.containsMatchIn(encoded))return encoded
+  require(encoded.startsWith("{")&&encoded.endsWith("}")){"Spielstand konnte nicht serialisiert werden."}
+  return if(encoded.length==2) "{\\\"saveVersion\\\":${w.saveVersion}}" else "{\\\"saveVersion\\\":${w.saveVersion},"+encoded.substring(1)
  }
  fun copy(w: World)=decode(encode(w))
- private val versionRegex=Regex("\\\"saveVersion\\\"\\s*:\\s*(\\d+)")
  fun versionOf(text:String):Int=versionRegex.find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()?:1
  fun decode(text: String): World {
   require(text.length<=128*1024*1024){"Spielstand ist zu groß (maximal 128 MB)."}
