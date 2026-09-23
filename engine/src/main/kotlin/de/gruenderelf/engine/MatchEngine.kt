@@ -876,13 +876,13 @@ object MatchEngine {
   }
 
 
-  val keeperDelayContext=m.liveDetail.contains("Torwart",true)||m.possessionChangeReason==PossessionChangeReason.SAVE
-  if(keeperDelayContext){
+  val keeperCarrier=w.players[m.livePlayerId]
+  if(keeperCarrier?.position==Position.TW&&keeperCarrier.clubId==clubId(m,ownerHome)&&(m.liveDetail.contains("Torwart",true)||m.possessionChangeReason==PossessionChangeReason.SAVE)){
    m.keeperControlSeconds=if(rng.chance(.004))9 else rng.int(3,7)
-   if(m.keeperControlSeconds>8){
+   if(CompetitionRulesEngine.goalkeeperViolation(m.keeperControlSeconds,CompetitionRulesEngine.forMatch(w,m))){
     val attackingHome=!ownerHome
     val taker=moverFor(w,m,attackingHome,rng)
-    setBallPhase(m,LivePhase.CORNER,attackingHome,taker,"Ecke nach Torwart-Zeitspiel",PossessionChangeReason.GOALKEEPER_DELAY)
+    setBallPhase(m,LivePhase.POSSESSION,attackingHome,taker,"Ecke nach Torwart-Zeitspiel",PossessionChangeReason.GOALKEEPER_DELAY)
     queueCorner(w,m,attackingHome,taker,rng)
     log(m,"Der Torwart hält den Ball länger als acht Sekunden – Ecke für ${w.clubs.getValue(clubId(m,attackingHome)).shortName}.","bad")
     m.keeperControlSeconds=0;m.rngState=rng.state;return
@@ -1147,8 +1147,8 @@ object MatchEngine {
  fun substitute(w: World,m: LiveMatch,out: Int,incoming: Int,clubId: Int=w.user.clubId){
   require(!m.finished&&!m.pendingDecision){"Wechsel gerade nicht möglich."};val home=clubId==m.homeId;require(home||clubId==m.awayId)
   val lineup=xi(m,home);val bench=if(home)m.homeBench else m.awayBench
-  require((if(home)m.homeSubs else m.awaySubs)<5){"Fünf Wechsel sind bereits erfolgt."};require(out!=0&&out in lineup&&incoming in bench&&w.players.getValue(incoming).available){"Dieser Wechsel ist nicht möglich."}
-  lineup[lineup.indexOf(out)]=incoming;bench.remove(incoming);if(home)m.homeSubs++ else m.awaySubs++;addStoppageTime(m,20)
+  val issue=CompetitionRulesEngine.substitutionIssue(w,m,home);require(issue==null){issue?:"Wechsel nicht möglich."};require(out!=0&&out in lineup&&incoming in bench&&w.players.getValue(incoming).available){"Dieser Wechsel ist nicht möglich."}
+  lineup[lineup.indexOf(out)]=incoming;bench.remove(incoming);CompetitionRulesEngine.registerSubstitution(w,m,home);if(home)m.homeSubs++ else m.awaySubs++;addStoppageTime(m,20)
   ensurePerformance(w,m,incoming);if(incoming !in m.participation)m.participation.add(incoming)
   log(m,"Wechsel: ${w.players.getValue(incoming).name} für ${w.players.getValue(out).name}.")
  }
@@ -1196,7 +1196,7 @@ object MatchEngine {
  fun resumeIncident(w: World,m: LiveMatch){
   require(m.incidentPause){"Das Spiel ist nicht unterbrochen."}
   if(m.incidentReason==MatchPauseReason.INJURY&&m.incidentClubId==w.user.clubId){
-   val home=w.user.clubId==m.homeId;val lineup=xi(m,home);val bench=if(home)m.homeBench else m.awayBench;val subs=if(home)m.homeSubs else m.awaySubs;val canReplace=subs<5&&bench.any{w.players[it]?.available==true}
+   val home=w.user.clubId==m.homeId;val lineup=xi(m,home);val bench=if(home)m.homeBench else m.awayBench;val canReplace=CompetitionRulesEngine.substitutionIssue(w,m,home)==null&&bench.any{w.players[it]?.available==true}
    require(!canReplace||m.incidentPlayerId !in lineup){"Verletzten Spieler zuerst wechseln."}
   }
   val reason=m.incidentReason;m.incidentPause=false;m.incidentReason=MatchPauseReason.NONE;m.incidentPlayerId=0;m.incidentClubId=0
@@ -1226,7 +1226,7 @@ object MatchEngine {
  }
 
  private fun aiSub(w: World,m: LiveMatch,home: Boolean){
-  if((if(home)m.homeSubs else m.awaySubs)>=5||m.pendingDecision||m.assistantSubPending)return
+  if(CompetitionRulesEngine.substitutionIssue(w,m,home)!=null||m.pendingDecision||m.assistantSubPending)return
   val club=clubId(m,home);val suggestions=substitutionSuggestions(w,m,club)
   val userAssistant=club==w.user.clubId&&w.assistantCoach.autoSubstitutions
   val suggestion=suggestions.firstOrNull{candidate->
@@ -1293,7 +1293,7 @@ object MatchEngine {
   when(outcome){
    ShotOutcome.GOAL->{
     addStoppageTime(m,25)
-    val reviewChance=when(type){ShotType.ONE_ON_ONE->.38;ShotType.CUTBACK->.32;ShotType.HEADER,ShotType.VOLLEY->.28;ShotType.PENALTY->.18;ShotType.FREE_KICK->.12;else->.24}
+    val reviewChance=if(!CompetitionRulesEngine.forMatch(w,m).varEnabled)0.0 else when(type){ShotType.ONE_ON_ONE->.38;ShotType.CUTBACK->.32;ShotType.HEADER,ShotType.VOLLEY->.28;ShotType.PENALTY->.18;ShotType.FREE_KICK->.12;else->.24}
     if(rng.chance(reviewChance)){
      s.varChecks++;m.pendingVarShotIndex=m.shotEvents.lastIndex;m.pendingVarKeeperId=keeperId;m.varReviewStage=0;m.varReviewReason="";m.varReviewResult="";m.varWillOverturn=false
      setBallPhase(m,LivePhase.GOAL,home,id,"TOR · ${target.third} · ${type.label}")
