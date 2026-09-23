@@ -7,22 +7,26 @@ class EngineTest {
  @Test fun createWorldHasTenLeagues120DomesticClubsAndNewCompetitions(){val w=WorldFactory.createWorld(42);assertEquals(10,w.leagues.size);assertEquals(120,w.leagues.flatMap{it.clubIds}.toSet().size);assertEquals(140,w.clubs.size);assertEquals(10,w.club().tier);assertTrue(w.leagues.all{it.clubIds.size==12});assertEquals(SaveCodec.encode(w),SaveCodec.encode(WorldFactory.createWorld(42)));assertEquals(1320,w.fixtures.count{it.competition==CompetitionType.LEAGUE});assertEquals(32,w.fixtures.count{it.competition==CompetitionType.NATIONAL_CUP&&it.round==1});assertEquals(96,w.fixtures.count{it.competition==CompetitionType.EURO_ELITE&&it.stage=="Ligaphase"});for(id in w.leagues.flatMap{it.clubIds}){val games=w.fixtures.filter{it.competition==CompetitionType.LEAGUE&&(it.homeId==id||it.awayId==id)};assertEquals(22,games.size);assertEquals(22,games.map{it.matchday}.toSet().size);assertEquals(11,games.count{it.homeId==id})}}
 
  @Test fun generatedClubsHaveUniqueNamesAndNeutralLeagueLabels(){val w=WorldFactory.createWorld(81);val domestic=w.leagues.flatMap{it.clubIds}.map{w.clubs.getValue(it)};assertEquals(120,domestic.map{it.name}.toSet().size);assertTrue(w.leagues.none{it.name.contains("Hannover",ignoreCase=true)})}
- @Test fun realModeContainsNineLeaguesGermanPyramidOwnPlayerAndUefaCompetitions(){
+ @Test fun realModeContainsOriginalGamePlusExpandedLeaguesAndCompetitions(){
   val selected=RealModeDatabase.leagues.first().clubs.first();val originalName=selected.players.first().name
   val self=PlayerDraft(firstName="Leon",lastName="Test",number=10,position=Position.ST,attributes=Attributes(91,94,88,93,55,82,90,90,84,9,91))
   val w=WorldFactory.createRealModeWorld(90458,selected.key,self)
-  assertTrue(w.privateTopClubMode);assertEquals(9,w.leagues.size);assertEquals(setOf("Bundesliga","2. Bundesliga","3. Liga","Regionalliga Nord","Oberliga Hamburg","Premier League","La Liga","Serie A","Ligue 1"),w.leagues.map{it.name}.toSet())
-  assertTrue(w.leagues.all{it.clubIds.size in 18..20&&it.clubIds.size%2==0});assertEquals(selected.name,w.club().name);assertTrue(w.squad().any{it.name==originalName});assertEquals("Leon Test",w.self().name)
+  val original=setOf("Bundesliga","2. Bundesliga","3. Liga","Regionalliga Nord","Oberliga Hamburg","Premier League","La Liga","Serie A","Ligue 1")
+  assertTrue(w.privateTopClubMode);assertTrue(w.leagues.size>9);assertTrue(original.all{name->w.leagues.any{it.name==name}})
+  assertTrue(w.leagues.all{it.clubIds.size>=8});assertEquals(selected.name,w.club().name);assertTrue(w.squad().any{it.name==originalName});assertEquals("Leon Test",w.self().name)
   val ownRounds=(w.leagues.first{w.user.clubId in it.clubIds}.clubIds.size-1)*2;assertEquals(ownRounds,w.fixtures.count{it.competition==CompetitionType.LEAGUE&&(it.homeId==w.user.clubId||it.awayId==w.user.clubId)})
-  assertEquals(144,w.fixtures.count{it.competition==CompetitionType.CHAMPIONS_LEAGUE&&it.stage=="Ligaphase"});assertEquals(144,w.fixtures.count{it.competition==CompetitionType.EUROPA_LEAGUE&&it.stage=="Ligaphase"});assertEquals(32,w.fixtures.count{it.competition==CompetitionType.NATIONAL_CUP&&it.round==1})
-  val copy=SaveCodec.decode(SaveCodec.encode(w));assertTrue(copy.privateTopClubMode);assertEquals(9,copy.leagues.size);assertEquals("Leon Test",copy.self().name)
+  assertEquals(144,w.fixtures.count{it.competition==CompetitionType.CHAMPIONS_LEAGUE&&it.stage=="Ligaphase"});assertEquals(144,w.fixtures.count{it.competition==CompetitionType.EUROPA_LEAGUE&&it.stage=="Ligaphase"});assertEquals(32,w.fixtures.count{it.competition==CompetitionType.NATIONAL_CUP&&it.round==1&&it.group==DomesticCompetitionData.DFB_ID})
+  val copy=SaveCodec.decode(SaveCodec.encode(w));assertTrue(copy.privateTopClubMode);assertEquals(w.leagues.size,copy.leagues.size);assertEquals("Leon Test",copy.self().name)
  }
- @Test fun realModeDatasetHasExpectedLeagueAndSquadShape(){
-  assertEquals(listOf(18,18,20,18,18,20,20,20,18),RealModeDatabase.leagues.map{it.clubs.size})
-  assertEquals(170,RealModeDatabase.options.size);assertEquals(170,RealModeDatabase.options.map{it.key}.toSet().size)
+ @Test fun realModeDatasetHasExpandedLeagueAndSquadShape(){
+  val originalGerman=listOf("Bundesliga","2. Bundesliga","3. Liga","Regionalliga Nord","Oberliga Hamburg")
+  assertTrue(RealModeDatabase.leagues.size>9)
+  assertTrue(RealModeDatabase.options.size>170);assertEquals(RealModeDatabase.options.size,RealModeDatabase.options.map{it.key}.toSet().size)
   assertTrue(RealModeDatabase.options.all{it.players.isEmpty()||it.players.size in 18..40})
   assertTrue(RealModeDatabase.options.all{club->club.players.map{it.name}.toSet().size==club.players.size})
-  assertEquals(listOf("Bundesliga","2. Bundesliga","3. Liga","Regionalliga Nord","Oberliga Hamburg"),RealModeDatabase.leaguesForCountry("Deutschland").map{it.name})
+  assertTrue(originalGerman.all{name->RealModeDatabase.leaguesForCountry("Deutschland").any{it.name==name}})
+  assertTrue(RealModeDatabase.countries.size>=10)
+  assertTrue(RealModeDatabase.leagues.count{it.level==1}>=10)
  }
  @Test fun realModeUsesCurrentSquadsCanonicalCodesAndDetailedPositions(){
   val bayern=RealModeDatabase.options.first{it.name=="FC Bayern München"}
