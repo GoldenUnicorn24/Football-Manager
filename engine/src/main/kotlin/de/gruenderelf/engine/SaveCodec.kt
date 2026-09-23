@@ -1,5 +1,6 @@
 package de.gruenderelf.engine
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.*
 object SaveCodec {
  val json=Json{encodeDefaults=false;ignoreUnknownKeys=true;coerceInputValues=true}
@@ -11,14 +12,21 @@ object SaveCodec {
   return JsonObject(root).toString()
  }
  fun copy(w: World)=decode(encode(w))
+ private val versionRegex=Regex("\\\"saveVersion\\\"\\s*:\\s*(\\d+)")
+ fun versionOf(text:String):Int=versionRegex.find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()?:1
  fun decode(text: String): World {
   require(text.length<=128*1024*1024){"Spielstand ist zu groß (maximal 128 MB)."}
-  val root=json.parseToJsonElement(text).jsonObject.toMutableMap();val version=root["saveVersion"]?.jsonPrimitive?.intOrNull?:1;val legacyVersion=version<=3
+  val version=versionOf(text);val legacyVersion=version<=3
   require(version in 1..SAVE_VERSION){"Dieser Spielstand benötigt eine neuere Gründerelf-Version."}
-  if(version==1){root.putIfAbsent("live",JsonNull);root.putIfAbsent("relationships",JsonObject(emptyMap()));root["saveVersion"]=JsonPrimitive(2)}
-  if(version<=2)root["saveVersion"]=JsonPrimitive(3)
-  if(version<=3)root["saveVersion"]=JsonPrimitive(4)
-  val w=json.decodeFromJsonElement<World>(JsonObject(root))
+  // Aktuelle Saves direkt in World dekodieren. Der frühere Umweg über einen vollständigen
+  // JsonElement-Baum verdoppelte bei großen Real-Mode-Welten kurzzeitig den RAM-Verbrauch.
+  val w=if(version==SAVE_VERSION) json.decodeFromString<World>(text) else {
+   val root=json.parseToJsonElement(text).jsonObject.toMutableMap()
+   if(version==1){root.putIfAbsent("live",JsonNull);root.putIfAbsent("relationships",JsonObject(emptyMap()));root["saveVersion"]=JsonPrimitive(2)}
+   if(version<=2)root["saveVersion"]=JsonPrimitive(3)
+   if(version<=3)root["saveVersion"]=JsonPrimitive(4)
+   json.decodeFromJsonElement<World>(JsonObject(root))
+  }
   // IDs zuerst stabilisieren, damit alte Spielstände gefahrlos um neue Gastvereine/Wettbewerbe ergänzt werden können.
   w.nextIds.player=maxOf(w.nextIds.player,(w.players.keys.maxOrNull()?:0)+1);w.nextIds.fixture=maxOf(w.nextIds.fixture,(w.fixtures.maxOfOrNull{it.id}?:0)+1)
   val realMode=w.privateTopClubMode&&w.leagues.size>=5
