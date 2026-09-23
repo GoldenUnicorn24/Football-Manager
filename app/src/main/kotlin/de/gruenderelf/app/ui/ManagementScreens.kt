@@ -9,7 +9,7 @@ import androidx.compose.ui.unit.dp
 import de.gruenderelf.app.GameViewModel
 import de.gruenderelf.engine.*
 
-@Composable fun MoreScreen(onNavigate: (String)->Unit,onMenu: ()->Unit){Page("Hinter der Bande","VEREIN & VERANTWORTUNG"){listOf("verein" to "Verein, Finanzen & Partner","training" to "Training & Co-Trainer","transfers" to "Transfers & Jugend","trophaeen" to "Trophäenschrank","karriere" to "Deine Karriere","editor" to "Editor","v0518" to "Manager-Zentrale","einstellungen" to "Einstellungen","speichern" to "Speicherstände").forEach{(route,label)->Action(label,secondary=true){onNavigate(route)}};Section("Gründerelf · 0.5.21"){Text("Offline. Ohne Werbung. Ohne Käufe.",color=Grass);Text("Kompaktere Spielstände, optionaler Fantasy-Cup beim Karrierestart sowie erweiterte Datenbankprüfungen.",color=Muted)};Action("Speichern & zum Startbildschirm",secondary=true,onClick=onMenu)}}
+@Composable fun MoreScreen(onNavigate: (String)->Unit,onMenu: ()->Unit){Page("Hinter der Bande","VEREIN & VERANTWORTUNG"){listOf("verein" to "Verein, Finanzen & Partner","training" to "Training & Co-Trainer","transfers" to "Transfers & Jugend","trophaeen" to "Trophäenschrank","karriere" to "Deine Karriere","hilfe" to "Hilfe & Tutorial","editor" to "Editor","einstellungen" to "Einstellungen","speichern" to "Speicherstände").forEach{(route,label)->Action(label,secondary=true){onNavigate(route)}};Section("Gründerelf · 0.5.22"){Text("Offline. Ohne Werbung. Ohne Käufe.",color=Grass);Text("Das vollständige v0.5.18-Spielsystem bleibt erhalten. Ergänzt wurden weitere europäische Ligen und Pokale, moderne UEFA-Qualifikation, Club World Cup, Krone der Kontinente sowie kompaktere und schnellere Spielstände.",color=Muted)};Action("Speichern & zum Startbildschirm",secondary=true,onClick=onMenu)}}
 
 @Composable fun TrainingScreen(w: World,vm: GameViewModel){
  val effective=TrainingEngine.effectiveDays(w);val amateur=!w.privateTopClubMode&&w.club().tier>=7;val assistant=w.assistantCoach
@@ -365,3 +365,13 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
   }
  }
 }
+
+
+@Composable fun HelpScreen(w:World,vm:GameViewModel){Page("Hilfe & Tutorial","MANAGER-HANDBUCH"){
+ Section("Tutorial"){Text(if(w.user.tutorialEnabled&&!w.user.tutorialCompleted)"Das geführte Tutorial ist in dieser Karriere aktiv." else "Das Tutorial ist aktuell beendet oder deaktiviert.",color=Muted);Action("Tutorial von vorn starten",secondary=true){vm.action("Tutorial neu gestartet."){it.user.tutorialEnabled=true;it.user.tutorialCompleted=false;it.user.tutorialStep=0}};if(w.user.tutorialEnabled&&!w.user.tutorialCompleted)Action("Tutorial beenden",secondary=true){vm.action{it.user.tutorialEnabled=false;it.user.tutorialCompleted=true}}}
+ Section("Erste Schritte"){Text("Start: Aufgaben und nächstes Spiel. Kader: Formation, Rollen und Verträge. Training: Belastung und Entwicklung. Transfers: Scouting, Jugend und Verhandlungen.",color=Muted)}
+ Section("Live-Spiel"){Text("Live zeigt Ball und Ticker. Taktik bündelt Formation, Regler, Sofortanweisungen und Wechsel. Statistik zeigt Matchwerte; Analyse xG, Schusskarte, Passnetz und Wirkung deiner Taktikänderungen.",color=Muted)}
+ Section("xG & Analyse"){Text("xG beschreibt die Qualität von Torchancen, nicht die Zahl der Tore, die zwingend fallen müsste. Die Taktik-Wirkungsanalyse vergleicht echte Matchdaten vor und nach Änderungen.",color=Muted)}
+ Section("Spielerkarriere"){Text("Dein Karrierefokus gibt deinem eigenen Spieler einen kleinen Entwicklungsimpuls. Saisonziele, Vermächtnis, Meilensteine und Vereinsrekorde machen lange Karrieren nachvollziehbarer.",color=Muted)}
+ Section("v0.5.22 Update"){Text("Neue Ligen und nationale Pokale erweitern die alte Karriere. UEFA-Wettbewerbe qualifizieren sich aus den nationalen Wettbewerben; Club World Cup und die optionale Krone der Kontinente ergänzen den Spielkalender.",color=Grass)}
+}}
