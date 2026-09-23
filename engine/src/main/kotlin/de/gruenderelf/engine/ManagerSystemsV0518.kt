@@ -56,7 +56,7 @@ object CompetitionRulesEngine {
  fun rules(w: World, m: LiveMatch): CompetitionRuleSet {
   val fixture = w.fixtures.firstOrNull { it.id == m.fixtureId } ?: return CompetitionRuleSet()
   val league = w.leagues.firstOrNull { fixture.homeId in it.clubIds || fixture.awayId in it.clubIds }
-  val level = league?.tier ?: fixture.tier.coerceAtLeast(1)
+  val level = league?.let{if(w.privateTopClubMode)RealModeDatabase.levelForTier(it.tier) else it.tier} ?: fixture.tier.coerceAtLeast(1)
   return when (fixture.competition) {
    CompetitionType.LEAGUE -> CompetitionRuleSet(extraTimeAdditionalSubstitution = false, varEnabled = !(w.privateTopClubMode && level > 2))
    else -> CompetitionRuleSet(extraTimeAdditionalSubstitution = true, varEnabled = true)
@@ -138,7 +138,7 @@ object ScoutingTransferSystem {
  private fun regionMultiplier(region: ScoutRegion) = when (region) { ScoutRegion.DOMESTIC -> 1.0; ScoutRegion.DACH -> 1.15; ScoutRegion.EUROPE -> 1.35; ScoutRegion.SOUTH_AMERICA -> 1.55; ScoutRegion.WORLD -> 1.8 }
  fun windowOpen(w: World) = w.calendar.matchday <= 7 || w.calendar.matchday in 15..17
  fun cost(w: World, player: Player, region: ScoutRegion): Long {
-  val base = player.ca * 22L + 900L + w.club().tier.coerceAtMost(10) * 70L
+  val level=if(w.privateTopClubMode)RealModeDatabase.levelForTier(w.club().tier) else w.club().tier.coerceAtMost(10);val base = player.ca * 22L + 900L + level * 70L
   return (base * regionMultiplier(region)).roundToInt().toLong().coerceAtLeast(250L)
  }
  fun report(w: World, playerId: Int): ScoutReport? {
