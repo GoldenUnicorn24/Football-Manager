@@ -115,8 +115,8 @@ object CompetitionEngine {
    .flatMap{league->league.clubIds.sortedWith(compareByDescending<Int>{w.clubs.getValue(it).reputation}.thenBy{it})}
    .distinct()
 
- private fun hasCup(w: World,cupId: String,round: Int=1)=w.fixtures.any{
-  it.season==w.calendar.season&&it.competition==CompetitionType.NATIONAL_CUP&&it.round==round&&cupId(w,it)==cupId
+ private fun hasCup(w: World,cupKey: String,round: Int=1)=w.fixtures.any{
+  it.season==w.calendar.season&&it.competition==CompetitionType.NATIONAL_CUP&&it.round==round&&cupId(w,it)==cupKey
  }
 
  private fun scheduleRealDomesticCups(w: World){
