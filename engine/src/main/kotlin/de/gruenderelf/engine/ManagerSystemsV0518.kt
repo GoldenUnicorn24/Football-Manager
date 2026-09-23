@@ -6,9 +6,15 @@ import kotlin.math.roundToInt
 
 /** Recovered v0.5.18 systems reconstructed from the shipped APK. */
 object CompetitionPrizeSystem {
- fun winnerId(w: World, competition: CompetitionType): Int = w.fixtures
-  .filter { it.season == w.calendar.season && it.competition == competition && it.played && it.winnerId != 0 }
+ fun winnerId(w: World, competition: CompetitionType, group: String? = null): Int = w.fixtures
+  .filter { it.season == w.calendar.season && it.competition == competition && it.played && it.winnerId != 0 &&
+   (group == null || it.group == group || (group == "DFB_POKAL" && it.group.isBlank())) }
   .maxWithOrNull(compareBy<Fixture> { it.round }.thenBy { it.matchday }.thenBy { it.id })?.winnerId ?: 0
+
+ fun nationalCupWinners(w: World): Map<String,Int> {
+  val ids=if(w.privateTopClubMode)EuropeanLeagueData.domesticCups.map{it.id} else listOf("")
+  return ids.mapNotNull{id->winnerId(w,CompetitionType.NATIONAL_CUP,id).takeIf{it!=0}?.let{id to it}}.toMap()
+ }
 
  fun award(w: World, key: String, clubId: Int, amount: Long): Boolean {
   val club = w.clubs[clubId] ?: return false
@@ -37,8 +43,10 @@ object CompetitionPrizeSystem {
 
  fun awardSeasonPrizes(w: World, leagueWinnerId: Int, tier: Int) {
   award(w, "${w.calendar.season}:league:$tier", leagueWinnerId, leagueChampionPrize(w, tier))
-  val cup = winnerId(w, CompetitionType.NATIONAL_CUP)
-  if (cup != 0) award(w, "${w.calendar.season}:cup", cup, if (w.privateTopClubMode) 6_000_000L else 500_000L)
+  for ((cupId,winner) in nationalCupWinners(w)) {
+   val key=if(cupId.isBlank())"${w.calendar.season}:cup" else "${w.calendar.season}:cup:$cupId"
+   award(w,key,winner,if(w.privateTopClubMode)6_000_000L else 500_000L)
+  }
   val cl = winnerId(w, CompetitionType.CHAMPIONS_LEAGUE)
   if (cl != 0) award(w, "${w.calendar.season}:cl", cl, 25_000_000L)
   val el = winnerId(w, CompetitionType.EUROPA_LEAGUE)
