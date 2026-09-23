@@ -259,50 +259,38 @@ object YouthCompetitionSystem {
 }
 
 object OutboundTransferSystem {
- fun weekly(w:World,rng:SeededRandom){
-  if(w.calendar.absoluteWeek%2!=0)return
-  val existing=w.negotiations.values.filter{isOutbound(w,it)&&it.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED)}.map{it.playerId}.toSet()
-  val candidates=w.squad().filter{it.id!=w.user.playerId&&!it.retired&&!it.youth&&it.id !in existing}.sortedByDescending{(if(it.wantsMove)20 else 0)+(100-it.morale)+it.ca/3}.take(12)
-  if(candidates.isEmpty()||!rng.chance(.65))return
-  val p=rng.pick(candidates);val buyers=w.clubs.values.filter{it.id!=w.user.clubId&&it.id!=p.clubId&&it.budget>TransferEngine.marketValue(w,p)/2}.filter{TransferInterestSystem.score(w,p,it.id)>=35}.sortedByDescending{it.reputation}.take(15);if(buyers.isEmpty())return
-  val buyer=rng.pick(buyers);val type=if(w.calendar.season-p.birthYear<=24&&rng.chance(.28))DealType.LOAN_OPTION else DealType.BUY;val value=TransferEngine.marketValue(w,p);val fee=if(type==DealType.BUY)(value*(.76+rng.nextDouble()*.30)).toLong() else (value*(.04+rng.nextDouble()*.05)).toLong();val role=if(p.ca>=70)SquadRole.STARTER else SquadRole.ROTATION
-  val o=TransferOffer(id=w.nextIds.negotiation++,buyerClubId=buyer.id,sellerClubId=w.user.clubId,playerId=p.id,type=type,role=role,fee=fee,wage=maxOf(p.wage,(p.wage*1.08).roundToInt()),buyOption=if(type==DealType.LOAN_OPTION)(value*1.05).toLong() else 0L,status=NegotiationStatus.COUNTER,stage=TransferStage.CLUB,message="${buyer.name} legt ein Angebot für ${p.name} vor.")
-  w.negotiations[o.id]=o;w.news("Transferangebot für ${p.name}","${buyer.name}: ${type.label} · ${fee} €${if(o.buyOption>0)" · Option ${o.buyOption} €" else ""}.","normal")
- }
  fun isOutbound(w:World,o:TransferOffer)=o.sellerClubId==w.user.clubId&&o.buyerClubId!=w.user.clubId
+ fun activeOffers(w:World)=w.negotiations.values
+  .filter{isOutbound(w,it)&&it.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.WITHDRAWN,NegotiationStatus.COMPLETED)}
+  .sortedWith(compareBy<TransferOffer>{it.playerId}.thenByDescending{it.fee}.thenBy{it.id})
+
  fun maxBuyOffer(w:World,buyer:Club,p:Player):Long{
   val value=TransferEngine.marketValue(w,p);val need=positionNeed(w,buyer,p);val age=w.calendar.season-p.birthYear
-  val upside=(p.hidden.potential-p.ca).coerceAtLeast(0)
-  val repGap=(buyer.reputation-w.club().reputation).coerceIn(-20,25)
+  val upside=(p.hidden.potential-p.ca).coerceAtLeast(0);val repGap=(buyer.reputation-w.club().reputation).coerceIn(-20,25)
   val factor=(.78+need*.075+(if(age<=23)upside.coerceAtMost(20)*.008 else 0.0)+repGap*.003).coerceIn(.72,1.30)
   return minOf((buyer.budget*.78).toLong().coerceAtLeast(0L),(value*factor).toLong()).coerceAtLeast(1_000L)
  }
  private fun positionNeed(w:World,buyer:Club,p:Player):Int{
-  val same=w.squad(buyer.id).filter{!it.youth&&!it.retired&&it.position==p.position}
-  val strongest=same.maxOfOrNull{it.ca}?:0
+  val same=w.squad(buyer.id).filter{!it.youth&&!it.retired&&it.position==p.position};val strongest=same.maxOfOrNull{it.ca}?:0
   return when{same.isEmpty()||strongest+5<=p.ca->4;strongest<p.ca->3;same.size<=2->2;else->1}
  }
  fun loanFeeLimit(w:World,buyer:Club,p:Player):Long{
-  val value=TransferEngine.marketValue(w,p)
-  val need=positionNeed(w,buyer,p)
+  val value=TransferEngine.marketValue(w,p);val need=positionNeed(w,buyer,p)
   return minOf((buyer.budget*.18).toLong().coerceAtLeast(0L),(value*(.045+need*.018)).toLong()).coerceAtLeast(500L)
  }
  fun buyOptionLimit(w:World,buyer:Club,p:Player):Long{
-  val value=TransferEngine.marketValue(w,p)
-  val need=positionNeed(w,buyer,p)
+  val value=TransferEngine.marketValue(w,p);val need=positionNeed(w,buyer,p)
   return minOf((buyer.budget*.80).toLong().coerceAtLeast(0L),(value*(.88+need*.055)).toLong()).coerceAtLeast(1_000L)
  }
- /** User-triggered multi-club offer round restored from the shipped v0.5.18 APK. */
- fun solicitOffers(w:World,playerId:Int,type:DealType):List<TransferOffer>{
+
+ /** Exact user-triggered multi-club offer round from shipped v0.5.18. */
+ fun requestOffers(w:World,playerId:Int,type:DealType):List<TransferOffer>{
   require(w.live==null){"Spieler erst außerhalb eines laufenden Spiels anbieten."}
   require(type in listOf(DealType.BUY,DealType.LOAN,DealType.LOAN_OPTION)){"Nur Verkauf oder Leihe können angeboten werden."}
   require(ScoutingTransferSystem.windowOpen(w)){"Das Transferfenster ist geschlossen."}
   val p=w.players.getValue(playerId)
   require(!p.retired&&p.clubId==w.user.clubId&&p.loanParentClubId==0&&p.id!=w.user.playerId){"Dieser Spieler kann aktuell nicht angeboten werden."}
-  w.negotiations.values.filter{it.playerId==p.id&&isOutbound(w,it)&&it.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED)}.forEach{
-   it.status=NegotiationStatus.REJECTED
-   it.message="Durch eine neue Angebotsrunde ersetzt."
-  }
+  activeOffers(w).filter{it.playerId==p.id}.forEach{it.status=NegotiationStatus.REJECTED;it.message="Durch eine neue Angebotsrunde ersetzt."}
   val value=TransferEngine.marketValue(w,p)
   val buyers=w.clubs.values.asSequence()
    .filter{it.id!=w.user.clubId&&it.id!=p.clubId}
@@ -314,12 +302,7 @@ object OutboundTransferSystem {
   val created=buyers.mapIndexed{index,(buyer,interest)->
    val senior=w.squad(buyer.id).filter{!it.youth&&!it.retired}
    val average=senior.map{it.ca}.average().takeUnless{it.isNaN()}?:p.ca.toDouble()
-   val role=when{
-    p.ca>=average+8->SquadRole.STAR
-    p.ca>=average+3->SquadRole.STARTER
-    p.ca>=average-4->SquadRole.ROTATION
-    else->SquadRole.PROSPECT
-   }
+   val role=when{p.ca>=average+8->SquadRole.STAR;p.ca>=average+3->SquadRole.STARTER;p.ca>=average-4->SquadRole.ROTATION;else->SquadRole.PROSPECT}
    val cap=if(type==DealType.BUY)maxBuyOffer(w,buyer,p) else loanFeeLimit(w,buyer,p)
    val variance=.78+kotlin.math.abs((index*7+w.calendar.absoluteWeek*13+buyer.id*17+p.id*31)%15)/100.0
    val fee=(cap*variance).toLong().coerceAtLeast(500L)
@@ -327,11 +310,9 @@ object OutboundTransferSystem {
    val option=if(type==DealType.LOAN_OPTION)(buyOptionLimit(w,buyer,p)*(.82+index*.035)).toLong() else 0L
    val promise=when(role){SquadRole.STAR->95;SquadRole.STARTER->82;SquadRole.ROTATION->65;SquadRole.PROSPECT->58;SquadRole.BACKUP->42}
    TransferOffer(
-    id=w.nextIds.negotiation++,buyerClubId=buyer.id,sellerClubId=w.user.clubId,playerId=p.id,
-    type=type,role=role,fee=fee,wage=wage,signingBonus=wage.toLong()*4,
-    sellOnPercent=if(type==DealType.BUY&&index%2==0)5 else 0,
-    buyOption=option,playingTimePromise=promise,status=NegotiationStatus.COUNTER,
-    stage=TransferStage.CLUB,loanWeeksRequested=if(type==DealType.BUY)24 else listOf(24,40,52)[index%3],
+    id=w.nextIds.negotiation++,buyerClubId=buyer.id,sellerClubId=w.user.clubId,playerId=p.id,type=type,role=role,fee=fee,wage=wage,
+    signingBonus=wage.toLong()*4,sellOnPercent=if(type==DealType.BUY&&index%2==0)5 else 0,buyOption=option,playingTimePromise=promise,
+    status=NegotiationStatus.COUNTER,stage=TransferStage.CLUB,loanWeeksRequested=if(type==DealType.BUY)24 else listOf(24,40,52)[index%3],
     recallAllowed=type!=DealType.BUY&&index%2==0,
     message="${buyer.name} bietet ${if(type==DealType.BUY)"einen Kauf" else type.label.lowercase()} an · Interesse $interest/100. Du kannst annehmen, ablehnen oder nachverhandeln."
    ).also{w.negotiations[it.id]=it}
@@ -339,8 +320,12 @@ object OutboundTransferSystem {
   w.news("Angebote für ${p.name}","${created.size} Vereine haben auf die ${if(type==DealType.BUY)"Verkaufsliste" else "Leihanfrage"} reagiert.","normal")
   return created
  }
+ fun solicitOffers(w:World,playerId:Int,type:DealType)=requestOffers(w,playerId,type)
 
- fun reject(w:World,offerId:Int){val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status!=NegotiationStatus.COMPLETED);o.status=NegotiationStatus.REJECTED;o.message="Angebot von dir abgelehnt."}
+ fun reject(w:World,offerId:Int){
+  val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status!=NegotiationStatus.COMPLETED)
+  o.status=NegotiationStatus.REJECTED;o.message="Angebot von dir abgelehnt."
+ }
  fun accept(w:World,offerId:Int){
   require(w.live==null){"Transfer erst außerhalb eines laufenden Spiels bestätigen."}
   val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status in listOf(NegotiationStatus.COUNTER,NegotiationStatus.AGREED)){"Dieses Angebot kann nicht angenommen werden."}
@@ -348,16 +333,40 @@ object OutboundTransferSystem {
   if(TransferInterestSystem.score(w,p,buyer.id)<28&&!p.wantsMove){o.status=NegotiationStatus.REJECTED;o.message="${p.name} lehnt den Wechsel zu ${buyer.name} ab.";return}
   if(buyer.budget<o.fee+o.signingBonus){o.status=NegotiationStatus.REJECTED;o.message="${buyer.name} kann das Angebot finanziell nicht mehr hinterlegen.";return}
   o.status=NegotiationStatus.AGREED;o.stage=TransferStage.REGISTRATION;o.medicalPassed=true;o.medicalNote="Medizincheck vom aufnehmenden Verein bestanden";o.registrationReady=true
+  val type=o.type;val fee=o.fee;val option=o.buyOption;val playerName=p.name;val buyerName=buyer.name
   TransferEngine.complete(w,o.id)
-  w.negotiations.values.filter{it.id!=o.id&&it.playerId==p.id&&isOutbound(w,it)&&it.status !in listOf(NegotiationStatus.COMPLETED,NegotiationStatus.REJECTED)}.forEach{it.status=NegotiationStatus.REJECTED;it.message="Spieler hat sich für ein anderes Angebot entschieden."}
+  activeOffers(w).filter{it.id!=o.id&&it.playerId==p.id}.forEach{it.status=NegotiationStatus.REJECTED;it.message="Spieler hat sich für ein anderes Angebot entschieden."}
+  w.news(if(type==DealType.BUY)"Spieler verkauft" else "Leihe vereinbart","$playerName → $buyerName · ${if(fee>0)fee.toString()+" €" else "ohne Gebühr"}${if(type==DealType.LOAN_OPTION&&option>0)" · Kaufoption $option €" else ""}","good")
  }
  fun negotiate(w:World,offerId:Int,kind:String){
-  val o=w.negotiations.getValue(offerId);require(isOutbound(w,o)&&o.status !in listOf(NegotiationStatus.REJECTED,NegotiationStatus.COMPLETED));val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId);o.round++
-  when(kind){"fee"->o.fee=(o.fee*1.08).toLong();"sellon"->o.sellOnPercent=(o.sellOnPercent+5).coerceAtMost(25);"option"->o.buyOption=(o.buyOption*1.08).toLong()}
-  val cap=maxBuyOffer(w,buyer,p);if(o.round>=4&&o.fee>cap*1.08){o.status=NegotiationStatus.REJECTED;o.message="Der Käufer steigt aus."}else if(o.fee<=cap){o.status=NegotiationStatus.AGREED;o.message="Der Käufer akzeptiert die Konditionen."}else{o.status=NegotiationStatus.COUNTER;o.fee=((o.fee+cap)/2);o.message="Der Käufer legt ein Gegenangebot vor."}
+  val o=w.negotiations.getValue(offerId)
+  require(isOutbound(w,o)&&o.status==NegotiationStatus.COUNTER){"Dieses Angebot kann nicht nachverhandelt werden."}
+  val p=w.players.getValue(o.playerId);val buyer=w.clubs.getValue(o.buyerClubId);val value=TransferEngine.marketValue(w,p)
+  when(kind){
+   "fee"->o.fee=(o.fee*1.08+maxOf(500L,value/80L)).toLong()
+   "sellon"->o.sellOnPercent=(o.sellOnPercent+5).coerceAtMost(25)
+   "option"->{require(o.type==DealType.LOAN_OPTION){"Nur bei einer Leihe mit Option kann die Kaufoption verändert werden."};o.buyOption=(o.buyOption*1.08+maxOf(1_000L,value/60L)).toLong()}
+   else->error("Unbekannter Verhandlungspunkt.")
+  }
+  o.round++
+  val cap=if(o.type==DealType.BUY)maxBuyOffer(w,buyer,p) else loanFeeLimit(w,buyer,p)
+  val optionCap=if(o.type==DealType.LOAN_OPTION)buyOptionLimit(w,buyer,p) else Long.MAX_VALUE
+  val effective=if(o.type==DealType.BUY)o.fee+value*o.sellOnPercent/100/4 else o.fee
+  val maxPackage=if(o.type==DealType.BUY)cap+value/16 else cap
+  val optionFits=o.type!=DealType.LOAN_OPTION||o.buyOption<=optionCap
+  val optionSoft=o.type!=DealType.LOAN_OPTION||o.buyOption<=(optionCap*1.08).toLong()
+  when{
+   buyer.budget<o.fee+o.signingBonus->{o.status=NegotiationStatus.REJECTED;o.message="${buyer.name} zieht das Angebot zurück: Das Paket passt nicht mehr ins Budget."}
+   o.round>=4&&(effective>maxPackage||!optionFits)->{o.status=NegotiationStatus.REJECTED;o.message="${buyer.name} bricht die Verhandlung nach mehreren Runden ab."}
+   effective<=maxPackage&&optionFits->{o.status=NegotiationStatus.AGREED;o.message="${buyer.name} akzeptiert dein Gegenangebot. Du kannst den Deal jetzt bestätigen."}
+   effective<=(maxPackage*1.08).toLong()&&optionSoft->{
+    o.status=NegotiationStatus.COUNTER;o.fee=minOf(o.fee,cap);if(o.type==DealType.LOAN_OPTION)o.buyOption=minOf(o.buyOption,optionCap)
+    o.message="${buyer.name} bleibt am Tisch und legt ein letztes Gegenangebot vor."
+   }
+   else->{o.status=NegotiationStatus.REJECTED;o.message="${buyer.name} lehnt deine Forderung ab und steigt aus."}
+  }
  }
 }
-
 object TransferV0518System {
  fun reservedBudget(w:World,buyerClubId:Int,exceptOfferId:Int=0):Long = w.negotiations.values.filter{it.id!=exceptOfferId&&it.buyerClubId==buyerClubId&&it.registrationReady&&it.status==NegotiationStatus.AGREED}.sumOf{it.fee+it.signingBonus}
  fun availableBudget(w:World,buyerClubId:Int,exceptOfferId:Int=0):Long=(w.clubs[buyerClubId]?.budget?:0L)-reservedBudget(w,buyerClubId,exceptOfferId)
@@ -377,5 +386,5 @@ object TransferV0518System {
   o.message=when{!budgetOk->"Registrierung blockiert: reserviertes Budget reicht nicht aus.";!rosterOk->"Registrierung blockiert: Profikader ist voll.";else->"Medizincheck bestanden. Registrierung ist vorbereitet."}
   return o.registrationReady
  }
- fun withdraw(w:World,offerId:Int){val o=w.negotiations.getValue(offerId);require(o.buyerClubId==w.user.clubId){"Nur eigene Verhandlungen können zurückgezogen werden."};require(o.status!=NegotiationStatus.COMPLETED){"Abgeschlossene Transfers können nicht zurückgezogen werden."};o.registrationReady=false;o.status=NegotiationStatus.REJECTED;o.message="Verhandlung zurückgezogen; reserviertes Budget ist wieder frei."}
+ fun withdraw(w:World,offerId:Int){val o=w.negotiations.getValue(offerId);require(o.buyerClubId==w.user.clubId){"Nur eigene Verhandlungen können zurückgezogen werden."};require(o.status !in listOf(NegotiationStatus.COMPLETED,NegotiationStatus.WITHDRAWN)){"Abgeschlossene oder bereits zurückgezogene Transfers können nicht zurückgezogen werden."};o.registrationReady=false;o.status=NegotiationStatus.WITHDRAWN;o.message="Verhandlung zurückgezogen; reserviertes Budget ist wieder frei."}
 }
