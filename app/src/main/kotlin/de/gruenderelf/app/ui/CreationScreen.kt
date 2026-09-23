@@ -251,7 +251,9 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
    Action("Individuellen Verein erstellen",!busy,secondary=true){mode="custom"}
   }
   Section("Enthaltene Ligen"){
-   Text("${RealModeDatabase.countries.size} Länder mit ${RealModeDatabase.leagues.size} spielbaren Ligen. Topligen mit hinterlegten Realkadern; bei noch nicht vollständig gepflegten Ligen werden fehlende Kader klar als simuliert gekennzeichnet.",color=Muted)
+   val realRosterClubs=RealModeDatabase.options.count{it.players.isNotEmpty()};val simulatedRosterClubs=RealModeDatabase.options.size-realRosterClubs
+   Text("${RealModeDatabase.countries.size} Länder mit ${RealModeDatabase.leagues.size} spielbaren Ligen.",color=Muted)
+   Text("$realRosterClubs Vereine mit hinterlegtem Realkader · $simulatedRosterClubs Vereine mit simuliertem Kader.",color=if(simulatedRosterClubs==0)Grass else Muted)
   }
   Action("Zurück zum Start",!busy,secondary=true){onBack()}
  }
