@@ -332,12 +332,14 @@ object TransferV0518System {
    o.medicalPassed=true;o.medicalNote="Medizincheck bestanden · Risiko ${o.medicalRisk}/100";o.stage=TransferStage.REGISTRATION
   }
   if(o.stage!=TransferStage.REGISTRATION)return false
-  val rosterOk=youthSlotValid(w,o,p)||w.squad(o.buyerClubId).count{!it.youth&&!it.retired}<32
+  val targetValid=o.targetYouthSquad==null||youthSlotValid(w,o,p)
+  val rosterOk=targetValid&&(o.targetYouthSquad!=null||w.squad(o.buyerClubId).count{!it.youth&&!it.retired}<32)
   val budgetOk=availableBudget(w,o.buyerClubId,o.id)>=o.fee+o.signingBonus
   o.registrationReady=rosterOk&&budgetOk
   o.status=if(o.registrationReady)NegotiationStatus.AGREED else NegotiationStatus.COUNTER
   o.message=o.medicalNote+when{
    o.registrationReady->". Registrierung freigegeben – Budget und Kaderplatz sind reserviert."
+   !targetValid->". Registrierung wartet: Der gewählte U19/U23-Zielkader passt nicht mehr zum Alter des Spielers. Wähle einen gültigen Zielkader."
    !budgetOk->". Registrierung wartet: frei verfügbares Budget reicht aktuell nicht. Der ausgehandelte Deal bleibt bestehen und kann erneut geprüft werden."
    else->". Registrierung wartet: Der Profikader hat bereits 32 Spieler. U19 und U23 zählen nicht zu dieser Grenze. Der Deal bleibt bestehen und kann nach einem freien Profiplatz erneut geprüft werden."
   }
