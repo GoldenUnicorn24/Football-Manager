@@ -169,7 +169,8 @@ object CompetitionEngine {
  }
 
  private fun realEuropeanQualificationOrder(w: World): List<Int>{
-  // Russische Klubs bleiben 2026/27 fuer UEFA-Wettbewerbe suspendiert; die nationale Liga/Pokalwelt laeuft normal.\n  val top=w.leagues.filter{RealModeDatabase.levelForTier(it.tier)==1&&RealModeDatabase.countryForLeague(it.name)!="Russland"}.sortedBy{it.tier}
+  // Russische Klubs bleiben 2026/27 fuer UEFA-Wettbewerbe suspendiert; die nationale Liga/Pokalwelt laeuft normal.
+  val top=w.leagues.filter{RealModeDatabase.levelForTier(it.tier)==1&&RealModeDatabase.countryForLeague(it.name)!="Russland"}.sortedBy{it.tier}
   require(top.size>=5){"Europapokal benötigt die fünf Topligen."}
   val rotation=(w.calendar.season-top.first().tier).mod(top.size)
   val orderedLeagues=(top.drop(rotation)+top.take(rotation)).map{league->league.clubIds.sortedWith(compareByDescending<Int>{w.clubs.getValue(it).reputation}.thenBy{it})}
