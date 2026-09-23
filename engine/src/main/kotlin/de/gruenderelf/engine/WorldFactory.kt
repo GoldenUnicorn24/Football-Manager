@@ -205,8 +205,8 @@ object WorldFactory {
   val result=w.copy(user=User(selectedId,me.id,Difficulty.SANDBOX),privateTopClubMode=true)
   makeSchedule(result)
   result.news("Verein übernommen","Du übernimmst ${userClub.name} in der ${leagueName(result,userClub.tier)}. Dein eigener Spieler wurde zusätzlich in den Kader aufgenommen.","good")
-  result.news("Deutscher Ligabaum","Bundesliga, 2. Bundesliga, 3. Liga, Regionalliga Nord und Oberliga Hamburg sind als 2026/27-Ligen enthalten.","normal")
-  result.news("Datenhinweis","Topligen nutzen den vorhandenen 2026/27-Kaderdatenstand. Unterhalb der Bundesliga werden reale Vereinsnamen mit ligaabhängig generierten Spielern verwendet.","normal")
+  result.news("Europäische Ligawelt","Der deutsche Ligabaum bleibt vollständig enthalten. Dazu kommen weitere reale Ligen aus England, Spanien, Italien, Frankreich, Kroatien, Russland, den Niederlanden, Belgien, Österreich, Polen, Schweden, Portugal, der Türkei, Schweiz, Schottland, Griechenland, Tschechien, Dänemark, Serbien, der Ukraine und Norwegen.","normal")
+  result.news("Datenhinweis","Vorhandene Topligen nutzen den 2026/27-Kaderdatenstand. Neu ergänzte Ligen verwenden reale Vereine; wo noch kein vollständiger Kader hinterlegt ist, werden Spieler passend zu Land und Liganiveau erzeugt.","normal")
   initializeManagerSystems(result)
   return result
  }
