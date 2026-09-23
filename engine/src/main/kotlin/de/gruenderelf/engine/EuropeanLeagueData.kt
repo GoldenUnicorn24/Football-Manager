@@ -148,6 +148,76 @@ object EuropeanLeagueData {
         "IK Sirius" to "SIR","IF Elfsborg" to "ELF","Vasteras SK" to "VSK","Degerfors IF" to "DEG"
     )
 
+
+    private val portugal=listOf(
+        "FC Porto" to "FCP","SL Benfica" to "SLB","Sporting CP" to "SCP","Santa Clara" to "SAN",
+        "FC Arouca" to "ARO","SC Braga" to "BRA","Academico de Viseu" to "AVI","Estrela da Amadora" to "EST",
+        "Gil Vicente" to "GIL","FC Alverca" to "ALV","Maritimo" to "MAR","Moreirense" to "MOR",
+        "FC Famalicao" to "FAM","Vitoria SC" to "VSC","Nacional" to "NAC","Rio Ave" to "RIO",
+        "Casa Pia" to "CAS","Estoril Praia" to "ESTO"
+    )
+
+    private val turkey=listOf(
+        "Amed SK" to "AMED","Galatasaray" to "GS","Besiktas" to "BJK","Kocaelispor" to "KOC",
+        "Alanyaspor" to "ALA","Fenerbahce" to "FB","Trabzonspor" to "TS","Kasimpasa" to "KAS",
+        "Caykur Rizespor" to "RIZ","Gaziantep FK" to "GFK","Corum FK" to "COR","Istanbul Basaksehir" to "IBFK",
+        "Genclerbirligi" to "GEN","Erzurumspor FK" to "ERZ","Konyaspor" to "KON","Samsunspor" to "SAM",
+        "Goztepe" to "GOZ","Eyupspor" to "EYU"
+    )
+
+    private val switzerland=listOf(
+        "FC Lugano" to "LUG","FC Sion" to "SIO","BSC Young Boys" to "YB","FC Basel" to "BAS",
+        "FC St. Gallen" to "STG","FC Luzern" to "LUZ","FC Zurich" to "FCZ","Servette FC" to "SER",
+        "FC Thun" to "THU","Grasshopper Club Zurich" to "GCZ","FC Vaduz" to "VAD","Lausanne-Sport" to "LS"
+    )
+
+    private val scotland=listOf(
+        "Celtic" to "CEL","Rangers" to "RAN","Heart of Midlothian" to "HEA","Dundee FC" to "DUN",
+        "St. Mirren" to "STM","St. Johnstone" to "STJ","Aberdeen" to "ABE","Motherwell" to "MOT",
+        "Dundee United" to "DUU","Hibernian" to "HIB","Falkirk" to "FAL","Kilmarnock" to "KIL"
+    )
+
+    private val greece=listOf(
+        "Panathinaikos" to "PAO","PAOK" to "PAOK","AEK Athens" to "AEK","Olympiacos" to "OLY",
+        "Atromitos" to "ATR","AE Kifisia" to "KIF","Aris Thessaloniki" to "ARI","Iraklis" to "IRA",
+        "Levadiakos" to "LEV","Volos NPS" to "VOL","OFI Crete" to "OFI","Asteras Tripolis" to "AST",
+        "Kalamata" to "KAL","Panetolikos" to "PAN"
+    )
+
+    private val czechia=listOf(
+        "Slavia Praha" to "SLA","Viktoria Plzen" to "PLZ","Sparta Praha" to "SPA","Hradec Kralove" to "HKR",
+        "Slovan Liberec" to "LIB","FK Jablonec" to "JAB","Banik Ostrava" to "BAN","Sigma Olomouc" to "SIG",
+        "Zbrojovka Brno" to "ZBR","Bohemians 1905" to "BOH","SK Artis Brno" to "ART","Pardubice" to "PAR",
+        "Slovacko" to "SLO","Teplice" to "TEP","Mlada Boleslav" to "MBL","FC Zlin" to "ZLI"
+    )
+
+    private val denmark=listOf(
+        "FC Copenhagen" to "FCK","FC Midtjylland" to "FCM","Viborg FF" to "VFF","FC Nordsjaelland" to "FCN",
+        "Brondby IF" to "BIF","AC Horsens" to "ACH","Silkeborg IF" to "SIF","Randers FC" to "RFC",
+        "OB Odense" to "OB","Lyngby BK" to "LBK","AGF Aarhus" to "AGF","SonderjyskE" to "SJE"
+    )
+
+    private val serbia=listOf(
+        "Crvena zvezda" to "CZV","Vojvodina" to "VOJ","Radnicki 1923" to "R23","Mladost Lucani" to "MLA",
+        "IMT" to "IMT","Zeleznicar Pancevo" to "ZEL","Radnik Surdulica" to "RAD","Novi Pazar" to "NPA",
+        "Cukaricki" to "CUK","OFK Beograd" to "OFK","Partizan" to "PAR","Radnicki Nis" to "RNI",
+        "Macva Sabac" to "MAC","Zemun" to "ZEM"
+    )
+
+    private val ukraine=listOf(
+        "Karpaty Lviv" to "KAR","Polissya Zhytomyr" to "POL","Shakhtar Donetsk" to "SHA","FC Kharkiv" to "KHA",
+        "Epitsentr" to "EPI","LNZ Cherkasy" to "LNZ","Dynamo Kyiv" to "DKY","Zorya Luhansk" to "ZOR",
+        "Bukovyna Chernivtsi" to "BUK","Veres Rivne" to "VER","Kryvbas Kryvyi Rih" to "KRY","Livyi Bereh Kyiv" to "LIV",
+        "Chornomorets Odesa" to "CHO","Obolon Kyiv" to "OBO","Kolos Kovalivka" to "KOL","Kudrivka" to "KUD"
+    )
+
+    private val norway=listOf(
+        "Bodo/Glimt" to "BOD","Viking FK" to "VIK","Molde FK" to "MOL","Tromso IL" to "TRO",
+        "Lillestrom SK" to "LSK","Rosenborg BK" to "RBK","Fredrikstad FK" to "FFK","SK Brann" to "BRA",
+        "Sarpsborg 08" to "SAR","HamKam" to "HAM","Valerenga" to "VIF","KFUM Oslo" to "KFUM",
+        "Sandefjord" to "SAN","Kristiansund BK" to "KBK","Aalesund" to "AAL","IK Start" to "STA"
+    )
+
     val leagues:List<RealModeLeagueSeed> by lazy(LazyThreadSafetyMode.PUBLICATION){
         listOf(
             league("Championship","England",10,2,championship),
