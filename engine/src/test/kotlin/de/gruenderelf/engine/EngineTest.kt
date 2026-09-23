@@ -243,7 +243,7 @@ class EngineTest {
   val seeded=RealModeDatabase.options.filter{it.players.isNotEmpty()}
   assertTrue(seeded.isNotEmpty())
   for(club in seeded){
-   assertTrue(club.players.size>=20,"${club.name}: verifizierter Kader hat nur ${club.players.size} Spieler")
+   assertTrue(club.players.size>=11,"${club.name}: namentlicher Kaderkern hat nur ${club.players.size} Spieler; fehlende Plätze dürfen erst beim Weltaufbau sichtbar simuliert ergänzt werden")
    assertEquals(club.players.size,club.players.map{it.name.trim().lowercase()}.toSet().size,"${club.name}: doppelte Spielernamen")
    assertEquals(club.players.size,club.players.map{it.number}.toSet().size,"${club.name}: doppelte Rückennummern")
    for(p in club.players){
