@@ -143,7 +143,7 @@ object CompetitionEngine {
 
  internal fun realEuropeanQualificationOrder(w: World): List<Int>{
   // Ein Verein pro Land/Liga wird nach der Vorjahrestabelle (erste Saison: Reputation)
-  // gerankt. Für jede UEFA-Ligaphase werden höchstens vier Vereine je Verband
+  // gerankt. Für jede UEFA-Ligaphase werden höchstens zwei Vereine je Verband
   // zugelassen. Dadurch bleibt die moderne 36er-Auslosung mit zwei Gegnern je Topf
   // und ohne Duelle aus demselben Verband für jede gepackte Ligenkombination lösbar.
   // Russland bleibt national spielbar, ist aber von UEFA-Wettbewerben ausgeschlossen.
@@ -171,7 +171,7 @@ object CompetitionEngine {
    fun add(id:Int,league:League):Boolean{
     if(id in excluded||id in result)return false
     val nation=country(league)
-    if((perCountry[nation]?:0)>=4)return false
+    if((perCountry[nation]?:0)>=2)return false
     result+=id;perCountry[nation]=(perCountry[nation]?:0)+1
     return true
    }
@@ -200,7 +200,7 @@ object CompetitionEngine {
    val nation=country(league)
    w.trophies.lastOrNull{it.season==w.calendar.season-1&&it.competition==cupName(w,nation)}?.clubId
   }.filter{it !in champions}
-  val europa=selectField(champions.toSet(),preferred=cupWinners,startRank=4)
+  val europa=selectField(champions.toSet(),preferred=cupWinners,startRank=2)
   return champions+europa
  }
  private val globalNames=listOf(
