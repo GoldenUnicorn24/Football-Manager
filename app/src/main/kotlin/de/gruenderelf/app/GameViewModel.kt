@@ -19,6 +19,7 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  val matchSpeed=repo.matchSpeed.stateIn(viewModelScope,SharingStarted.Eagerly,MatchSpeed.NORMAL)
  val soundsEnabled=repo.soundsEnabled.stateIn(viewModelScope,SharingStarted.Eagerly,true)
  private var liveRunnerJob: Job?=null
+ private var deferredSaveJob: Job?=null
  @Volatile private var liveRunnerEnabled=false
  private fun runnerDelayMs(phase:LivePhase,speed:MatchSpeed):Long {
   val normal=when(phase){
@@ -40,7 +41,22 @@ class GameViewModel(application: Application): AndroidViewModel(application){
   }
  }
  private fun liveBlocked(m:LiveMatch)=m.finished||m.halfTime||m.pendingDecision||m.incidentPause||m.assistantSubPending
- private fun liveCheckpoint(beforeMinute:Int,m:LiveMatch)=m.pendingDecision||m.halfTime||m.finished||m.incidentPause||m.assistantSubPending||m.minute/15!=beforeMinute/15
+ private fun liveCheckpoint(beforeMinute:Int,m:LiveMatch)=m.halfTime||m.finished||m.incidentPause||m.minute/30!=beforeMinute/30
+ private fun scheduleSave(slot:Int){
+  deferredSaveJob?.cancel()
+  deferredSaveJob=viewModelScope.launch{
+   delay(700)
+   lock.withLock{
+    val current=mutable.value
+    val w=current.world
+    if(w!=null&&current.slot==slot){
+     try{repo.save(slot,w)}
+     catch(e:CancellationException){throw e}
+     catch(e:Exception){mutable.update{it.copy(error="Automatisches Speichern fehlgeschlagen.")}}
+    }
+   }
+  }
+ }
  fun startLiveRunner(){
   liveRunnerEnabled=true
   if(liveRunnerJob?.isActive==true)return
@@ -96,10 +112,12 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  fun clearMessage(){mutable.update{it.copy(message=null)}}
  fun setMatchSpeed(v: MatchSpeed){viewModelScope.launch{repo.setMatchSpeed(v)}}
  fun setSoundsEnabled(enabled: Boolean){viewModelScope.launch{repo.setSoundsEnabled(enabled)}}
- fun action(message: String?=null,block: (World)->Unit)=work{
+ fun action(message: String?=null,persistNow:Boolean=false,block: (World)->Unit)=work{
   val current=mutable.value.world?:return@work
   withContext(Dispatchers.Default){block(current)}
-  repo.save(mutable.value.slot,current);mutable.update{it.copy(world=current,revision=it.revision+1,message=message)}
+  val slot=mutable.value.slot
+  mutable.update{it.copy(world=current,revision=it.revision+1,message=message)}
+  if(persistNow)repo.save(slot,current) else scheduleSave(slot)
  }
  fun startMatch()=action{require(it.live==null){"Das Spiel läuft bereits."};it.live=MatchEngine.start(it)}
  fun step(count: Int)=work{
@@ -160,9 +178,9 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  fun rejectAssistantSubstitution()=liveAction{w->w.live?.let{MatchEngine.rejectAssistantSubstitution(w,it)}}
  fun resumeIncident()=liveAction{w->w.live?.let{MatchEngine.resumeIncident(w,it)}}
  fun secondHalf()=liveAction{it.live?.let{m->MatchEngine.secondHalf(m)}}
- fun finishWeek()=action("Partie abgeschlossen und gespeichert."){SeasonEngine.advanceWeek(it)}
- fun advanceIdleWeek()=action("Vereinswoche abgeschlossen und gespeichert."){SeasonEngine.advanceIdleWeek(it)}
- fun advanceUntilNextMatch()=action("Bis zur nächsten eigenen Partie vorgespult."){SeasonEngine.advanceUntilNextMatch(it)}
+ fun finishWeek()=action("Partie abgeschlossen und gespeichert.",true){SeasonEngine.advanceWeek(it)}
+ fun advanceIdleWeek()=action("Vereinswoche abgeschlossen und gespeichert.",true){SeasonEngine.advanceIdleWeek(it)}
+ fun advanceUntilNextMatch()=action("Bis zur nächsten eigenen Partie vorgespult.",true){SeasonEngine.advanceUntilNextMatch(it)}
  fun exportTo(uri: Uri)=work{
   val w=mutable.value.world?:return@work
   withContext(Dispatchers.IO){val stream=getApplication<Application>().contentResolver.openOutputStream(uri)?:error("Datei nicht erreichbar.");stream.use{it.write(SaveCodec.encode(w).toByteArray(Charsets.UTF_8));it.flush()}}
