@@ -107,26 +107,56 @@ object MatchAnalysisSystem {
   if (last?.clubId == clubId && last.minute == m.minute) return
   m.tacticChanges += TacticChangeEvent(m.minute, clubId, label, stats.xg, stats.shots, stats.possessionTicks)
  }
- fun xgTimeline(m: LiveMatch, clubId: Int): List<Pair<Int, Double>> {
-  val maxMinute = max(m.minute, max(m.shotEvents.maxOfOrNull { it.minute } ?: 0, 1))
-  val checkpoints = (15..maxMinute step 15).toMutableList().also { if (it.lastOrNull() != maxMinute) it += maxMinute }
-  return checkpoints.distinct().map { minute -> minute to m.shotEvents.filter { it.clubId == clubId && it.minute <= minute }.sumOf { it.xg } }
- }
- fun passNetwork(m: LiveMatch, clubId: Int): Pair<List<PassNetworkNode>, List<PassNetworkEdge>> {
-  val events = m.passEvents.filter { it.clubId == clubId && it.completed && it.fromId != 0 && it.toId != 0 }
-  val touches = linkedMapOf<Int, MutableList<Pair<Float, Float>>>()
-  events.forEach { e ->
-   touches.getOrPut(e.fromId) { mutableListOf() } += e.startX to e.startY
-   touches.getOrPut(e.toId) { mutableListOf() } += e.endX to e.endY
-  }
-  val nodes = touches.map { (id, pts) -> PassNetworkNode(id, pts.map { it.first }.average().toFloat(), pts.map { it.second }.average().toFloat(), pts.size) }
-  val edges = events.groupBy { it.fromId to it.toId }.map { (ids, list) ->
-   PassNetworkEdge(ids.first, ids.second, list.size, list.map { it.startX }.average().toFloat(), list.map { it.startY }.average().toFloat(), list.map { it.endX }.average().toFloat(), list.map { it.endY }.average().toFloat())
-  }.sortedByDescending { it.count }
-  return nodes to edges
- }
-}
 
+ fun xgTimeline(m: LiveMatch, clubId: Int): List<Pair<Int, Double>> =
+  xgTimeline(m.minute, m.shotEvents, clubId)
+
+ fun xgTimeline(minute:Int, shots:List<ShotEvent>, clubId:Int): List<Pair<Int,Double>> {
+  val maxMinute = max(minute, max(shots.maxOfOrNull { it.minute } ?: 0, 1))
+  val checkpoints = (15..maxMinute step 15).toMutableList().also { if (it.lastOrNull() != maxMinute) it += maxMinute }
+  return checkpoints.distinct().map { checkpoint ->
+   checkpoint to shots.filter { it.clubId == clubId && it.minute <= checkpoint }.sumOf { it.xg }
+  }
+ }
+
+ private fun completedPasses(events:List<PassEvent>,clubId:Int)=events.filter {
+  it.clubId==clubId&&it.completed&&it.fromId!=0&&it.toId!=0
+ }
+
+ /** Original v0.5.18 pass-network edge aggregation recovered from the APK. */
+ fun passNetworkEdges(events:List<PassEvent>,clubId:Int):List<PassNetworkEdge> =
+  completedPasses(events,clubId)
+   .groupBy { it.fromId to it.toId }
+   .map { (ids,list) ->
+    PassNetworkEdge(
+     ids.first,ids.second,list.size,
+     list.map{it.startX}.average().toFloat(),list.map{it.startY}.average().toFloat(),
+     list.map{it.endX}.average().toFloat(),list.map{it.endY}.average().toFloat()
+    )
+   }
+   .sortedByDescending { it.count }
+   .take(24)
+
+ /** Original v0.5.18 node positions: average all real pass starts/receipts per player. */
+ fun passNetworkNodes(events:List<PassEvent>,clubId:Int):List<PassNetworkNode> {
+  val passes=completedPasses(events,clubId)
+  val points=linkedMapOf<Int,MutableList<Pair<Float,Float>>>()
+  passes.forEach { e ->
+   points.getOrPut(e.fromId){mutableListOf()} += e.startX to e.startY
+   points.getOrPut(e.toId){mutableListOf()} += e.endX to e.endY
+  }
+  return points.map { (id,pts) ->
+   PassNetworkNode(id,pts.map{it.first}.average().toFloat(),pts.map{it.second}.average().toFloat(),pts.size)
+  }.sortedByDescending { it.touches }.take(16)
+ }
+
+ fun passNetworkEdges(m:LiveMatch,clubId:Int)=passNetworkEdges(m.passEvents,clubId)
+ fun passNetworkNodes(m:LiveMatch,clubId:Int)=passNetworkNodes(m.passEvents,clubId)
+
+ /** Compatibility helper retained for recovery tests and callers. */
+ fun passNetwork(m: LiveMatch, clubId: Int): Pair<List<PassNetworkNode>, List<PassNetworkEdge>> =
+  passNetworkNodes(m,clubId) to passNetworkEdges(m,clubId)
+}
 object NotificationSystem {
  fun tiredPlayers(w: World): Set<Int> {
   val n = w.notifications
