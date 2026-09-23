@@ -79,7 +79,7 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP,Compe
 @Serializable enum class DevelopmentPath(val label:String){EARLY("Frühreif"),NORMAL("Normal"),LATE("Spätentwickler"),PLATEAU("Plateau"),BREAKTHROUGH("Durchbruch"),CRASH("Absturz")}
 @Serializable enum class DealType(val label:String){BUY("Kauf"),LOAN("Leihe"),LOAN_OPTION("Leihe + Kaufoption"),SWAP("Tausch")}
 @Serializable enum class SquadRole(val label:String){STAR("Starspieler"),STARTER("Stammspieler"),ROTATION("Rotation"),PROSPECT("Perspektive"),BACKUP("Backup")}
-@Serializable enum class NegotiationStatus(val label:String){DRAFT("Entwurf"),COUNTER("Gegenangebot"),AGREED("Einigung"),REJECTED("Abgelehnt"),COMPLETED("Abgeschlossen")}
+@Serializable enum class NegotiationStatus(val label:String){DRAFT("Entwurf"),COUNTER("Gegenangebot"),AGREED("Einigung"),REJECTED("Abgelehnt"),WITHDRAWN("Zurückgezogen"),COMPLETED("Abgeschlossen")}
 @Serializable enum class TransferInterestLevel(val label:String){LOW("eher kein Interesse"),OPEN("offen für Gespräche"),INTERESTED("interessiert"),VERY_INTERESTED("sehr interessiert"),DESPERATE("will unbedingt zu diesem Verein")}
 @Serializable enum class AssistantTrainingStyle(val label:String){BALANCED("Ausgewogen"),MATCH_PREP("Gegner & Matchplan"),DEVELOPMENT("Entwicklung"),FITNESS("Athletik"),YOUTH("Jugendförderung")}
 @Serializable enum class YouthBlueprint(val label:String){BALANCED("Ausgewogen"),TECHNICAL("Techniker"),PHYSICAL("Athlet"),CREATIVE("Spielmacher"),DEFENSIVE("Defensiv"),FINISHER("Abschluss")}
