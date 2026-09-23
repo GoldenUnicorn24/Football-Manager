@@ -43,7 +43,7 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
      composable("verein"){ClubScreen(w,vm){nav.navigate("speichern")}}
      composable("training"){TrainingScreen(w,vm)}
      composable("transfers"){TransfersScreen(w,vm){nav.navigate("spieler/$it")}}
-     composable("karriere"){CareerScreen(w)}
+     composable("karriere"){CareerScreen(w)}\n     composable("hilfe"){HelpScreen(w,vm)}
      composable("trophaeen"){TrophyScreen(w,vm)}
      composable("editor"){EditorScreen(w,vm)}
      composable("einstellungen"){SettingsScreen(vm)}
@@ -51,7 +51,7 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
      composable("speichern"){SavesScreen(vm,slots,state){nav.popBackStack()}}
      composable("spieler/{id}"){back->ProfileScreen(w,back.arguments?.getString("id")?.toIntOrNull()?:w.user.playerId,vm){nav.popBackStack()}}
     }
-    if(state.busy)LinearProgressIndicator(modifier=Modifier.fillMaxWidth().align(Alignment.TopCenter))
+    TutorialCoach(w,route,vm){dest->if(route!=dest)nav.navigate(dest){launchSingleTop=true}}\n    if(state.busy)LinearProgressIndicator(modifier=Modifier.fillMaxWidth().align(Alignment.TopCenter))
    }}
    BackHandler(route=="home"){exitConfirm=true}
   }
