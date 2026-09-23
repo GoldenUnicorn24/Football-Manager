@@ -75,7 +75,7 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
 }
 
 @Composable fun LeagueScreen(w: World){
- val real=w.privateTopClubMode;val cupName=CompetitionEngine.displayName(w,CompetitionType.NATIONAL_CUP)
+ val real=w.privateTopClubMode;val cupName=CompetitionEngine.displayName(w,CompetitionType.NATIONAL_CUP);val cupNames=if(real)CompetitionEngine.domesticCupNames(w) else listOf(cupName)
  val ownLeague=w.leagues.first{w.user.clubId in it.clubIds};val ownCountry=WorldFactory.leagueCountry(w,ownLeague.tier)
  val competitionOptions=if(real)listOf("Liga")+cupNames+listOf(CompetitionType.CHAMPIONS_LEAGUE.label,CompetitionType.EUROPA_LEAGUE.label) else listOf("Liga",cupName,CompetitionType.EURO_ELITE.label)
  var competition by rememberSaveable{mutableStateOf("Liga")};var country by rememberSaveable(w.user.clubId,w.calendar.season){mutableStateOf(ownCountry)};var tier by rememberSaveable(w.user.clubId,w.calendar.season){mutableIntStateOf(ownLeague.tier)};var day by rememberSaveable(w.calendar.season){mutableIntStateOf(w.calendar.matchday)};var fullTable by rememberSaveable{mutableStateOf(false)};var group by rememberSaveable{mutableStateOf("A")};var euroRound by rememberSaveable(w.calendar.season){mutableIntStateOf(1)}
@@ -83,8 +83,8 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
  val eyebrow=if(real)"LIGEN · NATIONALE POKALE · CHAMPIONS LEAGUE · EUROPA LEAGUE" else "LIGA · GRÜNDERPOKAL · EUROPA-ELITELIGA"
  Page("Wettbewerbe",eyebrow){
   Pick("Wettbewerb",competition,competitionOptions,{it}){competition=it}
-  when(competition){
-   "Liga"->{
+  when{
+   competition=="Liga"->{
     val countries=w.leagues.map{WorldFactory.leagueCountry(w,it.tier)}.distinct().sortedWith(compareBy<String>{if(it==ownCountry)0 else 1}.thenBy{it});if(country !in countries)country=ownCountry
     Pick("Land",country,countries,{it}){selected->country=selected;val options=w.leagues.filter{WorldFactory.leagueCountry(w,it.tier)==selected}.sortedBy{it.tier};tier=if(selected==ownCountry)ownLeague.tier else options.first().tier;day=1}
     val countryLeagues=w.leagues.filter{WorldFactory.leagueCountry(w,it.tier)==country}.sortedBy{it.tier};if(countryLeagues.none{it.tier==tier})tier=countryLeagues.first().tier
