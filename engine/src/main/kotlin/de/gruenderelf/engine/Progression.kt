@@ -91,7 +91,7 @@ object SeasonEngine {
    recordAndAdvanceCompetition(w,live);simulateScheduledCompetitionBackground(w,w.calendar.matchday,current.competition)
    val own=if(live.homeId==w.user.clubId)live.home.goals else live.away.goals;val other=if(live.homeId==w.user.clubId)live.away.goals else live.home.goals
    val detail=when{current.homePens>0||current.awayPens>0->" · Entscheidung im Elfmeterschießen";live.extraTimePlayed->" · nach Verlängerung";else->""}
-   w.news(CompetitionEngine.displayName(w,current.competition,CompetitionEngine.cupGroup(w,current)),"${current.stage}: $own:$other$detail","normal");w.live=null;return
+   w.news(CompetitionEngine.displayName(w,current.competition,CompetitionEngine.cupGroup(w,current)),"${current.stage}: $own:$other$detail","normal");w.squad().filter{it.temporarySeniorCallUp}.map{it.id}.forEach{YouthCompetitionSystem.returnToYouth(w,it)};w.live=null;return
   }
   MatchEngine.record(w,live)
   for(f in w.fixtures.filter{it.competition==CompetitionType.LEAGUE&&it.matchday==w.calendar.matchday&&!it.played})MatchEngine.record(w,MatchEngine.simulateFullMatch(w,f))
