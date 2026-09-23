@@ -5,7 +5,7 @@ data class RealModePlayerSeed(val name:String,val nationality:String,val born:In
 data class RealModeClubSeed(val key:String,val name:String,val shortName:String,val league:String,val country:String,val primary:Long,val secondary:Long,val players:List<RealModePlayerSeed>)
 data class RealModeLeagueSeed(val name:String,val country:String,val tier:Int,val clubs:List<RealModeClubSeed>,val level:Int=1)
 object RealModeDatabase {
- const val dataSnapshot="Saison 2026/27 · Topligen-Kader + geprüfte deutsche Ligen bis Oberliga Hamburg"
+ const val dataSnapshot="Saison 2026/27 · Topligen-Kader + erweiterte europäische Ligastruktur"
  private fun league1()=RealModeLeagueSeed("Bundesliga","Deutschland",1,listOf(club1_1(),club1_2(),club1_3(),club1_4(),club1_5(),club1_6(),club1_7(),club1_8(),club1_9(),club1_10(),club1_11(),club1_12(),club1_13(),club1_14(),club1_15(),club1_16(),club1_17(),club1_18()))
  private fun league2()=RealModeLeagueSeed("Premier League","England",6,listOf(club2_1(),club2_2(),club2_3(),club2_4(),club2_5(),club2_6(),club2_7(),club2_8(),club2_9(),club2_10(),club2_11(),club2_12(),club2_13(),club2_14(),club2_15(),club2_16(),club2_17(),club2_18(),club2_19(),club2_20()))
  private fun league3()=RealModeLeagueSeed("La Liga","Spanien",7,listOf(club3_1(),club3_2(),club3_3(),club3_4(),club3_5(),club3_6(),club3_7(),club3_8(),club3_9(),club3_10(),club3_11(),club3_12(),club3_13(),club3_14(),club3_15(),club3_16(),club3_17(),club3_18(),club3_19(),club3_20()))
@@ -3110,7 +3110,7 @@ object RealModeDatabase {
   RealModePlayerSeed("Yacouba Kone","Frankreich",2000,Position.ST,39,70),
   RealModePlayerSeed("Enisio Carneiro","Uruguay",1995,Position.ST,41,70)
  ))
- val leagues:List<RealModeLeagueSeed> by lazy(LazyThreadSafetyMode.PUBLICATION){listOf(league1())+GermanLeagueData.leagues+listOf(league2(),league3(),league4(),league5())}
+ val leagues:List<RealModeLeagueSeed> by lazy(LazyThreadSafetyMode.PUBLICATION){listOf(league1())+GermanLeagueData.leagues+listOf(league2(),league3(),league4(),league5())+InternationalLeagueData.leagues}
  val countries:List<String> get()=leagues.map{it.country}.distinct()
  fun leaguesForCountry(country:String)=leagues.filter{it.country==country}
  fun leagueForTier(tier:Int)=leagues.first{it.tier==tier}
