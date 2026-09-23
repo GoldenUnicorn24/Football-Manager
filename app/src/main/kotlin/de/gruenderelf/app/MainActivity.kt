@@ -19,6 +19,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.*
 import de.gruenderelf.app.ui.*
+import de.gruenderelf.engine.NotificationSystem
 
 class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState: Bundle?){super.onCreate(savedInstanceState);enableEdgeToEdge(statusBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),navigationBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT));setContent{GruenderelfTheme{GruenderelfApp()}}}}
 @Composable fun GruenderelfApp(vm: GameViewModel=viewModel()){
@@ -33,7 +34,13 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
   }else{
    val w=state.world!!;val nav=rememberNavController();val entry by nav.currentBackStackEntryAsState();val route=entry?.destination?.route?:"home"
    val tabs=listOf(Triple("home","Start",Icons.Default.Home),Triple("kader","Kader",Icons.Default.Person),Triple("spiel","Spiel",Icons.Default.PlayArrow),Triple("liga","Liga",Icons.AutoMirrored.Filled.List),Triple("mehr","Mehr",Icons.Default.MoreVert))
-   Scaffold(containerColor=Ink,snackbarHost={SnackbarHost(snack)},bottomBar={NavigationBar(containerColor=Ink,tonalElevation=0.dp){tabs.forEach{(dest,label,icon)->NavigationBarItem(selected=route==dest||(dest=="mehr"&&route !in tabs.map{it.first}),onClick={if(route!=dest)nav.navigate(dest){popUpTo("home"){saveState=true};launchSingleTop=true;restoreState=true}},icon={Icon(icon,contentDescription=label)},label={Text(label)})}}}){padding->Box(Modifier.fillMaxSize().padding(padding)){
+   val squadUnread=NotificationSystem.unreadTired(w).size+NotificationSystem.unreadExpiring(w).size
+   val moreUnread=NotificationSystem.unreadScoutReports(w).size
+   LaunchedEffect(route){when(route){"kader"->vm.action{NotificationSystem.markTiredSeen(it);NotificationSystem.markContractsSeen(it)};"mehr"->vm.action{NotificationSystem.markScoutReportsSeen(it)}}}
+   Scaffold(containerColor=Ink,snackbarHost={SnackbarHost(snack)},bottomBar={NavigationBar(containerColor=Ink,tonalElevation=0.dp){tabs.forEach{(dest,label,icon)->
+    val badgeCount=when(dest){"kader"->squadUnread;"mehr"->moreUnread;else->0}
+    NavigationBarItem(selected=route==dest||(dest=="mehr"&&route !in tabs.map{it.first}),onClick={if(route!=dest)nav.navigate(dest){popUpTo("home"){saveState=true};launchSingleTop=true;restoreState=true}},icon={if(badgeCount>0)BadgedBox(badge={Badge{Text(if(badgeCount>99)"99+" else badgeCount.toString())}}){Icon(icon,contentDescription=label)}else Icon(icon,contentDescription=label)},label={Text(label)})
+   }}}){padding->Box(Modifier.fillMaxSize().padding(padding)){
     NavHost(nav,"home"){
      composable("home"){HomeScreen(w,{nav.navigate("spiel")},{nav.navigate("spieler/${w.user.playerId}")})}
      composable("kader"){SquadScreen(w,vm){nav.navigate("spieler/$it")}}
