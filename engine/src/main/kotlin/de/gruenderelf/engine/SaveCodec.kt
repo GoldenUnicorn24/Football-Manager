@@ -6,7 +6,7 @@ object SaveCodec {
  fun encode(w: World)=json.encodeToString(w)
  fun copy(w: World)=decode(encode(w))
  fun decode(text: String): World {
-  require(text.length<=32*1024*1024){"Spielstand ist zu groß (maximal 32 MB)."}
+  require(text.length<=64*1024*1024){"Spielstand ist zu groß (maximal 64 MB)."}
   val root=json.parseToJsonElement(text).jsonObject.toMutableMap();val version=root["saveVersion"]?.jsonPrimitive?.intOrNull?:1;val legacyVersion=version<=3
   require(version in 1..SAVE_VERSION){"Dieser Spielstand benötigt eine neuere Gründerelf-Version."}
   if(version==1){root.putIfAbsent("live",JsonNull);root.putIfAbsent("relationships",JsonObject(emptyMap()));root["saveVersion"]=JsonPrimitive(2)}
