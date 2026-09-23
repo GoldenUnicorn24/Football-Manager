@@ -80,6 +80,7 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
  fun person(v: PlayerDraft){pj=SaveCodec.json.encodeToString(PlayerDraft.serializer(),v)}
  var page by rememberSaveable{mutableIntStateOf(0)}
  var saveSlot by rememberSaveable{mutableIntStateOf((1..5).firstOrNull{i->slots.none{it.slot==i}}?:1)}
+ var fantasyCupEnabled by rememberSaveable{mutableStateOf(true)}
  var confirm by remember{mutableStateOf(false)}
  val selected=options.first{it.key==clubKey}
  val leagueGames=(options.size-1)*2
@@ -119,16 +120,22 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
     Section(selected.name){
      Row(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically){Crest(Logo(options.indexOf(selected)%8,selected.shortName),selected.primary,selected.secondary,Modifier.size(72.dp));Column{Text("${selected.shortName} · ${selected.name}",style=MaterialTheme.typography.titleMedium);Text("${selected.league} · $leagueGames Spieltage",color=Grass)}}
      Text("Eigener Spieler: ${p.firstName.ifBlank{"Vorname fehlt"}} ${p.lastName} · ${p.position.label} · Nr. ${p.number}")
+     Section("Zusatzwettbewerb"){
+      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+       Column(Modifier.weight(1f)){Text("Krone der Kontinente");Text("Fantasy-Cup mit den Plätzen 1–6 aus jeder integrierten Liga. Kann nur für diese Karriere ein- oder ausgeschaltet werden.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+       Switch(fantasyCupEnabled,{fantasyCupEnabled=it})
+      }
+     }
      Pick("Speicherplatz",saveSlot,(1..5).toList(),{i->"Slot $i · ${slots.firstOrNull{it.slot==i}?.clubName?:"Leer"}"}){saveSlot=it}
      Text("Alle integrierten Ligen werden parallel simuliert. Deutsche Vereine können innerhalb der fünf deutschen Spielklassen auf- und absteigen.",color=Muted)
-     Action("Karriere starten",!busy){if(slots.any{it.slot==saveSlot})confirm=true else vm.createRealMode(System.currentTimeMillis(),clubKey,p,saveSlot)}
+     Action("Karriere starten",!busy){if(slots.any{it.slot==saveSlot})confirm=true else vm.createRealMode(System.currentTimeMillis(),clubKey,p,saveSlot,fantasyCupEnabled)}
     }
    }
   }
   if(page<titles.lastIndex)Action("Weiter",!busy){page++}
   Action(if(page==0)"Zurück zur Moduswahl" else "Zurück",!busy,secondary=true){if(page==0)onBack()else page--}
  }
- if(confirm)Confirm("Slot $saveSlot überschreiben?","Der bisherige Spielstand in diesem Slot wird ersetzt.",{confirm=false}){confirm=false;vm.createRealMode(System.currentTimeMillis(),clubKey,p,saveSlot)}
+ if(confirm)Confirm("Slot $saveSlot überschreiben?","Der bisherige Spielstand in diesem Slot wird ersetzt.",{confirm=false}){confirm=false;vm.createRealMode(System.currentTimeMillis(),clubKey,p,saveSlot,fantasyCupEnabled)}
 }
 
 @Composable private fun CustomClubCreationScreen(vm: GameViewModel,slots: List<SaveSummary>,busy: Boolean,onBack: ()->Unit){
@@ -154,6 +161,7 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
  val titles=listOf("Land & Liga","Dein Verein","Wappen & Trikots","Dein Spieler","Kader erstellen","Karriere starten")
  var page by rememberSaveable{mutableIntStateOf(0)}
  var saveSlot by rememberSaveable{mutableIntStateOf((1..5).firstOrNull{i->slots.none{it.slot==i}}?:1)}
+ var fantasyCupEnabled by rememberSaveable{mutableStateOf(true)}
  var confirm by remember{mutableStateOf(false)}
  var clothing by rememberSaveable{mutableStateOf("Heim")}
  var rosterIndex by rememberSaveable{mutableIntStateOf(0)}
@@ -214,14 +222,20 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
     Row(horizontalArrangement=Arrangement.spacedBy(18.dp),verticalAlignment=Alignment.CenterVertically){Crest(c.logo,c.primary,c.secondary);Column{Text("${c.city.ifBlank{"Ort noch offen"}} · seit ${c.founded}");Text("${league.country} · ${league.name}",color=Grass);Text("${c.capacity} Plätze",color=Muted)}}
     Text("Spielertrainer: ${p.firstName.ifBlank{"Vorname fehlt"}} ${p.lastName} · ${p.position.label} · Nr. ${p.number}")
     Text("19 individuell editierbare Mitspieler · ersetzt Ligaplatz ${replacedClub.shortName}",color=Muted)
+    Section("Zusatzwettbewerb"){
+     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+      Column(Modifier.weight(1f)){Text("Krone der Kontinente");Text("Fantasy-Cup mit den Plätzen 1–6 aus jeder integrierten Liga.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+      Switch(fantasyCupEnabled,{fantasyCupEnabled=it})
+     }
+    }
     Pick("Speicherplatz",saveSlot,(1..5).toList(),{i->"Slot $i · ${slots.firstOrNull{it.slot==i}?.clubName?:"Leer"}"}){saveSlot=it}
-    Action("Individuellen Verein starten",!busy){if(slots.any{it.slot==saveSlot})confirm=true else vm.createCustomReal(System.currentTimeMillis(),leagueSlotClubKey,c,p,rosterPlayers,saveSlot)}
+    Action("Individuellen Verein starten",!busy){if(slots.any{it.slot==saveSlot})confirm=true else vm.createCustomReal(System.currentTimeMillis(),leagueSlotClubKey,c,p,rosterPlayers,saveSlot,fantasyCupEnabled)}
    }
   }
   if(page<titles.lastIndex)Action("Weiter",!busy){page++}
   Action(if(page==0)"Zurück zur Moduswahl" else "Zurück",!busy,secondary=true){if(page==0)onBack() else page--}
  }
- if(confirm)Confirm("Slot $saveSlot überschreiben?","Der bisherige Spielstand in diesem Slot wird ersetzt.",{confirm=false}){confirm=false;vm.createCustomReal(System.currentTimeMillis(),leagueSlotClubKey,c,p,rosterPlayers,saveSlot)}
+ if(confirm)Confirm("Slot $saveSlot überschreiben?","Der bisherige Spielstand in diesem Slot wird ersetzt.",{confirm=false}){confirm=false;vm.createCustomReal(System.currentTimeMillis(),leagueSlotClubKey,c,p,rosterPlayers,saveSlot,fantasyCupEnabled)}
 }
 
 @Composable fun CreationScreen(vm: GameViewModel,slots: List<SaveSummary>,busy: Boolean,onBack: ()->Unit){
