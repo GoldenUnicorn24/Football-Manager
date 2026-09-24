@@ -72,7 +72,7 @@ class GameViewModel(application: Application): AndroidViewModel(application){
   val current=mutable.value.world?:return@work
   withContext(Dispatchers.Default){block(current);SaveCodec.requireRuntimeIntegrity(current)}
   val slot=mutable.value.slot
-  mutable.update{it.copy(world=current,revision=it.revision+1,message=message)}
+  mutable.update{it.copy(world=current.copy(),revision=it.revision+1,message=message)}
   if(persistNow)repo.save(slot,current) else scheduleSave(slot)
  }
  fun startMatch()=action(persistNow=true){require(it.live==null){"Das Spiel läuft bereits."};it.live=MatchEngine.start(it)}
@@ -81,7 +81,7 @@ class GameViewModel(application: Application): AndroidViewModel(application){
   val beforeMinute=current.live?.minute?:0
   withContext(Dispatchers.Default){current.live?.let{m->repeat(count){if(!m.finished)MatchEngine.step(current,m)}};SaveCodec.requireRuntimeIntegrity(current)}
   val m=current.live;if(m!=null&&(m.minute/10!=beforeMinute/10||m.pendingDecision||m.halfTime||m.finished))repo.checkpoint(mutable.value.slot,current)
-  mutable.update{it.copy(world=current,revision=it.revision+1)}
+  mutable.update{it.copy(world=current.copy(),revision=it.revision+1)}
  }
  // Der automatische Livetakt nutzt absichtlich nicht den globalen busy-Status.
  // Dadurch bleiben Taktik-, Pause- und Wechselknöpfe zwischen den einzelnen Minuten bedienbar.
@@ -94,7 +94,7 @@ class GameViewModel(application: Application): AndroidViewModel(application){
     withContext(Dispatchers.Default){current.live?.let{m->MatchEngine.step(current,m)};SaveCodec.requireRuntimeIntegrity(current)}
     val m=current.live
     val checkpoint=m!=null&&(m.minute/15!=beforeMinute/15||m.pendingDecision||m.halfTime||m.finished||m.incidentPause||m.assistantSubPending)
-    mutable.update{it.copy(world=current,revision=it.revision+1)}
+    mutable.update{it.copy(world=current.copy(),revision=it.revision+1)}
     if(checkpoint){checkpointSlot=mutable.value.slot;checkpointWorld=current}
    }catch(e: CancellationException){throw e}catch(_:OutOfMemoryError){memoryPressure()}catch(e: Exception){mutable.update{it.copy(error=if(e is IllegalArgumentException||e is IllegalStateException)e.message?:"Aktion nicht möglich." else "Die Live-Simulation konnte nicht fortgesetzt werden.")}}
   }
@@ -134,13 +134,13 @@ class GameViewModel(application: Application): AndroidViewModel(application){
    SaveCodec.requireRuntimeIntegrity(current)
   }
   repo.checkpoint(mutable.value.slot,current)
-  mutable.update{it.copy(world=current,revision=it.revision+1,message=if(toHalfTime)"Bis zur Halbzeit simuliert." else "Spiel vollständig simuliert.")}
+  mutable.update{it.copy(world=current.copy(),revision=it.revision+1,message=if(toHalfTime)"Bis zur Halbzeit simuliert." else "Spiel vollständig simuliert.")}
  }
  fun liveAction(block: (World)->Unit):Job=viewModelScope.launch{lock.withLock{
   try{
    val current=mutable.value.world?:return@withLock;val slot=mutable.value.slot
    withContext(Dispatchers.Default){block(current);current.live?.let{MatchEngine.captureBallFrame(it)};SaveCodec.requireRuntimeIntegrity(current)}
-   mutable.update{it.copy(world=current,revision=it.revision+1,error=null)}
+   mutable.update{it.copy(world=current.copy(),revision=it.revision+1,error=null)}
    scheduleSave(slot)
   }catch(e: CancellationException){throw e}catch(_:OutOfMemoryError){memoryPressure()}catch(e: Exception){mutable.update{it.copy(error=if(e is IllegalArgumentException||e is IllegalStateException)e.message?:"Aktion nicht möglich." else "Die Live-Aktion konnte nicht bestätigt werden.")}}
  }}
@@ -154,7 +154,7 @@ class GameViewModel(application: Application): AndroidViewModel(application){
     if(before!=after&&liveAfter!=null)MatchAnalysisSystem.recordTacticChange(current,liveAfter,current.user.clubId,"Live-Taktik angepasst")
     liveAfter?.let{MatchEngine.captureBallFrame(it)};SaveCodec.requireRuntimeIntegrity(current)
    }
-   mutable.update{it.copy(world=current,revision=it.revision+1,error=null)}
+   mutable.update{it.copy(world=current.copy(),revision=it.revision+1,error=null)}
    scheduleSave(mutable.value.slot)
   }catch(e:CancellationException){throw e}catch(_:OutOfMemoryError){memoryPressure()}catch(e:Exception){mutable.update{it.copy(error=e.message?:"Die Live-Taktik konnte nicht geändert werden.")}}
  }}}
@@ -175,7 +175,7 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  fun finishWeek()=work{
   val current=mutable.value.world?:return@work
   withContext(Dispatchers.Default){SeasonEngine.advanceWeek(current);SaveCodec.requireRuntimeIntegrity(current)}
-  repo.save(mutable.value.slot,current);mutable.update{it.copy(world=current,revision=it.revision+1,message="Partie abgeschlossen und gespeichert.")}
+  repo.save(mutable.value.slot,current);mutable.update{it.copy(world=current.copy(),revision=it.revision+1,message="Partie abgeschlossen und gespeichert.")}
  }
  fun exportTo(uri: Uri)=work{
   val w=mutable.value.world?:return@work
