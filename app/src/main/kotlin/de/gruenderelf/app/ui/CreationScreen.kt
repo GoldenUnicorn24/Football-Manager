@@ -132,7 +132,7 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
   if(page<titles.lastIndex)Action("Weiter",!busy){page++}
   Action(if(page==0)"Zurück zur Moduswahl" else "Zurück",!busy,secondary=true){if(page==0)onBack()else page--}
  }
- if(confirm)Confirm("Slot $saveSlot überschreiben?","Der bisherige Spielstand in diesem Slot wird ersetzt.",{confirm=false}){confirm=false;vm.createRealMode(System.currentTimeMillis(),clubKey,p,saveSlot,tutorial)}
+ if(confirm)Confirm("Slot $saveSlot überschreiben?","Der bisherige Spielstand in diesem Slot wird ersetzt.",{confirm=false}){confirm=false;vm.createRealMode(System.currentTimeMillis(),clubKey,p,saveSlot,tutorial,fantasyCup)}
 }
 
 @Composable private fun CustomClubCreationScreen(vm: GameViewModel,slots: List<SaveSummary>,busy: Boolean,onBack: ()->Unit){
@@ -159,6 +159,7 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
  var page by rememberSaveable{mutableIntStateOf(0)}
  var saveSlot by rememberSaveable{mutableIntStateOf((1..5).firstOrNull{i->slots.none{it.slot==i}}?:1)}
  var tutorial by rememberSaveable{mutableStateOf(true)}
+ var fantasyCup by rememberSaveable{mutableStateOf(true)}
  var confirm by remember{mutableStateOf(false)}
  var clothing by rememberSaveable{mutableStateOf("Heim")}
  var rosterIndex by rememberSaveable{mutableIntStateOf(0)}
@@ -221,13 +222,14 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
     Text("19 individuell editierbare Mitspieler · ersetzt Ligaplatz ${replacedClub.shortName}",color=Muted)
     Pick("Speicherplatz",saveSlot,(1..5).toList(),{i->"Slot $i · ${slots.firstOrNull{it.slot==i}?.clubName?:"Leer"}"}){saveSlot=it}
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Geführtes Tutorial",style=MaterialTheme.typography.titleMedium);Text("Ein oder aus gilt nur für diese neue Karriere.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(tutorial,{tutorial=it})}
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Krone der Kontinente",style=MaterialTheme.typography.titleMedium);Text("Optionaler Fantasy-Pokal für die besten Vereine aller Ligen.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(fantasyCup,{fantasyCup=it})}
     Action("Individuellen Verein starten",!busy){if(slots.any{it.slot==saveSlot})confirm=true else vm.createCustomReal(System.currentTimeMillis(),leagueSlotClubKey,c,p,rosterPlayers,saveSlot,tutorial,fantasyCup)}
    }
   }
   if(page<titles.lastIndex)Action("Weiter",!busy){page++}
   Action(if(page==0)"Zurück zur Moduswahl" else "Zurück",!busy,secondary=true){if(page==0)onBack() else page--}
  }
- if(confirm)Confirm("Slot $saveSlot überschreiben?","Der bisherige Spielstand in diesem Slot wird ersetzt.",{confirm=false}){confirm=false;vm.createCustomReal(System.currentTimeMillis(),leagueSlotClubKey,c,p,rosterPlayers,saveSlot,tutorial)}
+ if(confirm)Confirm("Slot $saveSlot überschreiben?","Der bisherige Spielstand in diesem Slot wird ersetzt.",{confirm=false}){confirm=false;vm.createCustomReal(System.currentTimeMillis(),leagueSlotClubKey,c,p,rosterPlayers,saveSlot,tutorial,fantasyCup)}
 }
 
 @Composable fun CreationScreen(vm: GameViewModel,slots: List<SaveSummary>,busy: Boolean,onBack: ()->Unit){
