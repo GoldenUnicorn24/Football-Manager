@@ -221,6 +221,15 @@ class EngineTest {
   m.assistantSubPending=true;m.assistantSubOutIds=s.map{it.outId}.toMutableList();m.assistantSubInIds=s.map{it.inId}.toMutableList();m.assistantSubReasons=s.map{it.reason}.toMutableList();m.assistantSubOutId=s.first().outId;m.assistantSubInId=s.first().inId
   val before=if(home)m.homeSubs else m.awaySubs;MatchEngine.acceptAssistantSubstitution(w,m,setOf(s.first().outId));assertEquals(before+1,if(home)m.homeSubs else m.awaySubs);assertTrue(s.first().outId !in lineup);assertTrue(s[1].outId in lineup);assertFalse(m.assistantSubPending)
  }
+ @Test fun reconcileMatchdaySelectionKeepsValidChosenStarters(){
+  val w=WorldFactory.createWorld(60605L);val c=w.club();WorldFactory.autoLineup(w);val before=c.tactics.xi.toList();val a=before.indexOfFirst{w.players[it]?.position!=Position.TW};val b=before.indices.first{it!=a&&w.players[before[it]]?.position!=Position.TW};val tmp=c.tactics.xi[a];c.tactics.xi[a]=c.tactics.xi[b];c.tactics.xi[b]=tmp;val custom=c.tactics.xi.toList()
+  WorldFactory.reconcileMatchdaySelection(w);assertEquals(custom,c.tactics.xi,"Gültige manuelle Startelf darf durch Kaderabgleich nicht neu sortiert werden.")
+  val unavailable=c.tactics.xi[a];w.players.getValue(unavailable).unavailableWeeks=1;WorldFactory.reconcileMatchdaySelection(w);assertNotEquals(unavailable,c.tactics.xi[a]);custom.indices.filter{it!=a}.forEach{assertEquals(custom[it],c.tactics.xi[it],"Nur der ungültige Platz darf repariert werden.")}
+ }
+ @Test fun academyPlayerNeedsSeniorCallUpBeforeLineupAssignment(){
+  val w=WorldFactory.createWorld(60606L);val youth=w.squad().first{it.youth};assertFailsWith<IllegalArgumentException>{WorldFactory.assignSlot(w,1,youth.id)}
+  YouthCompetitionSystem.temporaryCallUp(w,youth.id);WorldFactory.assignSlot(w,1,youth.id);assertEquals(youth.id,w.club().tactics.xi[1])
+ }
  @Test fun relatedPositionsUseSoftPenaltyAndExposeSecondaryOptions(){
   val p=Player(999,position=Position.DM,attributes=Attributes(82,74,88,84,87,83,88,87,75,9,80))
   val dm=p.ratingAt(Position.DM);val zm=p.ratingAt(Position.ZM)
