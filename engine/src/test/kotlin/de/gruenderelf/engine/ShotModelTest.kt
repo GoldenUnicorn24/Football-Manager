@@ -60,7 +60,7 @@ class ShotModelTest {
         val pVsEliteKeeper=ShotModel.goalProbability(xg,elite,eliteKeeper,ctx)
         println("EXECUTION weak=$pWeak elite=$pElite eliteVsEliteKeeper=$pVsEliteKeeper xg=$xg")
         assertTrue(pElite>pWeak*1.15)
-        assertTrue(pVsEliteKeeper<pElite*.93)
+        assertTrue(pVsEliteKeeper<pElite*.86,"elite keeper should materially reduce scoring: average=$pElite eliteKeeper=$pVsEliteKeeper")
         assertTrue(pElite<xg*1.35+.01)
     }
 
