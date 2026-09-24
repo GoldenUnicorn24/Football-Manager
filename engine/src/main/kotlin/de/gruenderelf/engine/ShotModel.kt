@@ -103,7 +103,15 @@ object ShotModel {
         val keeperQuality = keeper?.let {
             it.attributes.keeping * .68 + it.hidden.consistency * .10 + it.hidden.pressure * .06 + it.sharpness * .08 + it.fitness.coerceIn(0.0, 100.0) * .05 + (it.form * 10.0).coerceIn(30.0, 90.0) * .03
         } ?: 20.0
-        val keeperModifier = (1.0 - (keeperQuality - 50.0) * .0032).coerceIn(.82, 1.18)
+        // Keeper quality must materially change finishing outcomes. Close-range chances stay dangerous,
+        // while strong keepers now save a clearly larger share of otherwise identical shots.
+        val keeperImpact = when (context.type) {
+            ShotType.PENALTY -> .0033
+            ShotType.CLOSE_RANGE, ShotType.CUTBACK, ShotType.REBOUND -> .0043
+            ShotType.ONE_ON_ONE -> .0050
+            else -> .0048
+        }
+        val keeperModifier = (1.0 - (keeperQuality - 50.0) * keeperImpact).coerceIn(.74, 1.24)
         val primeExecution = if (prime) 1.10 else 1.0
         val raw = xg * finishing * technique * consistency * bigMoment * form * fitness * foot * executionUnderPressure * keeperModifier * primeExecution
         val ceiling = if (prime) minOf(.95, xg * 1.58 + .018) else minOf(.92, xg * 1.34 + .006)
