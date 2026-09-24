@@ -113,6 +113,16 @@ class EngineTest {
   val copy=SaveCodec.decode(SaveCodec.encode(w));assertEquals(w.fixtures.count{it.competition!=CompetitionType.LEAGUE},copy.fixtures.count{it.competition!=CompetitionType.LEAGUE});assertEquals(4,CompetitionEngine.groupTable(copy,"A").size)
  }
 
+ @Test fun matchStartRepairsGoalkeeperSlot(){
+  val w=WorldFactory.createWorld(6001L);val f=w.nextFixture()!!;val user=w.club()
+  val slots=Formations.positions(user.tactics.formation);val gkSlot=slots.indexOf(Position.TW);assertTrue(gkSlot>=0)
+  val keeperIndex=user.tactics.xi.indexOfFirst{id->w.players[id]?.position==Position.TW};assertTrue(keeperIndex>=0)
+  val fieldIndex=user.tactics.xi.indexOfFirst{id->id!=0&&w.players[id]?.position!=Position.TW};assertTrue(fieldIndex>=0)
+  val tmp=user.tactics.xi[gkSlot];user.tactics.xi[gkSlot]=user.tactics.xi[fieldIndex];user.tactics.xi[fieldIndex]=tmp
+  val m=MatchEngine.start(w,f);val own=if(w.user.clubId==m.homeId)m.homeXi else m.awayXi
+  assertEquals(Position.TW,w.players.getValue(own[gkSlot]).position)
+ }
+
  @Test fun fullMatchEndsAfter90WithValidScore(){val w=WorldFactory.createWorld(6);val m=MatchEngine.simulateFullMatch(w,w.nextFixture()!!);assertTrue(m.finished&&m.minute>=90);assertTrue(m.home.goals in 0..m.home.shots);assertTrue(m.away.goals in 0..m.away.shots);assertEquals(m.home.goals+m.away.goals,m.goals.size)}
  @Test fun quickSimulationStopsAtHalfTimeAndCanFinishSameMatch(){val w=WorldFactory.createWorld(6057);val m=MatchEngine.start(w);repeat(8){if(!m.pendingDecision&&!m.incidentPause)MatchEngine.step(w,m)};MatchEngine.simulateToHalfTime(w,m);assertTrue(m.halfTime);assertEquals(MatchBreakType.HALF_TIME,m.breakType);assertEquals(1,m.period);assertFalse(m.finished);val halfScore=m.home.goals+m.away.goals;MatchEngine.simulateRemaining(w,m);assertTrue(m.finished);assertTrue(m.minute>=90);assertTrue(m.home.goals+m.away.goals>=halfScore)}
  @Test fun quickSimulationResolvesIncidentWithoutStalling(){val w=WorldFactory.createWorld(6058);val m=MatchEngine.start(w);MatchEngine.simulateToHalfTime(w,m);assertTrue(m.halfTime);MatchEngine.secondHalf(m);m.incidentPause=true;m.incidentReason=MatchPauseReason.RED_CARD;m.incidentClubId=m.awayId;m.incidentPlayerId=m.awayXi.first();MatchEngine.simulateRemaining(w,m);assertTrue(m.finished);assertFalse(m.pendingDecision);assertFalse(m.incidentPause)}
