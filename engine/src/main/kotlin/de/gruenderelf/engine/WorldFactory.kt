@@ -159,6 +159,62 @@ object WorldFactory {
 
  private fun realBaseRating(level:Int)=when(level){1->74;2->68;3->62;4->55;else->49}
 
+ fun migrateExpandedRealModeLeagues(w:World):Int {
+  if(!w.privateTopClubMode)return 0
+  val existing=w.leagues.map{it.name}.toMutableSet()
+  val missing=RealModeDatabase.leagues.filter{it.name !in existing}
+  if(missing.isEmpty())return 0
+  val rng=SeededRandom(w.rngState xor 0x455850414E44L)
+  var nextClubId=(w.clubs.keys.maxOrNull()?:0)+1
+  var addedLeagues=0
+  for(leagueSeed in missing){
+   val league=League(leagueSeed.tier,leagueSeed.name);w.leagues.add(league);existing+=leagueSeed.name;addedLeagues++
+   for((clubIndex,clubSeed) in leagueSeed.clubs.withIndex()){
+    val id=nextClubId++;league.clubIds.add(id)
+    val short=clubSeed.shortName.uppercase().take(4).ifBlank{deriveShortName(clubSeed.name)}
+    val fallbackRating=realBaseRating(leagueSeed.level)
+    val avg=clubSeed.players.map{it.rating}.average().takeIf{!it.isNaN()}?:fallbackRating.toDouble()
+    val reputation=(avg+8).toInt().coerceIn(42,96)
+    val club=Club(id,clubSeed.name,short,leagueSeed.tier,city=clubSeed.country,founded=0,primary=clubSeed.primary,secondary=clubSeed.secondary,
+     logo=Logo(clubIndex%8,short),stadium=Stadium(name="Heimstadion",capacity=(when(leagueSeed.level){1->28000;2->18000;3->10000;4->4500;else->2200})+(reputation-55).coerceAtLeast(0)*350,pitchQuality=(94-(leagueSeed.level-1)*5).coerceAtLeast(70),surface=Surface.GRASS,floodlights=leagueSeed.level<=4,training=(86-(leagueSeed.level-1)*9).coerceAtLeast(45),youth=(80-(leagueSeed.level-1)*8).coerceAtLeast(40),medicine=(84-(leagueSeed.level-1)*8).coerceAtLeast(40)),
+     budget=(when(leagueSeed.level){1->20_000_000L;2->8_000_000L;3->2_500_000L;4->650_000L;else->220_000L})+(reputation-55).coerceAtLeast(0)*180_000L,reputation=reputation,members=(when(leagueSeed.level){1->18000;2->9000;3->4500;4->1800;else->700})+(reputation-55).coerceAtLeast(0)*250,sponsor=Sponsor("Hauptpartner",when(leagueSeed.level){1->42000;2->22000;3->9000;4->3200;else->1200}))
+    club.kits.home.primary=clubSeed.primary;club.kits.home.secondary=clubSeed.secondary;club.kits.away.primary=clubSeed.secondary;club.kits.away.secondary=clubSeed.primary
+    w.clubs[id]=club
+    if(clubSeed.players.isNotEmpty()){
+     clubSeed.players.forEach{ps->
+      val parts=ps.name.trim().split(Regex("\\s+")).filter{it.isNotBlank()};val first=if(parts.size==1)parts.single() else parts.dropLast(1).joinToString(" ");val last=if(parts.size==1)"" else parts.last()
+      val rating=ps.rating.coerceIn(45,94)
+      val player=Player(w.nextIds.player++,id,first,last,ps.born,nationality=ps.nationality,position=ps.position,number=ps.number.coerceIn(1,99),attributes=realSeedAttributes(rating,ps.position),
+       hidden=Hidden((rating+7).coerceAtMost(96),25,72,75,65,75,76,70),fitness=94.0,morale=70,form=6.6,sharpness=74,wage=(300+(6-leagueSeed.level).coerceAtLeast(1)*900+(reputation-50)*55).coerceAtLeast(120))
+      player.secondary=player.secondaryOptions().take(3).toMutableList();w.players[player.id]=player
+     }
+    }else{
+     val positions=Formations.positions("4-2-3-1")+listOf(Position.TW,Position.IV,Position.LV,Position.RV,Position.DM,Position.ZM,Position.OM,Position.LA,Position.RA,Position.ST,Position.ST)
+     positions.forEach{pos->val player=generatePlayer(w.nextIds.player++,id,leagueSeed.level,pos,rng,w.calendar.season);player.number=(1..99).first{n->w.squad(id).none{it.number==n}};player.nationality=leagueSeed.country;w.players[player.id]=player}
+    }
+    while(w.squad(id).count{!it.youth}<20){
+     val filled=w.squad(id);val position=Formations.positions("4-2-3-1").firstOrNull{pos->filled.none{it.position==pos}}?:rng.pick(Position.entries)
+     val player=generatePlayer(w.nextIds.player++,id,leagueSeed.level,position,rng,w.calendar.season);player.number=(1..99).first{n->filled.none{it.number==n}};player.nationality=leagueSeed.country;w.players[player.id]=player
+    }
+    YouthEngine.configureClub(club);ClubSystems.clamp(club);autoLineup(w,id);club.wageBill=w.squad(id).sumOf{it.wage}
+   }
+   val ids=league.clubIds.toList();val order=ids.toMutableList();val rounds=ids.size-1;val half=ids.size/2
+   for(round in 0 until rounds){
+    for(i in 0 until half){
+     val a=order[i];val b=order[order.lastIndex-i];val home=if((round+i)%2==0)a else b;val away=if(home==a)b else a
+     w.fixtures.add(Fixture(w.nextIds.fixture++,w.calendar.season,league.tier,round+1,home,away,competition=CompetitionType.LEAGUE))
+     w.fixtures.add(Fixture(w.nextIds.fixture++,w.calendar.season,league.tier,round+1+rounds,away,home,competition=CompetitionType.LEAGUE))
+    }
+    order.add(1,order.removeAt(order.lastIndex))
+   }
+  }
+  w.leagues.sortBy{it.tier};w.fixtures.sortWith(compareBy<Fixture>{it.matchday}.thenBy{it.competition.sortPriority()}.thenBy{it.tier}.thenBy{it.id})
+  w.rngState=rng.state
+  w.news("v0.5.22-Ligenupdate","$addedLeagues zusätzliche Liga-Strukturen wurden in diesen bestehenden Spielstand übernommen. Deine bisherigen Vereine, Spieler und Ergebnisse bleiben erhalten.","good")
+  return addedLeagues
+ }
+
+
  fun createRealModeWorld(seed: Long,clubKey: String,person: PlayerDraft,fantasyCupEnabled:Boolean=true): World {
   validateDraft(person,"Dein Spieler")
   val selected=RealModeDatabase.requireClub(clubKey)
