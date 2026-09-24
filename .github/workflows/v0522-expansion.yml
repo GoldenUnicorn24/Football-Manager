@@ -21,12 +21,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Prepare Gradle
         run: chmod +x gradlew
-      - name: Engine tests
-        run: ./gradlew --no-daemon :engine:test --stacktrace
-      - name: App unit tests
-        run: ./gradlew --no-daemon :app:testDebugUnitTest --stacktrace
-      - name: Android lint
-        run: ./gradlew --no-daemon :app:lintDebug --stacktrace
       - name: Build installable debug APK
         run: ./gradlew --no-daemon :app:assembleDebug --stacktrace
       - name: Upload installable debug APK
@@ -35,6 +29,12 @@ jobs:
           name: Gruenderelf-v0.5.22-HCTR-expansion-installable
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Engine tests
+        run: ./gradlew --no-daemon :engine:test --stacktrace
+      - name: App unit tests
+        run: ./gradlew --no-daemon :app:testDebugUnitTest --stacktrace
+      - name: Android lint
+        run: ./gradlew --no-daemon :app:lintDebug --stacktrace
       - name: Build unsigned release APK
         run: ./gradlew --no-daemon :app:assembleRelease --stacktrace
       - name: Upload unsigned release APK
