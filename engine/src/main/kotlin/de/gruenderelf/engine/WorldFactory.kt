@@ -335,6 +335,16 @@ object WorldFactory {
   }
   c.tactics.bench=valid
  }
+ fun reconcileMatchdaySelection(w:World,clubId:Int=w.user.clubId){
+  val c=w.clubs.getValue(clubId)
+  if(clubId!=w.user.clubId){autoLineup(w,clubId);return}
+  if(c.tactics.xi.size!=11)c.tactics.xi=MutableList(11){0}
+  val slots=Formations.positions(c.tactics.formation);val used=mutableSetOf<Int>()
+  c.tactics.xi=c.tactics.xi.map{pid->if(w.players[pid]?.let{it.clubId==clubId&&it.available&&!it.youth&&used.add(pid)}==true)pid else 0}.toMutableList()
+  val available=w.squad(clubId).filter{it.available&&!it.youth&&it.id !in used}.toMutableList()
+  c.tactics.xi.indices.filter{c.tactics.xi[it]==0}.forEach{i->val target=slots.getOrElse(i){Position.ZM};val p=available.maxByOrNull{it.ratingAt(target)*(.6+it.fitness*.004)};if(p!=null){c.tactics.xi[i]=p.id;used+=p.id;available.remove(p)}}
+  normalizeBench(w,c,true)
+ }
  fun toggleBench(w:World,playerId:Int){
   require(w.live==null){"Ersatzbank nur vor dem Spiel ändern."};val c=w.club();val p=w.players.getValue(playerId)
   require(p.clubId==c.id&&p.available&&!p.youth&&playerId !in c.tactics.xi){"Dieser Spieler kann nicht auf die Bank."}
