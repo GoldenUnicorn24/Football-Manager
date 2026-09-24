@@ -1218,6 +1218,15 @@ object MatchEngine {
   w.clubs.getValue(clubId).tactics.formation=newFormation;w.clubs.getValue(clubId).tactics.xi=reordered.toMutableList();MatchAnalysisSystem.recordTacticChange(w,m,clubId,"Formation $newFormation");log(m,"Taktik: ${w.clubs.getValue(clubId).shortName} stellt auf $newFormation um.")
  }
 
+ fun moveLiveLineupSlot(w:World,m:LiveMatch,fromIndex:Int,toIndex:Int,clubId:Int=w.user.clubId){
+  require(!m.finished&&!m.pendingDecision){"Aufstellung gerade nicht verschiebbar."};val home=clubId==m.homeId;require(home||clubId==m.awayId){"Verein spielt nicht in dieser Partie."}
+  val lineup=xi(m,home);require(fromIndex in lineup.indices&&toIndex in lineup.indices){"Ungültiger Aufstellungsplatz."};require(fromIndex!=toIndex){"Spieler steht bereits dort."}
+  val moving=lineup[fromIndex];require(moving!=0){"Leeren Platz kannst du nicht ziehen."}
+  val other=lineup[toIndex];lineup[toIndex]=moving;lineup[fromIndex]=other
+  w.clubs.getValue(clubId).tactics.xi=lineup.toMutableList()
+  val slots=Formations.positions(formation(m,home));val from=slots.getOrNull(fromIndex)?.label?:"Position";val to=slots.getOrNull(toIndex)?.label?:"Position"
+  MatchAnalysisSystem.recordTacticChange(w,m,clubId,"Positionswechsel $from → $to");log(m,"Taktische Neuordnung: ${w.players[moving]?.lastName?:"Spieler"} rückt von $from auf $to.")
+ }
  private fun reorderLineup(w: World,current: List<Int>,newFormation: String): MutableList<Int>{
   val players=current.filter{it!=0}.distinct().toMutableList();val slots=Formations.positions(newFormation);val result=MutableList(slots.size){0};val open=slots.indices.toMutableList()
   while(players.isNotEmpty()&&open.isNotEmpty()){
