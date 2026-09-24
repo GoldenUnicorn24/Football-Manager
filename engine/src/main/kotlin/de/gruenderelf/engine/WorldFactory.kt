@@ -353,7 +353,7 @@ object WorldFactory {
   else{require(c.tactics.bench.size<7){"Die Bank ist voll. Entferne zuerst einen Ersatzspieler."};c.tactics.bench.add(playerId)}
  }
  fun assignSlot(w: World,index: Int,playerId: Int){
-  require(w.live==null){"Aufstellung im Spiel über Wechsel ändern."};val c=w.club();val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.available){"Spieler nicht verfügbar."};val xi=c.tactics.xi;require(index in 0..10)
+  require(w.live==null){"Aufstellung im Spiel über Wechsel ändern."};val c=w.club();val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.available&&!p.youth){"Spieler nicht für den Profikader verfügbar."};val xi=c.tactics.xi;require(index in 0..10)
   val previous=xi[index];val old=xi.indexOf(playerId)
   if(old>=0)xi[old]=previous else{c.tactics.bench.remove(playerId);if(previous!=0&&w.players[previous]?.available==true&&previous !in c.tactics.bench&&c.tactics.bench.size<7)c.tactics.bench.add(previous)}
   xi[index]=playerId;normalizeBench(w,c,true)
