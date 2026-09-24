@@ -54,6 +54,8 @@ object MatchEngine {
     c.tactics.xi.indices.filter{c.tactics.xi[it]==0}.forEach{i->val pos=Formations.positions(c.tactics.formation)[i];val p=available.maxByOrNull{it.ca*it.fit(pos)};if(p!=null){c.tactics.xi[i]=p.id;available.remove(p)}}
     WorldFactory.rebuildBench(w,c)
    }
+   ensureGoalkeeperSlot(w,c)
+   WorldFactory.rebuildBench(w,c)
   }
   val h=w.clubs.getValue(f.homeId);val a=w.clubs.getValue(f.awayId)
   autoTuneAiTactics(w,h,a);autoTuneAiTactics(w,a,h)
@@ -100,6 +102,27 @@ object MatchEngine {
  }
  private fun stats(m: LiveMatch,home: Boolean)=if(home)m.home else m.away
  private fun xi(m: LiveMatch,home: Boolean)=if(home)m.homeXi else m.awayXi
+
+ private fun goalkeeperId(w:World,m:LiveMatch,home:Boolean):Int{
+  val lineup=xi(m,home);val slots=Formations.positions(formation(m,home));val slotIndex=slots.indexOf(Position.TW)
+  val slotted=lineup.getOrNull(slotIndex)?:0
+  if(slotted!=0&&slotted !in m.injured&&slotted !in m.sentOff&&w.players[slotted]?.clubId==clubId(m,home))return slotted
+  return lineup.firstOrNull{it!=0&&it !in m.injured&&it !in m.sentOff&&w.players[it]?.position==Position.TW}
+   ?:lineup.firstOrNull{it!=0&&it !in m.injured&&it !in m.sentOff}
+   ?:0
+ }
+
+ private fun ensureGoalkeeperSlot(w:World,c:Club){
+  val slots=Formations.positions(c.tactics.formation);val slotIndex=slots.indexOf(Position.TW)
+  if(slotIndex !in c.tactics.xi.indices)return
+  val current=c.tactics.xi[slotIndex]
+  if(w.players[current]?.let{it.available&&it.clubId==c.id&&it.position==Position.TW}==true)return
+  val inXi=c.tactics.xi.indexOfFirst{pid->w.players[pid]?.let{it.available&&it.clubId==c.id&&it.position==Position.TW}==true}
+  if(inXi>=0){val swap=c.tactics.xi[slotIndex];c.tactics.xi[slotIndex]=c.tactics.xi[inXi];c.tactics.xi[inXi]=swap;return}
+  val keeper=w.squad(c.id).filter{it.available&&it.position==Position.TW&&it.id !in c.tactics.xi}.maxByOrNull{it.ratingAt(Position.TW)}?:return
+  c.tactics.xi[slotIndex]=keeper.id
+  WorldFactory.rebuildBench(w,c)
+ }
 
  /** Näherung für die Spielerentscheidungs-Einblendung. Das Match besitzt bewusst keine
   * sichtbaren Spielerpunkte; der Gegnerdruck wird deshalb aus Zone, Formation und Pressing
@@ -534,7 +557,7 @@ object MatchEngine {
    val keeperBack=phase==LivePhase.POSSESSION&&rng.chance((.28+oppEffective.pressing*.055+(if(build==BuildUp.TIKI_TAKA||build==BuildUp.SHORT).12 else 0.0)).coerceAtMost(.72))
    if(keeperBack){
     m.ballY=(ownKeeperY+(rng.nextDouble().toFloat()-.5f)*.035f).coerceIn(.04f,.96f);m.ballX=(.5f+(rng.nextDouble().toFloat()-.5f)*.10f).coerceIn(.05f,.95f)
-    m.livePlayerId=xi(m,home).firstOrNull{it!=0&&w.players[it]?.position==Position.TW}?:m.livePlayerId;m.liveDetail="Rückpass zum Torwart"
+    m.livePlayerId=goalkeeperId(w,m,home).takeIf{it!=0}?:m.livePlayerId;m.liveDetail="Rückpass zum Torwart"
    }else{
     val backward=.08f+rng.nextDouble().toFloat()*.12f;m.ballY=(m.ballY-dir*backward).coerceIn(.05f,.95f)
     val lane=listOf(.18f,.32f,.50f,.68f,.82f)[rng.int(0,4)];m.ballX=(m.ballX+(lane-m.ballX)*.55f).coerceIn(.04f,.96f);m.liveDetail=if(build==BuildUp.TIKI_TAKA)"Neuaufbau über hinten" else "Angriff abgebrochen – Neuaufbau"
@@ -897,7 +920,7 @@ object MatchEngine {
   val candidates=xi(m,home).filter{it!=0&&it !in m.injured}.sortedByDescending{id->val p=w.players.getValue(id);p.attributes.setPieces*.40+p.attributes.finishing*.32+p.hidden.pressure*.18+p.attributes.technique*.10}
   return candidates.getOrNull(taken % candidates.size.coerceAtLeast(1))?:0
  }
- private fun shootoutKeeper(w: World,m: LiveMatch,home: Boolean)=xi(m,home).firstOrNull{it!=0&&it !in m.injured&&w.players[it]?.position==Position.TW}?:xi(m,home).firstOrNull{it!=0}?:0
+ private fun shootoutKeeper(w: World,m: LiveMatch,home: Boolean)=goalkeeperId(w,m,home)
  private fun shootoutShouldEnd(m: LiveMatch): Boolean {
   val hr=(5-m.shootoutHomeTaken).coerceAtLeast(0);val ar=(5-m.shootoutAwayTaken).coerceAtLeast(0)
   if(m.homePens>m.awayPens+ar||m.awayPens>m.homePens+hr)return true
@@ -1209,7 +1232,12 @@ object MatchEngine {
   require(!m.finished&&!m.pendingDecision){"Wechsel gerade nicht möglich."};val home=clubId==m.homeId;require(home||clubId==m.awayId)
   val lineup=xi(m,home);val bench=if(home)m.homeBench else m.awayBench
   val issue=CompetitionRulesEngine.substitutionIssue(w,m,home);require(issue==null){issue?:"Wechsel nicht möglich."};require(out!=0&&out in lineup&&incoming in bench&&w.players.getValue(incoming).available){"Dieser Wechsel ist nicht möglich."}
-  lineup[lineup.indexOf(out)]=incoming;bench.remove(incoming);CompetitionRulesEngine.registerSubstitution(m,home);if(home)m.homeSubs++ else m.awaySubs++;addStoppageTime(m,20)
+  val outIndex=lineup.indexOf(out);val target=Formations.positions(formation(m,home)).getOrNull(outIndex)
+  if(target==Position.TW&&w.players.getValue(incoming).position!=Position.TW){
+   val backupAvailable=bench.any{it!=incoming&&w.players[it]?.let{p->p.available&&p.position==Position.TW}==true}
+   require(!backupAvailable){"Im Tor muss ein verfügbarer Torwart eingesetzt werden."}
+  }
+  lineup[outIndex]=incoming;bench.remove(incoming);CompetitionRulesEngine.registerSubstitution(m,home);if(home)m.homeSubs++ else m.awaySubs++;addStoppageTime(m,20)
   ensurePerformance(w,m,incoming);if(incoming !in m.participation)m.participation.add(incoming)
   log(m,"Wechsel: ${w.players.getValue(incoming).name} für ${w.players.getValue(out).name}.")
  }
@@ -1316,7 +1344,7 @@ object MatchEngine {
  private fun resolveShot(w: World,m: LiveMatch,home: Boolean,id: Int,rng: SeededRandom,assist: Int=0,typeHint: ShotType?=null,allowRebound: Boolean=true){
   if(id==0)return
   val s=stats(m,home);val p=w.players.getValue(id)
-  val keeperId=xi(m,!home).firstOrNull{it!=0&&it !in m.injured&&w.players[it]?.position==Position.TW}?:xi(m,!home).firstOrNull{it!=0&&it !in m.injured}?:0
+  val keeperId=goalkeeperId(w,m,!home)
   val keeper=w.players[keeperId]
   val baseGeometry=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home))
   val type=typeHint?:when{baseGeometry.distanceMeters>=23.5->ShotType.LONG_RANGE;baseGeometry.distanceMeters<=8.5->ShotType.CLOSE_RANGE;else->ShotType.BOX_SHOT}
