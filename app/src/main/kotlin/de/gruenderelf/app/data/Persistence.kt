@@ -50,7 +50,7 @@ private fun encodeStoredWorld(raw:String):String{
  GZIPOutputStream(out).bufferedWriter(Charsets.UTF_8).use{it.write(raw)}
  return SAVE_STORAGE_PREFIX+Base64.getEncoder().encodeToString(out.toByteArray())
 }
-private fun decodeStoredWorld(stored:String):String{
+internal fun decodeStoredWorld(stored:String):String{
  if(!stored.startsWith(SAVE_STORAGE_PREFIX))return stored
  val packed=Base64.getDecoder().decode(stored.removePrefix(SAVE_STORAGE_PREFIX))
  return GZIPInputStream(ByteArrayInputStream(packed)).bufferedReader(Charsets.UTF_8).use{it.readText()}
