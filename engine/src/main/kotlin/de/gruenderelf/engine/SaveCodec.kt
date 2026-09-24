@@ -83,6 +83,7 @@ object SaveCodec {
    require(w.leagues.map{it.tier}.toSet().size==w.leagues.size&&w.leagues.all{it.clubIds.size in 6..24&&it.clubIds.size%2==0}&&leagueClubIds.size==w.leagues.sumOf{it.clubIds.size}&&leagueClubIds.all{it in w.clubs}){"Real-Modus-Ligastruktur beschädigt."}
   }else require(w.leagues.map{it.tier}.toSet()==(1..10).toSet()&&w.leagues.all{it.clubIds.size==12}&&leagueClubIds.size==120&&leagueClubIds.all{it in w.clubs}){"Ligastruktur beschädigt."}
   WorldFactory.migrateGeneratedIdentity(w)
+  if(w.privateTopClubMode)WorldFactory.migrateExpandedRealModeLeagues(w)
   CompetitionEngine.ensureForLoadedWorld(w)
   require(w.players.all{(id,p)->id==p.id&&(p.clubId==0||p.clubId in w.clubs)}){"Spielerliste beschädigt."}
   val leagueFixtures=w.fixtures.filter{it.competition==CompetitionType.LEAGUE}
