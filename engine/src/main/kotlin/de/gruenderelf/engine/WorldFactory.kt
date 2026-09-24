@@ -317,7 +317,7 @@ object WorldFactory {
   val golden=if(c.academy.goldenGeneration)6 else 0;val level=(20+c.stadium.youth/3+rng.int(0,9)+golden).coerceAtMost(70);p.attributes=Attributes(level,level,level,level,level,level,level,level,level,if(p.position==Position.TW)level+6 else 10,level);p.secondary=p.secondaryOptions().take(2).toMutableList();YouthEngine.seedProfile(w,c,p,rng);p.role=p.youthProfile.roleSpark;p.homegrownClubId=c.id;w.players[p.id]=p
  }
  fun autoLineup(w: World,clubId: Int=w.user.clubId){
-  val c=w.clubs.getValue(clubId);val available=w.squad(clubId).filter{it.available}.toMutableList()
+  val c=w.clubs.getValue(clubId);val senior=w.squad(clubId).filter{it.available&&!it.youth};val available=(if(senior.size>=11)senior else w.squad(clubId).filter{it.available}).toMutableList()
   c.tactics.xi=Formations.positions(c.tactics.formation).map{pos->val best=available.maxByOrNull{it.ratingAt(pos)*(.6+it.fitness*.004)};available.remove(best);best?.id?:0}.toMutableList();rebuildBench(w,c)
  }
  fun rebuildBench(w: World,c: Club){
