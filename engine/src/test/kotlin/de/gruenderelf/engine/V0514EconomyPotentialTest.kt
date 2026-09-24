@@ -26,6 +26,19 @@ class V0514EconomyPotentialTest {
   val after=w.club().budget;val duplicate=CompetitionPrizeSystem.awardSeasonTitles(w,tables);assertEquals(0,duplicate.userTotal);assertEquals(after,w.club().budget,"Titelprämien dürfen nicht doppelt ausgezahlt werden.")
  }
 
+ @Test fun internationalCupTitlesPayConfiguredFinalPrizesExactlyOnce(){
+  val selected=RealModeDatabase.leagues.first().clubs.first();val w=WorldFactory.createRealModeWorld(51404L,selected.key,PlayerDraft(firstName="International",lastName="Preis",number=72,position=Position.ZM));val user=w.user.clubId
+  val tables=w.leagues.associate{league->league.tier to league.clubIds.map{TableRow(it)}.sortedBy{if(it.clubId==user)1 else 0}}
+  val opponent=w.clubs.keys.first{it!=user}
+  fun addFinal(type:CompetitionType,round:Int,day:Int){w.fixtures.add(Fixture(id=w.nextIds.fixture++,season=w.calendar.season,tier=w.club().tier,matchday=day,homeId=user,awayId=opponent,played=true,competition=type,round=round,stage="Finale",winnerId=user))}
+  addFinal(CompetitionType.EUROPA_LEAGUE,17,40);addFinal(CompetitionType.EURO_ELITE,10,41);addFinal(CompetitionType.CLUB_WORLD_CUP,7,42);addFinal(CompetitionType.ETERNAL_CROWN,9,43)
+  val before=w.club().budget;val result=CompetitionPrizeSystem.awardSeasonTitles(w,tables)
+  val expected=CompetitionPrizeSystem.europaLeaguePrize(w)*2+CompetitionPrizeSystem.clubWorldCupPrize(w)+CompetitionPrizeSystem.eternalCrownPrize(w)
+  assertEquals(expected,result.userTotal);assertEquals(before+expected,w.club().budget)
+  assertTrue("Europa-League-Sieger" in result.userAwards);assertTrue("Europa-Eliteliga-Sieger" in result.userAwards);assertTrue("Club-World-Cup-Sieger" in result.userAwards);assertTrue("Sieger der Krone der Kontinente" in result.userAwards)
+  val after=w.club().budget;assertEquals(0,CompetitionPrizeSystem.awardSeasonTitles(w,tables).userTotal);assertEquals(after,w.club().budget)
+ }
+
  @Test fun targetedPotentialTrainingRaisesCeilingForYouthAndSenior(){
   val w=WorldFactory.createWorld(51403L);w.club().budget=100_000_000L;w.club().stadium.training=100;w.club().stadium.gym=100;w.club().stadium.youth=100;w.club().stadium.medicine=100;w.club().dynamics.staffQuality=100
   val players=listOf(w.squad().first{it.youth},w.squad().first{!it.youth&&!it.retired&&it.id!=w.user.playerId})
