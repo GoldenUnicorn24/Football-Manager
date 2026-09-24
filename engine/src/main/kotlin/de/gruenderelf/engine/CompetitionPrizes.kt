@@ -36,6 +36,10 @@ object CompetitionPrizeSystem {
   for(league in w.leagues){val winner=tables[league.tier]?.firstOrNull()?.clubId?:continue;val amount=leagueTitlePrize(w,league.tier);if(pay(w,"$season:LEAGUE:${league.tier}:$winner",winner,amount)&&winner==w.user.clubId){userTotal+=amount;userAwards+="Meister der ${WorldFactory.leagueName(w,league.tier)}"}}
   val cupWinner=finalWinner(w,CompetitionType.NATIONAL_CUP);val cupAmount=nationalCupPrize(w);if(pay(w,"$season:NATIONAL_CUP:$cupWinner",cupWinner,cupAmount)&&cupWinner==w.user.clubId){userTotal+=cupAmount;userAwards+=if(w.privateTopClubMode)"DFB-Pokalsieger" else "${CompetitionEngine.displayName(w,CompetitionType.NATIONAL_CUP)}-Sieger"}
   val clWinner=finalWinner(w,CompetitionType.CHAMPIONS_LEAGUE);val clAmount=championsLeaguePrize(w);if(pay(w,"$season:CHAMPIONS_LEAGUE:$clWinner",clWinner,clAmount)&&clWinner==w.user.clubId){userTotal+=clAmount;userAwards+="Champions-League-Sieger"}
+  val elWinner=finalWinner(w,CompetitionType.EUROPA_LEAGUE);val elAmount=europaLeaguePrize(w);if(pay(w,"$season:EUROPA_LEAGUE:$elWinner",elWinner,elAmount)&&elWinner==w.user.clubId){userTotal+=elAmount;userAwards+="Europa-League-Sieger"}
+  val eliteWinner=finalWinner(w,CompetitionType.EURO_ELITE);val eliteAmount=europaLeaguePrize(w);if(pay(w,"$season:EURO_ELITE:$eliteWinner",eliteWinner,eliteAmount)&&eliteWinner==w.user.clubId){userTotal+=eliteAmount;userAwards+="Europa-Eliteliga-Sieger"}
+  val worldWinner=finalWinner(w,CompetitionType.CLUB_WORLD_CUP);val worldAmount=clubWorldCupPrize(w);if(pay(w,"$season:CLUB_WORLD_CUP:$worldWinner",worldWinner,worldAmount)&&worldWinner==w.user.clubId){userTotal+=worldAmount;userAwards+="Club-World-Cup-Sieger"}
+  val crownWinner=finalWinner(w,CompetitionType.ETERNAL_CROWN);val crownAmount=eternalCrownPrize(w);if(pay(w,"$season:ETERNAL_CROWN:$crownWinner",crownWinner,crownAmount)&&crownWinner==w.user.clubId){userTotal+=crownAmount;userAwards+="Sieger der Krone der Kontinente"}
   if(userTotal>0)w.news("Titelprämien ausgezahlt","Für ${userAwards.joinToString(", ")} erhält der Verein insgesamt ${userTotal} € zusätzliches Preisgeld.","good")
   return Result(userTotal,userAwards)
  }
