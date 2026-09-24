@@ -65,6 +65,10 @@ object LeagueCalibration {
   if(fixture==null)return MatchCalibration()
   if(fixture.competition in listOf(CompetitionType.CHAMPIONS_LEAGUE,CompetitionType.EUROPA_LEAGUE,CompetitionType.EURO_ELITE))
    return MatchCalibration(chanceCreation=1.06,conversion=1.02,turnover=.97,tempo=1.04)
+  // International cups must not inherit the home country's league conversion boost.
+  // Otherwise e.g. a Bundesliga participant would make both teams score at Bundesliga rates.
+  if(fixture.competition in listOf(CompetitionType.CLUB_WORLD_CUP,CompetitionType.ETERNAL_CROWN))
+   return MatchCalibration(chanceCreation=1.02,conversion=.98,turnover=.99,tempo=1.02)
   val league=w.leagues.firstOrNull{fixture.homeId in it.clubIds || fixture.awayId in it.clubIds}?:return MatchCalibration()
   val country=RealModeDatabase.countryForLeague(league.name)
   val level=RealModeDatabase.levelForTier(league.tier)
