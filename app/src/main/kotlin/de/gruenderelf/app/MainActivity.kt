@@ -54,6 +54,7 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
      composable("training"){TrainingScreen(w,vm)}
      composable("transfers"){TransfersScreen(w,vm){nav.navigate("spieler/$it")}}
      composable("karriere"){CareerScreen(w,vm)}
+     composable("whatsnew"){WhatsNewScreen()}
      composable("hilfe"){HelpScreen(w,vm)}
      composable("editor"){EditorScreen(w,vm)}
      composable("einstellungen"){SettingsScreen(vm)}
@@ -66,7 +67,7 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
    BackHandler(route=="home"){exitConfirm=true}
   }
   state.error?.let{AlertDialog(onDismissRequest={vm.clearError()},title={Text("Das hat nicht geklappt")},text={Text(it)},confirmButton={TextButton({vm.clearError()}){Text("Verstanden")}})}
-  if(!changelogDismissedThisSession&&changelogSeenVersion!=CHANGELOG_LOADING&&changelogSeenVersion!=CHANGELOG_VERSION)ChangelogDialog{changelogDismissedThisSession=true;vm.markChangelogSeen()}
+  if(!changelogDismissedThisSession&&changelogSeenVersion!=CHANGELOG_LOADING&&changelogSeenVersion!=WHATS_NEW_VERSION)WhatsNewDialog{changelogDismissedThisSession=true;vm.markChangelogSeen(WHATS_NEW_VERSION)}
   if(exitConfirm)Confirm("Zurück zum Start?","Deine Karriere wird vorher gespeichert.",{exitConfirm=false}){exitConfirm=false;vm.backToMenu()}
  }
 }
