@@ -84,10 +84,13 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
 @Composable fun LeagueScreen(w: World){
  val real=w.privateTopClubMode;val cupName=CompetitionEngine.displayName(w,CompetitionType.NATIONAL_CUP)
  val ownLeague=w.leagues.first{w.user.clubId in it.clubIds};val ownCountry=WorldFactory.leagueCountry(w,ownLeague.tier)
- val competitionOptions=if(real)listOf("Liga",cupName,CompetitionType.CHAMPIONS_LEAGUE.label,CompetitionType.EUROPA_LEAGUE.label) else listOf("Liga",cupName,CompetitionType.EURO_ELITE.label)
+ val competitionOptions=if(real)buildList{
+  add("Liga");add(cupName);add(CompetitionType.CHAMPIONS_LEAGUE.label);add(CompetitionType.EUROPA_LEAGUE.label);add(CompetitionType.CLUB_WORLD_CUP.label)
+  if(w.fantasyCupEnabled)add(CompetitionType.ETERNAL_CROWN.label)
+ } else listOf("Liga",cupName,CompetitionType.EURO_ELITE.label)
  var competition by rememberSaveable{mutableStateOf("Liga")};var country by rememberSaveable(w.user.clubId,w.calendar.season){mutableStateOf(ownCountry)};var tier by rememberSaveable(w.user.clubId,w.calendar.season){mutableIntStateOf(ownLeague.tier)};var day by rememberSaveable(w.calendar.season){mutableIntStateOf(w.calendar.matchday)};var fullTable by rememberSaveable{mutableStateOf(false)};var group by rememberSaveable{mutableStateOf("A")};var euroRound by rememberSaveable(w.calendar.season){mutableIntStateOf(1)}
  if(competition !in competitionOptions)competition="Liga"
- val eyebrow=if(real)"LIGEN · DFB-POKAL · CHAMPIONS LEAGUE · EUROPA LEAGUE" else "LIGA · GRÜNDERPOKAL · EUROPA-ELITELIGA"
+ val eyebrow=if(real)"LIGEN · POKALE · EUROPA · CLUB WORLD CUP${if(w.fantasyCupEnabled)" · KRONE" else ""}" else "LIGA · GRÜNDERPOKAL · EUROPA-ELITELIGA"
  Page("Wettbewerbe",eyebrow){
   Pick("Wettbewerb",competition,competitionOptions,{it}){competition=it}
   when(competition){
@@ -107,6 +110,34 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
     val count=w.fixtures.count{it.competition==CompetitionType.NATIONAL_CUP&&it.round==1}
     Section(cupName){Text("${count*2} Vereine · sechs K.-o.-Runden · jede Runde ein Spiel. Bei Gleichstand folgen Verlängerung und Elfmeterschießen.",color=Muted);if(real)Text("Im DFB-Pokal starten 64 deutsche Vereine aus dem im Spiel enthaltenen Ligabaum.",color=Grass);val own=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP&&(it.homeId==w.user.clubId||it.awayId==w.user.clubId)};if(own.isEmpty())Text("Dein Verein ist in dieser Saison nicht qualifiziert.",color=Muted)else Text("Dein Weg: ${own.count{it.played}} von ${own.size} bislang angesetzten Partien.",color=Grass)}
     val rounds=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP}.groupBy{it.round}.toSortedMap();rounds.forEach{(_,games)->Section(games.first().stage){games.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}}
+   }
+   CompetitionType.CLUB_WORLD_CUP.label->{
+    val all=w.fixtures.filter{it.competition==CompetitionType.CLUB_WORLD_CUP}
+    val groups=all.filter{it.stage=="Gruppenphase"}
+    val ownIn=all.any{it.homeId==w.user.clubId||it.awayId==w.user.clubId}
+    Section(CompetitionType.CLUB_WORLD_CUP.label){
+     Text("32 Vereine · acht Vierergruppen. Die ersten zwei jeder Gruppe erreichen das Achtelfinale; danach geht es direkt im K.-o.-System bis zum Finale.",color=Muted)
+     Text("Siegerprämie: ${euros(CompetitionPrizeSystem.clubWorldCupPrize(w))}.",color=Grass)
+     if(!ownIn)Text("Dein Verein ist in dieser Saison nicht qualifiziert.",color=Muted)
+    }
+    if(groups.isNotEmpty()){
+     if(group !in ('A'..'H').map{it.toString()})group="A"
+     Pick("Gruppe",group,('A'..'H').map{it.toString()},{"Gruppe $it"}){group=it}
+     Section("Gruppe $group"){CompetitionEngine.worldCupGroupTable(w,group).forEachIndexed{i,r->val c=w.clubs.getValue(r.clubId);Column(Modifier.fillMaxWidth().background(if(c.id==w.user.clubId)Color(0xFF284335)else Color.Transparent,RoundedCornerShape(6.dp)).padding(7.dp)){Row(Modifier.fillMaxWidth()){Text("${i+1}. ${c.name} (${c.shortName})",Modifier.weight(1f),fontWeight=if(i<2)FontWeight.Bold else FontWeight.Normal,color=if(i<2)Grass else Chalk);Text("${r.points} P",fontWeight=FontWeight.Bold)};Text("Sp ${r.played} · S ${r.won} · U ${r.drawn} · N ${r.lost} · ${r.goalsFor}:${r.goalsAgainst}",color=Muted,style=MaterialTheme.typography.bodySmall)}}}
+     Section("Gruppenspiele"){groups.filter{it.group==group}.sortedWith(compareBy<Fixture>{it.round}.thenBy{it.id}).forEach{CompetitionResultRow(w,it)}}
+    }
+    all.filter{it.stage!="Gruppenphase"}.groupBy{it.round}.toSortedMap().forEach{(_,games)->Section(games.first().stage){games.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}}
+   }
+   CompetitionType.ETERNAL_CROWN.label->{
+    val games=w.fixtures.filter{it.competition==CompetitionType.ETERNAL_CROWN}
+    val ownIn=games.any{it.homeId==w.user.clubId||it.awayId==w.user.clubId}||w.user.clubId in w.fantasyCupByes
+    Section(CompetitionType.ETERNAL_CROWN.label){
+     Text("Die besten sechs Vereine jeder spielbaren Liga qualifizieren sich. Falls die Teilnehmerzahl keine Zweierpotenz ist, gibt es zuerst eine Vorrunde mit Freilosen; danach folgt ausschließlich K.-o. bis zum Finale.",color=Muted)
+     Text("Siegprämien steigen je Runde um 200.000 € · Turniersieger zusätzlich ${euros(CompetitionPrizeSystem.eternalCrownPrize(w))}.",color=Grass)
+     if(!ownIn)Text("Dein Verein ist in dieser Saison nicht qualifiziert.",color=Muted)
+    }
+    if(games.isEmpty())Section("Turnierstatus"){Text("Für diese Saison sind keine Partien angesetzt.",color=Muted)}
+    else games.groupBy{it.round}.toSortedMap().forEach{(_,roundGames)->Section(roundGames.first().stage){roundGames.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}}
    }
    else->{
     val type=when(competition){CompetitionType.CHAMPIONS_LEAGUE.label->CompetitionType.CHAMPIONS_LEAGUE;CompetitionType.EUROPA_LEAGUE.label->CompetitionType.EUROPA_LEAGUE;else->CompetitionType.EURO_ELITE}
