@@ -31,15 +31,15 @@ object YouthCompetitionSystem {
   val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.youth&&!p.retired&&p.loanParentClubId==0){"Nur eigene Jugendspieler können vorübergehend hochgezogen werden."}
   p.temporarySeniorCallUp=true;p.temporaryReturnSquad=p.youthSquad;p.youth=false
   p.youthProfile.seniorTraining=true;p.morale=(p.morale+2).coerceAtMost(100)
-  WorldFactory.rebuildBench(w,w.club())
+  WorldFactory.normalizeBench(w,w.club(),true)
   w.news("Notfall-Nominierung","${p.name} steht für das nächste Profispiel zur Verfügung und kehrt danach automatisch in ${p.temporaryReturnSquad?.label?:p.youthSquad.label} zurück.","normal")
  }
  fun returnTemporary(w:World,playerId:Int,announce:Boolean=true){
   val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.temporarySeniorCallUp){"Keine vorübergehende Jugend-Nominierung aktiv."}
-  val target=p.temporaryReturnSquad?:if(w.calendar.season-p.birthYear<=19)YouthSquad.U19 else YouthSquad.U23
-  p.youth=true;p.youthSquad=target;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false
+  val c=w.club();val wasStarter=playerId in c.tactics.xi;val target=p.temporaryReturnSquad?:if(w.calendar.season-p.birthYear<=19)YouthSquad.U19 else YouthSquad.U23
+  p.youth=true;p.youthSquad=target;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false;c.tactics.bench.remove(playerId)
   if(announce)w.news("Zurück im ${target.label}","${p.name} kehrt nach der Profikader-Nominierung in den Nachwuchs zurück.","normal")
-  WorldFactory.autoLineup(w,w.user.clubId)
+  if(wasStarter)WorldFactory.autoLineup(w,w.user.clubId)else WorldFactory.normalizeBench(w,c,true)
  }
  fun makeTemporaryPermanent(w:World,playerId:Int){
   require(w.live==null){"Kaderstatus erst außerhalb eines laufenden Spiels ändern."}
