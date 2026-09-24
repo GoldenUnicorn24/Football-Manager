@@ -81,6 +81,7 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
  var page by rememberSaveable{mutableIntStateOf(0)}
  var saveSlot by rememberSaveable{mutableIntStateOf((1..5).firstOrNull{i->slots.none{it.slot==i}}?:1)}
  var tutorial by rememberSaveable{mutableStateOf(true)}
+ var fantasyCup by rememberSaveable{mutableStateOf(true)}
  var confirm by remember{mutableStateOf(false)}
  val selected=options.first{it.key==clubKey}
  val leagueGames=(options.size-1)*2
@@ -122,8 +123,9 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
      Text("Eigener Spieler: ${p.firstName.ifBlank{"Vorname fehlt"}} ${p.lastName} · ${p.position.label} · Nr. ${p.number}")
      Pick("Speicherplatz",saveSlot,(1..5).toList(),{i->"Slot $i · ${slots.firstOrNull{it.slot==i}?.clubName?:"Leer"}"}){saveSlot=it}
      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Geführtes Tutorial",style=MaterialTheme.typography.titleMedium);Text("Wird nur für diese Karriere gespeichert und kann später neu gestartet oder beendet werden.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(tutorial,{tutorial=it})}
+     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Krone der Kontinente",style=MaterialTheme.typography.titleMedium);Text("Optionaler Fantasy-Pokal: die besten Vereine aller spielbaren Ligen treten gegeneinander an.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(fantasyCup,{fantasyCup=it})}
      Text("Alle integrierten Ligen werden parallel simuliert. Deutsche Vereine können innerhalb der fünf deutschen Spielklassen auf- und absteigen.",color=Muted)
-     Action("Karriere starten",!busy){if(slots.any{it.slot==saveSlot})confirm=true else vm.createRealMode(System.currentTimeMillis(),clubKey,p,saveSlot,tutorial)}
+     Action("Karriere starten",!busy){if(slots.any{it.slot==saveSlot})confirm=true else vm.createRealMode(System.currentTimeMillis(),clubKey,p,saveSlot,tutorial,fantasyCup)}
     }
    }
   }
@@ -219,7 +221,7 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
     Text("19 individuell editierbare Mitspieler · ersetzt Ligaplatz ${replacedClub.shortName}",color=Muted)
     Pick("Speicherplatz",saveSlot,(1..5).toList(),{i->"Slot $i · ${slots.firstOrNull{it.slot==i}?.clubName?:"Leer"}"}){saveSlot=it}
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Geführtes Tutorial",style=MaterialTheme.typography.titleMedium);Text("Ein oder aus gilt nur für diese neue Karriere.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(tutorial,{tutorial=it})}
-    Action("Individuellen Verein starten",!busy){if(slots.any{it.slot==saveSlot})confirm=true else vm.createCustomReal(System.currentTimeMillis(),leagueSlotClubKey,c,p,rosterPlayers,saveSlot,tutorial)}
+    Action("Individuellen Verein starten",!busy){if(slots.any{it.slot==saveSlot})confirm=true else vm.createCustomReal(System.currentTimeMillis(),leagueSlotClubKey,c,p,rosterPlayers,saveSlot,tutorial,fantasyCup)}
    }
   }
   if(page<titles.lastIndex)Action("Weiter",!busy){page++}
