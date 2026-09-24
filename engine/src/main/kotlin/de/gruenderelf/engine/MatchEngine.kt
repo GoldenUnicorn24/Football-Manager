@@ -52,10 +52,10 @@ object MatchEngine {
     val used=mutableSetOf<Int>();c.tactics.xi=c.tactics.xi.map{pid->if(w.players[pid]?.let{it.available&&it.clubId==id}==true&&used.add(pid))pid else 0}.toMutableList()
     val available=w.squad(id).filter{it.available&&it.id !in used}.toMutableList()
     c.tactics.xi.indices.filter{c.tactics.xi[it]==0}.forEach{i->val pos=Formations.positions(c.tactics.formation)[i];val p=available.maxByOrNull{it.ca*it.fit(pos)};if(p!=null){c.tactics.xi[i]=p.id;available.remove(p)}}
-    WorldFactory.rebuildBench(w,c)
+    WorldFactory.normalizeBench(w,c,true)
    }
    ensureGoalkeeperSlot(w,c)
-   WorldFactory.rebuildBench(w,c)
+   if(id==w.user.clubId)WorldFactory.normalizeBench(w,c,true)else WorldFactory.rebuildBench(w,c)
   }
   val h=w.clubs.getValue(f.homeId);val a=w.clubs.getValue(f.awayId)
   autoTuneAiTactics(w,h,a);autoTuneAiTactics(w,a,h)
@@ -121,7 +121,7 @@ object MatchEngine {
   if(inXi>=0){val swap=c.tactics.xi[slotIndex];c.tactics.xi[slotIndex]=c.tactics.xi[inXi];c.tactics.xi[inXi]=swap;return}
   val keeper=w.squad(c.id).filter{it.available&&it.position==Position.TW&&it.id !in c.tactics.xi}.maxByOrNull{it.ratingAt(Position.TW)}?:return
   c.tactics.xi[slotIndex]=keeper.id
-  WorldFactory.rebuildBench(w,c)
+  WorldFactory.normalizeBench(w,c,true)
  }
 
  /** Näherung für die Spielerentscheidungs-Einblendung. Das Match besitzt bewusst keine
