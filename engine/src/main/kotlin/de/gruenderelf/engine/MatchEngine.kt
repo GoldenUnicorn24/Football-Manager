@@ -1263,17 +1263,18 @@ object MatchEngine {
     val incoming=w.players.getValue(inId);val outRating=out.ratingAt(target);val inRating=incoming.ratingAt(target)
     val injury=if(outId in m.injured)220.0 else 0.0
     val fatigue=((78-out.fitness).coerceAtLeast(0.0)*1.25)+(if(out.fitness<62)16.0 else 0.0)
-    val performance=((6.45-currentRating).coerceAtLeast(0.0)*15.0)
-    val cardRisk=yellow*(if(target in listOf(Position.IV,Position.LV,Position.RV,Position.DM))14.0 else 9.0)
-    val load=when{minutes>=82->8.0;minutes>=70->4.0;else->0.0}
-    val hotProtection=(if(currentRating>=7.7)12.0 else 0.0)+(perf?.goals?:0)*9.0+(perf?.assists?:0)*5.5
-    val ratingGain=(inRating-outRating)*1.65
-    val readiness=(incoming.fitness-out.fitness)*.32+(incoming.form-out.form)*3.4+(incoming.sharpness-out.sharpness)*.055+(incoming.morale-out.morale)*.025
+    val performance=((6.55-currentRating).coerceAtLeast(0.0)*21.0)+(if(currentRating<5.9)12.0 else if(currentRating<6.15)6.0 else 0.0)
+    val cardRisk=yellow*(if(target in listOf(Position.IV,Position.LV,Position.RV,Position.DM))18.0 else 11.0)*(if(m.minute>=65)1.18 else 1.0)
+    val load=when{minutes>=82->10.0;minutes>=70->5.0;else->0.0}
+    val hotProtection=(if(currentRating>=7.4)15.0 else 0.0)+(perf?.goals?:0)*11.0+(perf?.assists?:0)*7.0
+    val ratingGain=(inRating-outRating)*1.75
+    val readiness=(incoming.fitness-out.fitness)*.34+(incoming.form-out.form)*4.6+(incoming.sharpness-out.sharpness)*.06+(incoming.morale-out.morale)*.03
     val positional=(incoming.fit(target)-.80)*34.0
     val attackDelta=((incoming.attributes.finishing+incoming.attributes.passing+incoming.attributes.pace)-(out.attributes.finishing+out.attributes.passing+out.attributes.pace))/12.0
     val defendDelta=((incoming.attributes.tackling+incoming.attributes.stamina+incoming.attributes.strength)-(out.attributes.tackling+out.attributes.stamina+out.attributes.strength))/13.0
-    val tactical=when{behind&&m.minute>=58->attackDelta;ahead&&m.minute>=68->defendDelta;else->(attackDelta+defendDelta)*.22}
-    val score=injury+fatigue+performance+cardRisk+load-hotProtection+ratingGain+readiness+positional+tactical
+    val scorePressure=when{behind&&m.minute>=75->7.0;behind&&m.minute>=58->3.0;ahead&&m.minute>=78->2.0;else->0.0}
+    val tactical=when{behind&&m.minute>=58->attackDelta*1.35;ahead&&m.minute>=68->defendDelta*1.25;else->(attackDelta+defendDelta)*.22}
+    val score=injury+fatigue+performance+cardRisk+load+scorePressure-hotProtection+ratingGain+readiness+positional+tactical
     val factors=mutableListOf<String>()
     if(outId in m.injured)factors+="${out.lastName} verletzt"
     if(out.fitness<72)factors+="Fitness ${out.fitness.roundToInt()} %"
@@ -1286,9 +1287,9 @@ object MatchEngine {
     result.add(SubSuggestion(outId,inId,target,score,reason))
    }
   }}
-  val sorted=result.sortedByDescending{it.score};val usedIn=mutableSetOf<Int>();val usedOut=mutableSetOf<Int>();val diverse=sorted.filter{usedIn.add(it.inId)&&usedOut.add(it.outId)}.take(5).toMutableList()
-  if(diverse.size<5){val existing=diverse.map{it.outId to it.inId}.toMutableSet();for(sug in sorted){if(diverse.size>=5)break;if(existing.add(sug.outId to sug.inId))diverse.add(sug)}}
-  return diverse.take(5)
+  val sorted=result.sortedByDescending{it.score};val usedIn=mutableSetOf<Int>();val usedOut=mutableSetOf<Int>();val diverse=mutableListOf<SubSuggestion>()
+  for(sug in sorted){if(diverse.size>=5)break;if(sug.outId !in usedOut&&sug.inId !in usedIn){usedOut+=sug.outId;usedIn+=sug.inId;diverse+=sug}}
+  return diverse
  }
 
  fun resumeIncident(w: World,m: LiveMatch){
