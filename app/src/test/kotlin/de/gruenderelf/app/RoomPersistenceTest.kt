@@ -51,7 +51,7 @@ class RoomPersistenceTest {
   w.club().budget=111_111L;repo.save(1,w);w.club().budget=222_222L;repo.save(1,w)
   val primary=db.saves().get(1)!!;db.saves().put(primary.copy(worldJson="{broken-json"))
   val restored=repo.load(1);assertEquals(222_222L,restored.club().budget);assertEquals(1,repo.saves.first().size);assertEquals(1,repo.saves.first().single().slot)
-  assertEquals(222_222L,SaveCodec.decode(db.saves().get(1)!!.worldJson).club().budget);db.close();context.deleteDatabase(name)
+  assertEquals(222_222L,SaveCodec.decode(decodeStoredWorld(db.saves().get(1)!!.worldJson)).club().budget);db.close();context.deleteDatabase(name)
  }}
 
  @Test fun corruptPrimaryIsNeverPromotedToBackupOnNextSave(){runBlocking{
@@ -59,7 +59,7 @@ class RoomPersistenceTest {
   w.club().budget=100_000L;repo.save(1,w);w.club().budget=200_000L;repo.save(1,w)
   val primary=db.saves().get(1)!!;db.saves().put(primary.copy(worldJson="{broken-json"))
   w.club().budget=300_000L;repo.save(1,w)
-  assertEquals(300_000L,SaveCodec.decode(db.saves().get(101)!!.worldJson).club().budget)
+  assertEquals(300_000L,SaveCodec.decode(decodeStoredWorld(db.saves().get(101)!!.worldJson)).club().budget)
   assertEquals(300_000L,repo.load(1).club().budget);db.close();context.deleteDatabase(name)
  }}
 
