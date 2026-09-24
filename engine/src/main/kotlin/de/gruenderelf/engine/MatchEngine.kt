@@ -1314,7 +1314,8 @@ object MatchEngine {
   val rejected=outs.indices.filter{it !in chosen}
   clearAssistantSubProposal(m);var completed=0
   for(i in chosen){val out=outs[i];val incoming=ins.getOrNull(i)?:continue;val home=w.user.clubId==m.homeId;if(out in xi(m,home)&&incoming in (if(home)m.homeBench else m.awayBench)&&CompetitionRulesEngine.substitutionIssue(w,m,home)==null){substitute(w,m,out,incoming,w.user.clubId);completed++}}
-  for(i in rejected){val out=outs[i];val incoming=ins.getOrNull(i)?:0;m.assistantSubRejectedPairs["$out:$incoming"]=m.minute+12;m.assistantSubRejectedPlayers[out]=m.minute+7}
+  var rejectedInjury=0;for(i in rejected){val out=outs[i];val incoming=ins.getOrNull(i)?:0;m.assistantSubRejectedPairs["$out:$incoming"]=m.minute+12;m.assistantSubRejectedPlayers[out]=m.minute+7;if(out in m.injured)rejectedInjury=out}
+  if(rejectedInjury!=0&&rejectedInjury in xi(m,w.user.clubId==m.homeId))pauseForIncident(m,MatchPauseReason.INJURY,rejectedInjury,w.user.clubId)
   m.assistantNextSuggestionMinute=m.minute+if(completed>=3)10 else 7
   w.assistantCoach.lastSubReason="${m.minute}. Minute: $completed Wechsel angenommen · ${reasons.firstOrNull()?:summary}"
  }
