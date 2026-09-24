@@ -327,7 +327,27 @@ object WorldFactory {
   while(result.size<7&&pool.isNotEmpty()){val p=pool.maxBy{it.ca*(.7+it.fitness*.003)};result.add(p.id);pool.remove(p)}
   c.tactics.bench=result.take(7).toMutableList()
  }
- fun assignSlot(w: World,index: Int,playerId: Int){require(w.live==null){"Aufstellung im Spiel über Wechsel ändern."};val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.available){"Spieler nicht verfügbar."};val xi=w.club().tactics.xi;require(index in 0..10);val old=xi.indexOf(playerId);if(old>=0)xi[old]=xi[index];xi[index]=playerId;rebuildBench(w,w.club())}
+ fun normalizeBench(w:World,c:Club=w.club(),fill:Boolean=true){
+  val valid=c.tactics.bench.filter{id->w.players[id]?.let{it.clubId==c.id&&it.available&&!it.youth&&id !in c.tactics.xi}==true}.distinct().take(7).toMutableList()
+  if(fill){
+   val pool=w.squad(c.id).filter{it.available&&!it.youth&&it.id !in c.tactics.xi&&it.id !in valid}.sortedByDescending{it.ca*(.7+it.fitness*.003)}
+   for(p in pool){if(valid.size>=7)break;valid+=p.id}
+  }
+  c.tactics.bench=valid
+ }
+ fun toggleBench(w:World,playerId:Int){
+  require(w.live==null){"Ersatzbank nur vor dem Spiel ändern."};val c=w.club();val p=w.players.getValue(playerId)
+  require(p.clubId==c.id&&p.available&&!p.youth&&playerId !in c.tactics.xi){"Dieser Spieler kann nicht auf die Bank."}
+  normalizeBench(w,c,false)
+  if(playerId in c.tactics.bench)c.tactics.bench.remove(playerId)
+  else{require(c.tactics.bench.size<7){"Die Bank ist voll. Entferne zuerst einen Ersatzspieler."};c.tactics.bench.add(playerId)}
+ }
+ fun assignSlot(w: World,index: Int,playerId: Int){
+  require(w.live==null){"Aufstellung im Spiel über Wechsel ändern."};val c=w.club();val p=w.players.getValue(playerId);require(p.clubId==w.user.clubId&&p.available){"Spieler nicht verfügbar."};val xi=c.tactics.xi;require(index in 0..10)
+  val previous=xi[index];val old=xi.indexOf(playerId)
+  if(old>=0)xi[old]=previous else{c.tactics.bench.remove(playerId);if(previous!=0&&w.players[previous]?.available==true&&previous !in c.tactics.bench&&c.tactics.bench.size<7)c.tactics.bench.add(previous)}
+  xi[index]=playerId;normalizeBench(w,c,true)
+ }
  fun makeSchedule(w: World){
   w.fixtures.clear();w.matches.clear()
   for(l in w.leagues){
