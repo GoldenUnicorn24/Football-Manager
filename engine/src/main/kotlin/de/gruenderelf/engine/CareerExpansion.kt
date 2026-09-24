@@ -19,7 +19,7 @@ object YouthCompetitionSystem {
   p.youth=true;p.youthSquad=squad;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null
   p.youthProfile.seniorTraining=false;p.youthProfile.confidence=(p.youthProfile.confidence+2).coerceAtMost(100)
   w.training.extra.removeAll{it.playerId==p.id}
-  WorldFactory.autoLineup(w,w.user.clubId)
+  WorldFactory.reconcileMatchdaySelection(w,w.user.clubId)
   w.news("${p.name} in ${squad.label}","Der Spieler gehört jetzt fest zum ${squad.label}-Kader und erhält dort Nachwuchsspielpraxis und den Academy-Entwicklungsweg.","normal")
  }
  fun move(w:World,playerId:Int,squad:YouthSquad){
@@ -39,7 +39,7 @@ object YouthCompetitionSystem {
   val c=w.club();val wasStarter=playerId in c.tactics.xi;val target=p.temporaryReturnSquad?:if(w.calendar.season-p.birthYear<=19)YouthSquad.U19 else YouthSquad.U23
   p.youth=true;p.youthSquad=target;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null;p.youthProfile.seniorTraining=false;c.tactics.bench.remove(playerId)
   if(announce)w.news("Zurück im ${target.label}","${p.name} kehrt nach der Profikader-Nominierung in den Nachwuchs zurück.","normal")
-  if(wasStarter)WorldFactory.autoLineup(w,w.user.clubId)else WorldFactory.normalizeBench(w,c,true)
+  WorldFactory.reconcileMatchdaySelection(w,w.user.clubId)
  }
  fun makeTemporaryPermanent(w:World,playerId:Int){
   require(w.live==null){"Kaderstatus erst außerhalb eines laufenden Spiels ändern."}
@@ -143,7 +143,7 @@ object ScoutingTransferSystem {
  fun recallLoan(w:World,playerId:Int){
   val p=w.players.getValue(playerId);require(p.loanParentClubId==w.user.clubId&&p.clubId!=w.user.clubId&&p.loanRecallAllowed){"Diese Leihe kann aktuell nicht zurückgerufen werden."}
   val loanClub=p.clubId;p.clubId=w.user.clubId;p.youth=p.loanReturnYouth;if(p.youth)p.youthSquad=p.loanReturnYouthSquad;p.loanParentClubId=0;p.loanBuyerClubId=0;p.loanWeeks=0;p.loanOptionFee=0;p.loanRecallAllowed=true;p.loanReturnYouth=false;p.temporarySeniorCallUp=false;p.temporaryReturnSquad=null
-  WorldFactory.autoLineup(w,w.user.clubId);w.clubs[loanClub]?.let{WorldFactory.autoLineup(w,it.id)};w.news("Leihe beendet","${p.name} kehrt vorzeitig zurück${if(p.youth)" in ${p.youthSquad.label}" else ""}.","normal")
+  WorldFactory.reconcileMatchdaySelection(w,w.user.clubId);w.clubs[loanClub]?.let{WorldFactory.autoLineup(w,it.id)};w.news("Leihe beendet","${p.name} kehrt vorzeitig zurück${if(p.youth)" in ${p.youthSquad.label}" else ""}.","normal")
  }
  private fun updateReport(w:World,a:ScoutAssignment){
   val p=w.players[a.playerId]?:return;val r=w.scoutReports.getOrPut(p.id){ScoutReport(playerId=p.id)}
@@ -172,11 +172,11 @@ object ScoutingTransferSystem {
    if(p.retired||p.youth||p.id==w.user.playerId)continue
    if(p.precontractClubId!=0&&p.precontractSeason<=newSeason){
     val from=p.clubId;val to=p.precontractClubId;p.clubId=to;p.wage=p.precontractWage;p.contractYears=maxOf(2,p.precontractYears);p.precontractClubId=0;p.precontractSeason=0;p.precontractWage=0;p.precontractYears=0;p.wantsMove=false
-    w.transferHistory.add(0,TransferHistoryEntry(newSeason,w.calendar.absoluteWeek,p.id,from,to,DealType.BUY,0,"Bosman / Vorvertrag"));WorldFactory.autoLineup(w,to);if(from in w.clubs)WorldFactory.autoLineup(w,from)
+    w.transferHistory.add(0,TransferHistoryEntry(newSeason,w.calendar.absoluteWeek,p.id,from,to,DealType.BUY,0,"Bosman / Vorvertrag"));if(to==w.user.clubId)WorldFactory.reconcileMatchdaySelection(w,to)else WorldFactory.autoLineup(w,to);if(from in w.clubs){if(from==w.user.clubId)WorldFactory.reconcileMatchdaySelection(w,from)else WorldFactory.autoLineup(w,from)}
     if(to==w.user.clubId)w.news("Bosman-Transfer vollzogen","${p.name} ist ablösefrei zum Verein gestoßen.","good")
     continue
    }
-   if(p.clubId!=0){p.contractYears=(p.contractYears-1).coerceAtLeast(0);if(p.contractYears==0){val from=p.clubId;p.clubId=0;p.wage=0;p.wantsMove=true;w.transferHistory.add(0,TransferHistoryEntry(newSeason,w.calendar.absoluteWeek,p.id,from,0,DealType.BUY,0,"Vertragsende"));if(from==w.user.clubId)w.news("Vertrag ausgelaufen","${p.name} verlässt den Verein ablösefrei.","bad")}}
+   if(p.clubId!=0){p.contractYears=(p.contractYears-1).coerceAtLeast(0);if(p.contractYears==0){val from=p.clubId;p.clubId=0;p.wage=0;p.wantsMove=true;w.transferHistory.add(0,TransferHistoryEntry(newSeason,w.calendar.absoluteWeek,p.id,from,0,DealType.BUY,0,"Vertragsende"));if(from==w.user.clubId){WorldFactory.reconcileMatchdaySelection(w,from);w.news("Vertrag ausgelaufen","${p.name} verlässt den Verein ablösefrei.","bad")}else if(from in w.clubs)WorldFactory.autoLineup(w,from)}}
   }
   w.competingBids.clear();w.scoutAssignments.clear()
  }
