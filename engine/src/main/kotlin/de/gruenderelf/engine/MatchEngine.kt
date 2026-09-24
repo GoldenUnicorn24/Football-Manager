@@ -1307,15 +1307,17 @@ object MatchEngine {
 
  private fun clearAssistantSubProposal(m:LiveMatch){m.assistantSubPending=false;m.assistantSubOutId=0;m.assistantSubInId=0;m.assistantSubReason="";m.assistantSubOutIds.clear();m.assistantSubInIds.clear();m.assistantSubReasons.clear();m.assistantSubSuggestedMinute=-1}
 
- fun acceptAssistantSubstitution(w:World,m:LiveMatch){
+ fun acceptAssistantSubstitution(w:World,m:LiveMatch,acceptedOutIds:Set<Int>?=null){
   require(m.assistantSubPending){"Es liegt kein Co-Trainer-Wechselvorschlag vor."}
   val outs=(m.assistantSubOutIds.ifEmpty{mutableListOf(m.assistantSubOutId)}).toList();val ins=(m.assistantSubInIds.ifEmpty{mutableListOf(m.assistantSubInId)}).toList();val reasons=m.assistantSubReasons.toList();val summary=m.assistantSubReason
+  val chosen=outs.indices.filter{acceptedOutIds==null||outs[it] in acceptedOutIds};require(chosen.isNotEmpty()){"Wähle mindestens einen Wechsel aus."}
+  val rejected=outs.indices.filter{it !in chosen}
   clearAssistantSubProposal(m);var completed=0
-  for(i in outs.indices){val out=outs[i];val incoming=ins.getOrNull(i)?:continue;val home=w.user.clubId==m.homeId;if(out in xi(m,home)&&incoming in (if(home)m.homeBench else m.awayBench)&&CompetitionRulesEngine.substitutionIssue(w,m,home)==null){substitute(w,m,out,incoming,w.user.clubId);completed++}}
+  for(i in chosen){val out=outs[i];val incoming=ins.getOrNull(i)?:continue;val home=w.user.clubId==m.homeId;if(out in xi(m,home)&&incoming in (if(home)m.homeBench else m.awayBench)&&CompetitionRulesEngine.substitutionIssue(w,m,home)==null){substitute(w,m,out,incoming,w.user.clubId);completed++}}
+  for(i in rejected){val out=outs[i];val incoming=ins.getOrNull(i)?:0;m.assistantSubRejectedPairs["$out:$incoming"]=m.minute+12;m.assistantSubRejectedPlayers[out]=m.minute+7}
   m.assistantNextSuggestionMinute=m.minute+if(completed>=3)10 else 7
   w.assistantCoach.lastSubReason="${m.minute}. Minute: $completed Wechsel angenommen · ${reasons.firstOrNull()?:summary}"
  }
-
  fun rejectAssistantSubstitution(w:World,m:LiveMatch){
   require(m.assistantSubPending){"Es liegt kein Co-Trainer-Wechselvorschlag vor."}
   val outs=(m.assistantSubOutIds.ifEmpty{mutableListOf(m.assistantSubOutId)}).toList();val ins=(m.assistantSubInIds.ifEmpty{mutableListOf(m.assistantSubInId)}).toList();val reason=m.assistantSubReason
@@ -1339,10 +1341,12 @@ object MatchEngine {
   fun urgent(s:SubSuggestion):Boolean{val p=w.players[s.outId]?:return false;val yellow=m.yellows[s.outId]?:0;return s.outId in m.injured||p.fitness<(62+(aggression-3)*2)||yellow>0||calculatePlayerRating(w,m,s.outId)<(5.95+(aggression-3)*.06)}
   val baseThreshold=17.0-(aggression-3)*3.5+if(m.minute>=84)8.0 else if(m.minute>=78)3.0 else 0.0
   val eligible=available.filter{urgent(it)||it.score>=baseThreshold};if(eligible.isEmpty())return
-  if(!userAssistant){substitute(w,m,eligible.first().outId,eligible.first().inId,club);return}
-  val rng=SeededRandom(m.rngState xor (m.minute.toLong()*7919L) xor club.toLong());val strong=eligible.count{urgent(it)||it.score>=baseThreshold+7}
-  val maxBatch=minOf(remaining,eligible.size,when{eligible.count{it.outId in m.injured}>=2->5;m.minute in 58..78&&aggression>=4&&strong>=4->5;m.minute in 64..82&&strong>=3->4;strong>=2->3;else->1})
-  val desired=if(maxBatch<=1)1 else rng.int(1,maxBatch);val batch=eligible.take(desired)
+  val uniqueEligible=mutableListOf<SubSuggestion>();val batchOut=mutableSetOf<Int>();val batchIn=mutableSetOf<Int>();for(candidate in eligible){if(candidate.outId !in batchOut&&candidate.inId !in batchIn){batchOut+=candidate.outId;batchIn+=candidate.inId;uniqueEligible+=candidate}}
+  if(uniqueEligible.isEmpty())return
+  if(!userAssistant){substitute(w,m,uniqueEligible.first().outId,uniqueEligible.first().inId,club);return}
+  val rng=SeededRandom(m.rngState xor (m.minute.toLong()*7919L) xor club.toLong());val strong=uniqueEligible.count{urgent(it)||it.score>=baseThreshold+7}
+  val maxBatch=minOf(remaining,uniqueEligible.size,when{eligible.count{it.outId in m.injured}>=2->5;m.minute in 58..78&&aggression>=4&&strong>=4->5;m.minute in 64..82&&strong>=3->4;strong>=2->3;else->1})
+  val desired=if(maxBatch<=1)1 else rng.int(1,maxBatch);val batch=uniqueEligible.take(desired)
   // In den Schlussminuten nicht zwanghaft das Kontingent leeren: ohne echten Grund höchstens zwei.
   val finalBatch=if(m.minute>=84&&batch.none{urgent(it)})batch.take(2) else batch
   if(finalBatch.isEmpty())return
