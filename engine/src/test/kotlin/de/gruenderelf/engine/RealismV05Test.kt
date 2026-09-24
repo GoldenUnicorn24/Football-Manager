@@ -28,6 +28,16 @@ class RealismV05Test {
   assertTrue(a.conversion>b.conversion);assertTrue(b.turnover>a.turnover)
  }
 
+ @Test fun internationalCupsDoNotInheritDomesticGoalBoost(){
+  val w=WorldFactory.createWorld(50009L)
+  val base=w.fixtures.first{it.competition==CompetitionType.LEAGUE}
+  val cwc=base.copy(id=990001,competition=CompetitionType.CLUB_WORLD_CUP)
+  val crown=base.copy(id=990002,competition=CompetitionType.ETERNAL_CROWN)
+  val a=LeagueCalibration.forFixture(w,cwc);val b=LeagueCalibration.forFixture(w,crown)
+  assertEquals(.98,a.conversion);assertEquals(.98,b.conversion)
+  assertEquals(1.02,a.chanceCreation);assertEquals(1.02,b.chanceCreation)
+ }
+
  @Test fun modernUefaDrawUsesPotsAndAssociationLimits(){
   val selected=RealModeDatabase.leagues.first().clubs.first()
   val w=WorldFactory.createRealModeWorld(50003L,selected.key,PlayerDraft(firstName="UEFA",lastName="Regel",number=73,position=Position.ZM))
