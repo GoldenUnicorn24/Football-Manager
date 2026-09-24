@@ -168,7 +168,8 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  fun setControlGame(enabled: Boolean)=liveTacticAction{w->w.live?.let{MatchEngine.setControlGame(w,it,w.user.clubId,enabled)}}
  fun updateLiveTactic(block: (World)->Unit)=liveTacticAction(block)
  fun substitute(out: Int,incoming: Int)=liveAction{w->w.live?.let{MatchEngine.substitute(w,it,out,incoming,w.user.clubId)}}
- fun acceptAssistantSubstitution()=liveAction{w->w.live?.let{MatchEngine.acceptAssistantSubstitution(w,it)}}
+ fun moveLiveLineupSlot(fromIndex:Int,toIndex:Int)=liveTacticAction{w->w.live?.let{MatchEngine.moveLiveLineupSlot(w,it,fromIndex,toIndex,w.user.clubId)}}
+ fun acceptAssistantSubstitution(selectedOutIds:Set<Int>?=null)=liveAction{w->w.live?.let{MatchEngine.acceptAssistantSubstitution(w,it,selectedOutIds)}}
  fun rejectAssistantSubstitution()=liveAction{w->w.live?.let{MatchEngine.rejectAssistantSubstitution(w,it)}}
  fun resumeIncident()=liveAction{w->w.live?.let{MatchEngine.resumeIncident(w,it)}}
  fun secondHalf()=liveAction{it.live?.let{m->MatchEngine.secondHalf(m)}}
