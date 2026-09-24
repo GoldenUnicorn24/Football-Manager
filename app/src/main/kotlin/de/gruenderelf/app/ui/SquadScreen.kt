@@ -72,7 +72,19 @@ private fun suitabilityColor(p: Player?,target: Position)=when{p==null->Muted;p.
    Text("Ist ein eingeteilter Spieler nicht auf dem Platz, übernimmt automatisch der passendste Mitspieler.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
 
-  Section("Die Bank · ${c.tactics.bench.size} / 7"){c.tactics.bench.forEach{id->w.players[id]?.let{PlayerRow(it,w,onProfile)}};if(c.tactics.bench.isEmpty())Text("Keine verfügbaren Ersatzspieler.")}
+  Section("Ersatzbank auswählen · ${c.tactics.bench.size} / 7"){
+   Text("Du bestimmst die sieben Ersatzspieler selbst. Entferne bei voller Bank zuerst einen Spieler und wähle danach den Ersatz.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   val benchCandidates=w.squad().filter{!it.youth&&!it.retired&&it.id !in c.tactics.xi}.sortedWith(compareBy<Player>{it.position.ordinal}.thenByDescending{it.ca})
+   benchCandidates.forEach{p->
+    val selected=p.id in c.tactics.bench
+    Row(Modifier.fillMaxWidth().heightIn(min=58.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
+     Checkbox(selected,{vm.action{WorldFactory.toggleBench(it,p.id)}},enabled=w.live==null&&p.available)
+     Column(Modifier.weight(1f)){Text(p.name,fontWeight=if(selected)FontWeight.Bold else FontWeight.Normal);Text("${p.position.label} · Stärke ${p.ca} · Fitness ${p.fitness.roundToInt()} %${if(!p.available)" · nicht verfügbar" else ""}",color=if(p.available)Muted else Clay,style=MaterialTheme.typography.bodySmall)}
+     TextButton({onProfile(p.id)}){Text("Profil")}
+    }
+   }
+   if(c.tactics.bench.size<7)Text("Noch ${7-c.tactics.bench.size} Bankplatz/-plätze frei. Beim Spielstart werden nur fehlende Plätze automatisch aufgefüllt.",color=Gold,style=MaterialTheme.typography.bodySmall)
+  }
   Section("Spielidee"){
    Pick("Taktik-Vorlage",tacticPreset,tacticPresets,{it}){v->tacticPreset=v;if(v!="Individuell")vm.action{require(it.live==null){"Taktik nach dem Spiel ändern."};applyTacticPreset(it.club().tactics,v)}}
    StepSlider("Mentalität",c.tactics.mentality,w.live==null){v->tacticPreset="Individuell";vm.action{it.club().tactics.mentality=v}};StepSlider("Pressing",c.tactics.pressing,w.live==null){v->tacticPreset="Individuell";vm.action{it.club().tactics.pressing=v}};StepSlider("Defensive Linie",c.tactics.line,w.live==null){v->tacticPreset="Individuell";vm.action{it.club().tactics.line=v}};StepSlider("Tempo",c.tactics.tempo,w.live==null){v->tacticPreset="Individuell";vm.action{it.club().tactics.tempo=v}};StepSlider("Breite",c.tactics.width,w.live==null){v->tacticPreset="Individuell";vm.action{it.club().tactics.width=v}};Pick("Spielaufbau",c.tactics.buildUp,BuildUp.entries.toList(),{it.label}){v->tacticPreset="Individuell";vm.action{require(it.live==null){"Spielaufbau nach dem Spiel ändern."};it.club().tactics.buildUp=v}}
