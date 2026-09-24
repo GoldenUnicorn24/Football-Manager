@@ -47,13 +47,7 @@ object MatchEngine {
   require(!f.played){"Dieses Spiel wurde schon gewertet."}
   for(id in listOf(f.homeId,f.awayId)){
    val c=w.clubs.getValue(id)
-   if(id!=w.user.clubId||c.tactics.xi.size!=11)WorldFactory.autoLineup(w,id)
-   else{
-    val used=mutableSetOf<Int>();c.tactics.xi=c.tactics.xi.map{pid->if(w.players[pid]?.let{it.available&&it.clubId==id}==true&&used.add(pid))pid else 0}.toMutableList()
-    val available=w.squad(id).filter{it.available&&it.id !in used}.toMutableList()
-    c.tactics.xi.indices.filter{c.tactics.xi[it]==0}.forEach{i->val pos=Formations.positions(c.tactics.formation)[i];val p=available.maxByOrNull{it.ca*it.fit(pos)};if(p!=null){c.tactics.xi[i]=p.id;available.remove(p)}}
-    WorldFactory.normalizeBench(w,c,true)
-   }
+   if(id==w.user.clubId)WorldFactory.reconcileMatchdaySelection(w,id)else WorldFactory.autoLineup(w,id)
    ensureGoalkeeperSlot(w,c)
    if(id==w.user.clubId)WorldFactory.normalizeBench(w,c,true)else WorldFactory.rebuildBench(w,c)
   }
