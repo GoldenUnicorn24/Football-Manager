@@ -1,13 +1,18 @@
 package de.gruenderelf.app.ui
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -162,6 +167,29 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
  }
 }
 
+@Composable private fun LiveLineupEditor(w:World,m:LiveMatch,home:Boolean,selectedOut:Int,onSelect:(Int)->Unit,onMove:(Int,Int)->Unit){
+ val formation=if(home)m.homeFormation else m.awayFormation;val lineup=if(home)m.homeXi else m.awayXi;val slots=Formations.positions(formation);val coords=Formations.coordinates(formation)
+ var dragging by remember(m.fixtureId,lineup.hashCode(),formation){mutableIntStateOf(-1)};var dragOffset by remember{mutableStateOf(Offset.Zero)}
+ val density=LocalDensity.current
+ BoxWithConstraints(Modifier.fillMaxWidth().height(430.dp).background(Color(0xFF123B27),RoundedCornerShape(18.dp)).padding(6.dp)){
+  val usableW=with(density){(maxWidth-68.dp).toPx()}.coerceAtLeast(1f);val usableH=with(density){(maxHeight-74.dp).toPx()}.coerceAtLeast(1f)
+  coords.forEachIndexed{i,(x,y)->
+   val id=lineup.getOrNull(i)?:0;val p=w.players[id];val target=slots.getOrElse(i){p?.position?:Position.ZM};val isDragging=dragging==i;val selected=id!=0&&id==selectedOut
+   val dx=if(isDragging)dragOffset.x else 0f;val dy=if(isDragging)dragOffset.y else 0f
+   val mod=Modifier.offset((maxWidth-68.dp)*x,(maxHeight-74.dp)*y).width(68.dp).heightIn(min=66.dp).graphicsLayer{translationX=dx;translationY=dy}.border(if(selected)3.dp else 1.dp,if(id==0)Clay else if(selected)Gold else Chalk.copy(alpha=.28f),RoundedCornerShape(12.dp)).background(if(id==0)Color(0x332A1616) else Color(0xCC183127),RoundedCornerShape(12.dp)).clickable(enabled=id!=0){onSelect(id)}.pointerInput(i,id,lineup.hashCode(),formation){
+    if(id!=0)detectDragGesturesAfterLongPress(onDragStart={dragging=i;dragOffset=Offset.Zero},onDragCancel={dragging=-1;dragOffset=Offset.Zero},onDragEnd={
+     if(dragging==i){val nx=(x+dragOffset.x/usableW).coerceIn(0f,1f);val ny=(y+dragOffset.y/usableH).coerceIn(0f,1f);val drop=coords.indices.minByOrNull{j->val ax=coords[j].first-nx;val ay=coords[j].second-ny;ax*ax+ay*ay}?:i;if(drop!=i)onMove(i,drop)};dragging=-1;dragOffset=Offset.Zero
+    },onDrag={change,amount->change.consume();dragOffset=dragOffset+amount})
+   }
+   Column(mod.padding(4.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.Center){
+    if(p==null){Text("LÜCKE",color=Clay,fontWeight=FontWeight.Bold,fontSize=10.sp);Text(target.name,color=Muted,fontSize=9.sp)}else{
+     val rating=m.playerPerformance[id]?.rating?:6.5;Text("${p.number} · ${p.lastName.take(8)}",fontWeight=FontWeight.Bold,fontSize=10.sp,maxLines=1);Text(target.name,color=suitabilityColorForMatch(p,target),fontSize=9.sp);Text("${p.fitness.roundToInt()}% · ${String.format(java.util.Locale.GERMANY,"%.1f",rating)}${if((m.yellows[id]?:0)>0)" · 🟨" else ""}",color=if(p.fitness<60)Clay else Muted,fontSize=9.sp,maxLines=1)
+    }
+   }
+  }
+ }
+ Text("Tippen = Spieler für Wechsel wählen · halten & ziehen = Position tauschen/Lücke nach Platzverweis verschieben.",color=Muted,style=MaterialTheme.typography.bodySmall)
+}
 @Composable fun StatLine(label: String,left: String,right: String){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(left,Modifier.weight(1f));Text(label,color=Muted);Text(right,Modifier.weight(1f),textAlign=TextAlign.End)}}
 @Composable fun MatchScreen(state: GameState,vm: GameViewModel,speed: MatchSpeed){
  val w=state.world?:return;val m=w.live;var userPaused by rememberSaveable(m?.fixtureId){mutableStateOf(false)};var foreground by remember{mutableStateOf(true)};val running=foreground&&!userPaused;var liveTab by rememberSaveable(m?.fixtureId){mutableIntStateOf(0)};var showLiveGraphic by rememberSaveable(m?.fixtureId){mutableStateOf(true)};val lifecycle=LocalLifecycleOwner.current.lifecycle
