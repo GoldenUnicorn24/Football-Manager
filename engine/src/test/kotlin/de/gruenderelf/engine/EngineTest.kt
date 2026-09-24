@@ -199,6 +199,28 @@ class EngineTest {
   repeat(600){i->(w.squad(f.homeId)+w.squad(f.awayId)).forEach{it.fitness=100.0;it.injuryWeeks=0;it.unavailableWeeks=0};val m=MatchEngine.simulateFullMatch(w,f.copy(id=10000+i));xg+=m.home.xg+m.away.xg;goals+=m.home.goals+m.away.goals;if(m.home.goals>=7||m.away.goals>=7)blowouts++}
   val mean=xg/1200;println("CALIBRATION: xG/team=$mean goals/team=${goals/1200.0} seven-plus=$blowouts/600");assertTrue(mean in 1.10..1.55,"xG/team=$mean");assertTrue(blowouts<12)
  }
+ @Test fun manualBenchSelectionSurvivesMatchStart(){
+  val w=WorldFactory.createWorld(60601L);val c=w.club();WorldFactory.autoLineup(w,w.user.clubId);assertEquals(7,c.tactics.bench.size)
+  val removed=c.tactics.bench.first();WorldFactory.toggleBench(w,removed);val chosen=w.squad().first{it.available&&!it.youth&&it.id !in c.tactics.xi&&it.id !in c.tactics.bench&&it.id!=removed};WorldFactory.toggleBench(w,chosen.id)
+  val m=MatchEngine.start(w,w.nextFixture()!!);val ownBench=if(w.user.clubId==m.homeId)m.homeBench else m.awayBench
+  assertTrue(chosen.id in ownBench);assertFalse(removed in ownBench,"Manuell abgewählter Ersatzspieler darf beim Anpfiff nicht heimlich zurückkehren.")
+ }
+ @Test fun liveLineupSlotMoveCanRelocateRedCardGap(){
+  val w=WorldFactory.createWorld(60602L);val m=MatchEngine.start(w,w.nextFixture()!!);val home=w.user.clubId==m.homeId;val lineup=if(home)m.homeXi else m.awayXi
+  val from=lineup.indexOfFirst{it!=0&&w.players[it]?.position!=Position.TW};val to=lineup.indices.first{it!=from&&lineup[it]!=0};val sent=lineup[to];m.sentOff.add(sent);lineup[to]=0;val moving=lineup[from]
+  MatchEngine.moveLiveLineupSlot(w,m,from,to);assertEquals(moving,lineup[to]);assertEquals(0,lineup[from],"Die Unterzahl-Lücke muss an den frei gewordenen Ursprungsplatz wandern.")
+ }
+ @Test fun substitutionSuggestionsNeverRepeatOutgoingOrIncomingPlayer(){
+  val w=WorldFactory.createWorld(60603L);val m=MatchEngine.start(w,w.nextFixture()!!);val home=w.user.clubId==m.homeId;val lineup=if(home)m.homeXi else m.awayXi;val bench=if(home)m.homeBench else m.awayBench;m.minute=72
+  lineup.filter{it!=0}.take(5).forEach{w.players.getValue(it).apply{fitness=48.0;form=5.7}};bench.forEach{w.players.getValue(it).apply{fitness=100.0;form=7.8;sharpness=90}}
+  val suggestions=MatchEngine.substitutionSuggestions(w,m);assertTrue(suggestions.size>=2);assertEquals(suggestions.size,suggestions.map{it.outId}.distinct().size);assertEquals(suggestions.size,suggestions.map{it.inId}.distinct().size)
+ }
+ @Test fun assistantBatchCanAcceptOnlySelectedChanges(){
+  val w=WorldFactory.createWorld(60604L);val m=MatchEngine.start(w,w.nextFixture()!!);val home=w.user.clubId==m.homeId;val lineup=if(home)m.homeXi else m.awayXi;val bench=if(home)m.homeBench else m.awayBench;m.minute=70
+  lineup.filter{it!=0}.take(4).forEach{w.players.getValue(it).fitness=45.0};bench.forEach{w.players.getValue(it).fitness=100.0};val s=MatchEngine.substitutionSuggestions(w,m).take(2);assertEquals(2,s.size)
+  m.assistantSubPending=true;m.assistantSubOutIds=s.map{it.outId}.toMutableList();m.assistantSubInIds=s.map{it.inId}.toMutableList();m.assistantSubReasons=s.map{it.reason}.toMutableList();m.assistantSubOutId=s.first().outId;m.assistantSubInId=s.first().inId
+  val before=if(home)m.homeSubs else m.awaySubs;MatchEngine.acceptAssistantSubstitution(w,m,setOf(s.first().outId));assertEquals(before+1,if(home)m.homeSubs else m.awaySubs);assertTrue(s.first().outId !in lineup);assertTrue(s[1].outId in lineup);assertFalse(m.assistantSubPending)
+ }
  @Test fun relatedPositionsUseSoftPenaltyAndExposeSecondaryOptions(){
   val p=Player(999,position=Position.DM,attributes=Attributes(82,74,88,84,87,83,88,87,75,9,80))
   val dm=p.ratingAt(Position.DM);val zm=p.ratingAt(Position.ZM)
