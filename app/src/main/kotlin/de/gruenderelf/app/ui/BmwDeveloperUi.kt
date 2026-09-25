@@ -139,7 +139,7 @@ private fun BmwCommandCenterScreen(w:World,onNavigate:(String)->Unit){
  Page("BMW FC","BMW MOTORSPORT DNA · FOOTBALL PERFORMANCE"){
   Section{
    Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(18.dp)){
-    BmwFcMark(88.dp)
+    Crest(c.logo,c.primary,c.secondary,Modifier.size(88.dp))
     Column(Modifier.weight(1f)){MPerformanceMark();Spacer(Modifier.height(8.dp));Text("BMW FC EXPERIENCE",style=MaterialTheme.typography.headlineMedium);Text("Developer Mode · München",color=Muted)}
    }
   }
@@ -228,7 +228,7 @@ private fun BmwInfrastructureScreen(w:World){
  val s=w.club().stadium
  val rank=BmwDeveloperSystems.infrastructureRanking(w).indexOfFirst{it.clubId==w.user.clubId}+1
  Page("Performance Campus","BMW HUMAN PERFORMANCE CENTER"){
-  Section("BMW Performance Arena"){BmwFcMark(76.dp);Text(s.name,style=MaterialTheme.typography.headlineMedium);Text(s.capacity.toString()+" Plätze · Hybridrasen · vollständige Performance-Infrastruktur",color=Muted)}
+  Section("BMW Performance Arena"){Crest(w.club().logo,w.club().primary,w.club().secondary,Modifier.size(76.dp));Text(s.name,style=MaterialTheme.typography.headlineMedium);Text(s.capacity.toString()+" Plätze · Hybridrasen · vollständige Performance-Infrastruktur",color=Muted)}
   Section("Einrichtungen"){
    Meter("Training",s.training);Meter("Medizin",s.medicine);Meter("Kraftraum",s.gym);Meter("Jugend",s.youth);Meter("Platzqualität",s.pitchQuality);Meter("Clubhouse",s.clubhouse)
    Text("Infrastructure Ranking: #"+rank,color=Grass)
@@ -278,7 +278,7 @@ private fun BmwRosterDataScreen(w:World){
 @Composable
 private fun BmwMoreScreen(w:World,vm:GameViewModel,onNavigate:(String)->Unit,onExit:()->Unit){
  Page("BMW FC Operations","DEVELOPER CONTROL CENTER"){
-  Section{BmwFcMark(74.dp);Spacer(Modifier.height(6.dp));MPerformanceMark();Text("Versteckter Developer-Spielstand",color=Muted)}
+  Section{Crest(w.club().logo,w.club().primary,w.club().secondary,Modifier.size(74.dp));Spacer(Modifier.height(6.dp));MPerformanceMark();Text("Versteckter Developer-Spielstand",color=Muted)}
   Action("Global Rankings",secondary=true){onNavigate("bmw_rankings")}
   Action("Performance Campus",secondary=true){onNavigate("bmw_infrastructure")}
   Action("Human Performance / Longevity",secondary=true){onNavigate("bmw_medical")}
