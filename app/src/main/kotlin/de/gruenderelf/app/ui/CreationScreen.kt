@@ -192,7 +192,7 @@ private fun replaceKit(kits:Kits,kind:String,kit:Kit)=when(kind){
  }
  val kitLauncher=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->
   if(uri!=null){
-   val encoded=importBrandImage(context,uri,768,false)
+   val encoded=importBrandImage(context,uri,768,true)
    if(encoded!=null){
     val current=SaveCodec.json.decodeFromString(ClubDraft.serializer(),cj)
     val currentKit=kitFor(current.kits,pendingKitUpload)
