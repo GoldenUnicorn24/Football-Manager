@@ -66,6 +66,7 @@ object SaveCodec {
    if(version<=5)root["saveVersion"]=JsonPrimitive(6)
    if(version<=6)root["saveVersion"]=JsonPrimitive(7)
    if(version<=7)root["saveVersion"]=JsonPrimitive(8)
+   if(version<=8)root["saveVersion"]=JsonPrimitive(9)
    json.decodeFromJsonElement<World>(JsonObject(root))
   }
   if(version<7)NotificationSystem.acknowledgeCurrentForMigration(w)
