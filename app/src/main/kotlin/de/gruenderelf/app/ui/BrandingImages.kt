@@ -9,6 +9,8 @@ import java.io.ByteArrayOutputStream
 import kotlin.math.max
 import kotlin.math.roundToInt
 
+private const val MAX_BRANDING_BYTES=1_200_000
+
 /**
  * Imports user-selected club branding into a portable, save-friendly Base64 payload.
  * Images are downscaled before they enter the save so exported careers remain reasonably small.
@@ -30,24 +32,41 @@ fun importBrandImage(
   inSampleSize=sample
   inPreferredConfig=Bitmap.Config.ARGB_8888
  }
- val decoded=resolver.openInputStream(uri)?.use{BitmapFactory.decodeStream(it,null,opts)}?:return@runCatching null
- val largest=max(decoded.width,decoded.height)
- val bitmap=if(largest>maxDimension){
+ var bitmap=resolver.openInputStream(uri)?.use{BitmapFactory.decodeStream(it,null,opts)}?:return@runCatching null
+ val largest=max(bitmap.width,bitmap.height)
+ if(largest>maxDimension){
   val scale=maxDimension.toFloat()/largest
-  Bitmap.createScaledBitmap(
-   decoded,
-   (decoded.width*scale).roundToInt().coerceAtLeast(1),
-   (decoded.height*scale).roundToInt().coerceAtLeast(1),
+  val resized=Bitmap.createScaledBitmap(
+   bitmap,
+   (bitmap.width*scale).roundToInt().coerceAtLeast(1),
+   (bitmap.height*scale).roundToInt().coerceAtLeast(1),
    true
-  ).also{if(it!==decoded)decoded.recycle()}
- }else decoded
+  )
+  if(resized!==bitmap)bitmap.recycle()
+  bitmap=resized
+ }
 
- val out=ByteArrayOutputStream()
- val format=if(preserveAlpha)Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
- bitmap.compress(format,if(preserveAlpha)100 else 90,out)
+ fun encode(source:Bitmap):ByteArray{
+  val out=ByteArrayOutputStream()
+  val alpha=preserveAlpha&&source.hasAlpha()
+  source.compress(if(alpha)Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG,if(alpha)100 else 90,out)
+  return out.toByteArray()
+ }
+
+ var bytes=encode(bitmap)
+ while(bytes.size>MAX_BRANDING_BYTES&&max(bitmap.width,bitmap.height)>256){
+  val resized=Bitmap.createScaledBitmap(
+   bitmap,
+   (bitmap.width*.82f).roundToInt().coerceAtLeast(1),
+   (bitmap.height*.82f).roundToInt().coerceAtLeast(1),
+   true
+  )
+  if(resized!==bitmap)bitmap.recycle()
+  bitmap=resized
+  bytes=encode(bitmap)
+ }
  bitmap.recycle()
- val bytes=out.toByteArray()
- if(bytes.isEmpty()||bytes.size>2_500_000)return@runCatching null
+ if(bytes.isEmpty()||bytes.size>MAX_BRANDING_BYTES)return@runCatching null
  Base64.encodeToString(bytes,Base64.NO_WRAP)
 }.getOrNull()
 
