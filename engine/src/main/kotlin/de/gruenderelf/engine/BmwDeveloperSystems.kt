@@ -127,7 +127,18 @@ object BmwDeveloperSystems {
    val domains=listOf(TechDomain.AI,TechDomain.ANALYTICS,TechDomain.TRAINING,TechDomain.MEDICINE,TechDomain.INFRASTRUCTURE)
    val domain=domains[(w.calendar.absoluteWeek+id).mod(domains.size)]
    p.set(domain,(p.value(domain)+growth).coerceAtMost(ceiling))
-   p.projects.firstOrNull()?.let{it.level=p.ai;it.progress=(it.progress+growth/20.0).coerceAtMost(1.0)}
+   p.researchBudget+=(c.reputation.toLong()*85_000L).coerceAtLeast(1_000_000L)
+   if(p.projects.isEmpty()&&(p.ai>=60.0||p.infrastructure>=68.0)){
+    p.projects.add(TechProject(p.systemName,TechDomain.AI,p.ai,true,p.researchBudget,.05))
+    if(c.reputation>=82)w.news("Neue Konkurrenz-KI",c.name+" startet "+p.systemName+". Der Verein investiert in eigene Fußballanalyse und versucht technologisch aufzuholen.","normal")
+   }
+   p.projects.forEach{project->
+    if(project.active){
+     val projectGain=growth*(if(project.domain==domain)1.2 else .35)
+     project.level=(project.level+projectGain).coerceAtMost(ceiling)
+     project.progress=(project.progress+projectGain/20.0).coerceAtMost(1.0)
+    }
+   }
   }
   profile(w,bmw)?.let{p->
    p.projects.filter{it.active}.forEach{project->
@@ -136,6 +147,11 @@ object BmwDeveloperSystems {
     project.level=p.value(project.domain);project.progress=(project.progress+gain/15.0).coerceAtMost(1.0)
    }
   }
+  w.developer.automotiveTechnology=(w.developer.automotiveTechnology+.025).coerceAtMost(130.0)
+  w.developer.productionTechnology=(w.developer.productionTechnology+.030).coerceAtMost(130.0)
+  w.developer.medicalResearch=(w.developer.medicalResearch+.028).coerceAtMost(130.0)
+  val recentWins=w.club().form.takeLast(5).count{it=="S"}
+  w.developer.brandPower=(w.developer.brandPower+.006+recentWins*.003).coerceAtMost(130.0)
   val medicine=profile(w,bmw)?.medicine?:100.0
   for(lp in w.developer.longevity.values.filter{it.active}){
    val player=w.players[lp.playerId]?:continue
