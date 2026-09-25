@@ -23,7 +23,7 @@ import java.util.Locale
   Text("Deine fünf Vereinsgeschichten",style=MaterialTheme.typography.titleLarge)
   for(slot in 1..5){val s=slots.firstOrNull{it.slot==slot};Section("Slot $slot"){if(s==null)Text("Leer",color=Muted)else{SaveInfo(s);Action("Stand laden",!busy){vm.load(slot)};Action("Stand löschen",!busy,true){delete=slot}}}}
   Text("Kein Konto erforderlich. Für einen Gerätewechsel kannst du deine Spielstände als Datei exportieren.",color=Muted,style=MaterialTheme.typography.bodySmall)
-  Text("Gründerelf · Developer Build",color=Muted,style=MaterialTheme.typography.labelSmall,modifier=Modifier.clickable{
+  Text("Gründerelf · 0.5.18",color=Muted,style=MaterialTheme.typography.labelSmall,modifier=Modifier.clickable{
    developerTaps++
    if(developerTaps>=7){developerTaps=0;developerGate=true}
   })
