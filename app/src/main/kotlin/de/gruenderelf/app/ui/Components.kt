@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,7 +50,9 @@ fun dec(value: Double)=String.format(Locale.GERMANY,"%.1f",value)
  Canvas(modifier.semantics{contentDescription=if(custom!=null)"Eigenes Vereinswappen" else "Vereinswappen ${logo.letters}, Vorlage ${logo.template+1}"}){
   val w=size.width;val h=size.height
   if(custom!=null){
-   drawImage(custom,dstSize=IntSize(w.toInt().coerceAtLeast(1),h.toInt().coerceAtLeast(1)))
+   val scale=minOf(w/custom.width.toFloat(),h/custom.height.toFloat())
+   val dw=(custom.width*scale).toInt().coerceAtLeast(1);val dh=(custom.height*scale).toInt().coerceAtLeast(1)
+   drawImage(custom,dstOffset=IntOffset(((w-dw)/2f).toInt(),((h-dh)/2f).toInt()),dstSize=IntSize(dw,dh))
   }else{
    val path=Path().apply{when(logo.template%8){
     0->{moveTo(w*.13f,h*.1f);lineTo(w*.87f,h*.1f);lineTo(w*.85f,h*.62f);quadraticTo(w*.8f,h*.84f,w*.5f,h*.95f);quadraticTo(w*.2f,h*.84f,w*.15f,h*.62f);close()}
@@ -74,6 +77,7 @@ fun dec(value: Double)=String.format(Locale.GERMANY,"%.1f",value)
   val w=size.width;val h=size.height
   val p=Path().apply{moveTo(w*.3f,h*.08f);lineTo(w*.15f,h*.15f);lineTo(w*.01f,h*.4f);lineTo(w*.2f,h*.5f);lineTo(w*.25f,h*.4f);lineTo(w*.25f,h*.94f);lineTo(w*.75f,h*.94f);lineTo(w*.75f,h*.4f);lineTo(w*.8f,h*.5f);lineTo(w*.99f,h*.4f);lineTo(w*.85f,h*.15f);lineTo(w*.7f,h*.08f);quadraticTo(w*.5f,h*.32f,w*.3f,h*.08f);close()}
   if(custom!=null){
+   drawPath(p,Color(kit.primary))
    clipPath(p){drawImage(custom,dstSize=IntSize(w.toInt().coerceAtLeast(1),h.toInt().coerceAtLeast(1)))}
    drawPath(p,Chalk.copy(alpha=.55f),style=Stroke(1.5.dp.toPx()))
   }else{
