@@ -26,6 +26,7 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  val matchSpeed=repo.matchSpeed.stateIn(viewModelScope,SharingStarted.Eagerly,MatchSpeed.NORMAL)
  val soundsEnabled=repo.soundsEnabled.stateIn(viewModelScope,SharingStarted.Eagerly,true)
  val changelogSeenVersion=repo.changelogSeenVersion.stateIn(viewModelScope,SharingStarted.Eagerly,CHANGELOG_LOADING)
+ val developerPasswordConfigured=repo.developerPasswordConfigured.stateIn(viewModelScope,SharingStarted.Eagerly,false)
  private fun memoryPressure(){
   liveRunnerEnabled=false;liveRunnerJob?.cancel();liveRunnerJob=null;decisionJob?.cancel();decisionJob=null
   mutable.update{it.copy(error="Zu wenig freier Arbeitsspeicher. Der Vorgang wurde gestoppt, statt die App zu beenden. Bitte erneut laden.")}
@@ -52,6 +53,20 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  fun setMatchSpeed(v: MatchSpeed)=preferenceWrite("Das Spieltempo konnte nicht gespeichert werden."){repo.setMatchSpeed(v)}
  fun setSoundsEnabled(enabled: Boolean)=preferenceWrite("Die Sound-Einstellung konnte nicht gespeichert werden."){repo.setSoundsEnabled(enabled)}
  fun markChangelogSeen(version:String=CHANGELOG_VERSION)=preferenceWrite("Der Changelog-Status konnte nicht gespeichert werden."){repo.markChangelogSeen(version)}
+ fun openDeveloperMode(password:String,configure:Boolean=false)=work{
+  if(configure)repo.setDeveloperPassword(password) else require(repo.verifyDeveloperPassword(password)){"Developer-Code falsch."}
+  val world=if(repo.developerSaveExists())repo.load(BMW_DEVELOPER_SAVE_SLOT) else BmwDeveloperWorldFactory.create()
+  require(world.developer.enabled){"Der Developer-Spielstand ist ungültig."}
+  if(!repo.developerSaveExists())repo.save(BMW_DEVELOPER_SAVE_SLOT,world)
+  mutable.value=GameState(world,BMW_DEVELOPER_SAVE_SLOT,revision=mutable.value.revision+1,message="BMW FC Experience geladen.")
+ }
+ fun resetDeveloperWorld()=work{
+  val world=BmwDeveloperWorldFactory.create(System.currentTimeMillis())
+  repo.save(BMW_DEVELOPER_SAVE_SLOT,world)
+  mutable.value=GameState(world,BMW_DEVELOPER_SAVE_SLOT,revision=mutable.value.revision+1,message="BMW FC Experience neu aufgebaut.")
+ }
+ fun investTechnology(domain:TechDomain,amount:Long)=action("Forschungsbudget wurde freigegeben."){BmwDeveloperSystems.invest(it,domain,amount)}
+ fun enrollLongevity(playerId:Int)=action("Longevity-Programm aktualisiert."){BmwDeveloperSystems.enrollLongevity(it,playerId)}
  fun action(message: String?=null,block: (World)->Unit)=work{
   val current=mutable.value.world?:return@work;val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->block(w);SaveCodec.requireRuntimeIntegrity(w)}}
   repo.checkpoint(mutable.value.slot,next);mutable.update{it.copy(world=next,revision=it.revision+1,message=message)}
