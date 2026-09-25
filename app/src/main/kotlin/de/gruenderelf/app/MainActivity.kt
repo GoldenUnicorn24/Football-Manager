@@ -21,10 +21,20 @@ import androidx.navigation.compose.*
 import de.gruenderelf.app.ui.*
 import de.gruenderelf.engine.NotificationSystem
 
-class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState: Bundle?){super.onCreate(savedInstanceState);enableEdgeToEdge(statusBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),navigationBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT));setContent{GruenderelfTheme{GruenderelfApp()}}}}
+class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState: Bundle?){super.onCreate(savedInstanceState);enableEdgeToEdge(statusBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),navigationBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT));setContent{GruenderelfRoot()}}}
+@Composable fun GruenderelfRoot(vm:GameViewModel=viewModel()){
+ val state by vm.state.collectAsStateWithLifecycle()
+ UiBrand.bmwMode=state.world?.developer?.enabled==true
+ GruenderelfTheme{GruenderelfApp(vm)}
+}
 @Composable fun GruenderelfApp(vm: GameViewModel=viewModel()){
  val state by vm.state.collectAsStateWithLifecycle();val slots by vm.slots.collectAsStateWithLifecycle();val last by vm.lastSlot.collectAsStateWithLifecycle();val matchSpeed by vm.matchSpeed.collectAsStateWithLifecycle();val changelogSeenVersion by vm.changelogSeenVersion.collectAsStateWithLifecycle()
  var startPage by rememberSaveable{mutableStateOf("start")};var exitConfirm by remember{mutableStateOf(false)};var changelogDismissedThisSession by rememberSaveable{mutableStateOf(false)};val snack=remember{SnackbarHostState()}
+ if(state.world?.developer?.enabled==true){
+  BmwDeveloperShell(state,vm,slots,matchSpeed)
+  state.error?.let{AlertDialog(onDismissRequest={vm.clearError()},title={Text("BMW FC")},text={Text(it)},confirmButton={TextButton({vm.clearError()}){Text("Verstanden")}})}
+  return
+ }
  LaunchedEffect(state.world?.user?.clubId){if(state.world!=null)startPage="start"}
  LaunchedEffect(state.message){state.message?.let{snack.showSnackbar(it);vm.clearMessage()}}
  Surface(Modifier.fillMaxSize(),color=Ink){
