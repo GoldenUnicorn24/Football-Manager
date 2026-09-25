@@ -10,6 +10,8 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.security.MessageDigest
+import java.util.UUID
 
 @Entity(tableName="savegames",indices=[Index(value=["slot"],unique=true)])
 data class Savegame(@PrimaryKey val id: Int,val slot: Int,val clubName: String,val season: Int,val matchday: Int,val leagueName: String,val difficulty: String,val updatedAt: Long,val worldJson: String,@ColumnInfo(defaultValue="2") val saveVersion: Int=2)
@@ -44,11 +46,17 @@ class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.
  private val saveMutex=Mutex()
  private val settings=context.applicationContext.settings
  private val lastKey=intPreferencesKey("letzter_slot");private val fastKey=booleanPreferencesKey("schnelles_spiel");private val speedKey=stringPreferencesKey("spieltempo_v044");private val soundKey=booleanPreferencesKey("match_sounds_v0464");private val changelogKey=stringPreferencesKey("changelog_seen_version")
+ private val developerHashKey=stringPreferencesKey("developer_password_hash_v1");private val developerSaltKey=stringPreferencesKey("developer_password_salt_v1")
  val saves=db.saves().summaries()
  val lastSlot=settings.data.catch{emit(emptyPreferences())}.map{it[lastKey]?:1}
  val matchSpeed=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[speedKey]?.let{runCatching{MatchSpeed.valueOf(it)}.getOrNull()}?:if(prefs[fastKey]==true)MatchSpeed.FAST else MatchSpeed.NORMAL}
  val soundsEnabled=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[soundKey]?:true}
  val changelogSeenVersion=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[changelogKey]?:""}
+ val developerPasswordConfigured=settings.data.catch{emit(emptyPreferences())}.map{prefs->!prefs[developerHashKey].isNullOrBlank()&&!prefs[developerSaltKey].isNullOrBlank()}
+ private fun passwordHash(value:String,salt:String)=MessageDigest.getInstance("SHA-256").digest((salt+"|"+value).toByteArray(Charsets.UTF_8)).joinToString(""){"%02x".format(it)}
+ suspend fun setDeveloperPassword(value:String){require(value.length>=6){"Der Developer-Code braucht mindestens 6 Zeichen."};val salt=UUID.randomUUID().toString();settings.edit{it[developerSaltKey]=salt;it[developerHashKey]=passwordHash(value,salt)}}
+ suspend fun verifyDeveloperPassword(value:String):Boolean{val prefs=settings.data.first();val salt=prefs[developerSaltKey]?:return false;val hash=prefs[developerHashKey]?:return false;return MessageDigest.isEqual(hash.toByteArray(),passwordHash(value,salt).toByteArray())}
+ suspend fun developerSaveExists()=db.saves().header(BMW_DEVELOPER_SAVE_SLOT)!=null
  suspend fun setMatchSpeed(value: MatchSpeed){settings.edit{it[speedKey]=value.name;it[fastKey]=value==MatchSpeed.FAST}}
  suspend fun setSoundsEnabled(enabled: Boolean){settings.edit{it[soundKey]=enabled}}
  suspend fun markChangelogSeen(version:String){settings.edit{it[changelogKey]=version}}
@@ -69,7 +77,7 @@ class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.
   return bytes
  }
  suspend fun load(slot: Int): World=withContext(Dispatchers.IO){
-  require(slot in 1..5);val dao=db.saves();var primary=dao.get(slot);val hadPrimary=primary!=null;val primaryVersion=primary?.saveVersion
+  require(slot in 1..5||slot==BMW_DEVELOPER_SAVE_SLOT);val dao=db.saves();var primary=dao.get(slot);val hadPrimary=primary!=null;val primaryVersion=primary?.saveVersion
   var w=decodeOrNull(primary)
   // Die große JSON-Zeichenkette sofort freigeben, bevor ggf. ein Backup oder Re-Save folgt.
   primary=null
@@ -82,7 +90,7 @@ class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.
  }
  private fun saveRow(slot:Int,w:World,payload:String)=Savegame(slot,slot,w.club().name,w.calendar.season,w.calendar.matchday,WorldFactory.leagueName(w,w.club().tier),w.user.difficulty.label,System.currentTimeMillis(),payload,SAVE_VERSION)
  suspend fun save(slot: Int,w: World)=saveMutex.withLock{withContext(Dispatchers.IO+NonCancellable){
-  require(slot in 1..5){"Es gibt fünf Speicherplätze."};SaveCodec.requireRuntimeIntegrity(w);val payload=SaveCodec.encode(w)
+  require(slot in 1..5||slot==BMW_DEVELOPER_SAVE_SLOT){"Ungültiger Speicherplatz."};SaveCodec.requireRuntimeIntegrity(w);val payload=SaveCodec.encode(w)
   require(utf8Size(payload)<=128L*1024*1024){"Der Spielstand überschreitet 128 MB."}
   // World ist bereits ein gültiger Engine-Zustand. Ein komplettes encode->decode nur zur Kontrolle
   // verdoppelte den Peak-RAM. Backup und Primärstand werden nun atomar aus demselben Payload geschrieben.
@@ -98,7 +106,7 @@ class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.
   * Room/WAL schreibt die neue Zeile atomar; die letzte Vollsicherung bleibt als Backup erhalten.
   */
  suspend fun checkpoint(slot:Int,w:World)=saveMutex.withLock{withContext(Dispatchers.IO){
-  require(slot in 1..5);SaveCodec.requireRuntimeIntegrity(w);val payload=SaveCodec.encode(w)
+  require(slot in 1..5||slot==BMW_DEVELOPER_SAVE_SLOT);SaveCodec.requireRuntimeIntegrity(w);val payload=SaveCodec.encode(w)
   require(utf8Size(payload)<=128L*1024*1024){"Der Spielstand überschreitet 128 MB."}
   db.saves().put(saveRow(slot,w,payload));settings.edit{it[lastKey]=slot}
  }}
