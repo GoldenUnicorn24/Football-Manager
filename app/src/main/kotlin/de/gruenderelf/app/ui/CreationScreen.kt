@@ -1,11 +1,14 @@
 package de.gruenderelf.app.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import de.gruenderelf.app.GameViewModel
 import de.gruenderelf.app.data.SaveSummary
@@ -17,6 +20,26 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
  val pos=positions[index.coerceIn(0,positions.lastIndex)]
  val a=if(pos==Position.TW)Attributes(45,25,52,48,42,54,58,50,35,68,42) else Attributes(55,52,54,54,52,53,58,53,50,12,48)
  return PlayerDraft(firstName="Spieler",lastName=(index+2).toString().padStart(2,'0'),birthYear=2000-index%10,position=pos,number=(index+2).coerceAtMost(99),attributes=a)
+}
+
+private val kitKinds=listOf("Heim","Auswärts","Drittes Trikot","Torwart","Training")
+private val kitPatternNames=listOf(
+ "Einfarbig","Längsstreifen","Schärpe","Brustring","Halbiert",
+ "Mittelstreifen","Querstreifen","Kontrastärmel","Chevron","Nadelstreifen"
+)
+private fun kitFor(kits:Kits,kind:String)=when(kind){
+ "Auswärts"->kits.away
+ "Drittes Trikot"->kits.third?:Kit()
+ "Torwart"->kits.keeper
+ "Training"->kits.training
+ else->kits.home
+}
+private fun replaceKit(kits:Kits,kind:String,kit:Kit)=when(kind){
+ "Auswärts"->kits.copy(away=kit)
+ "Drittes Trikot"->kits.copy(third=kit)
+ "Torwart"->kits.copy(keeper=kit)
+ "Training"->kits.copy(training=kit)
+ else->kits.copy(home=kit)
 }
 
 @Composable private fun AttributeSlider(label: String,value: Int,onChange: (Int)->Unit){
@@ -144,7 +167,7 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
  var leagueSlotClubKey by rememberSaveable(league.name){mutableStateOf(league.clubs.first().key)}
  if(league.clubs.none{it.key==leagueSlotClubKey})leagueSlotClubKey=league.clubs.first().key
 
- var cj by rememberSaveable{mutableStateOf(SaveCodec.json.encodeToString(ClubDraft.serializer(),ClubDraft()))}
+ var cj by remember{mutableStateOf(SaveCodec.json.encodeToString(ClubDraft.serializer(),ClubDraft()))}
  var pj by rememberSaveable{mutableStateOf(SaveCodec.json.encodeToString(PlayerDraft.serializer(),PlayerDraft()))}
  val listSer=remember{ListSerializer(PlayerDraft.serializer())}
  var sj by rememberSaveable{mutableStateOf(SaveCodec.json.encodeToString(listSer,List(19){sandboxTemplate(it)}))}
@@ -154,6 +177,30 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
  fun club(v:ClubDraft){cj=SaveCodec.json.encodeToString(ClubDraft.serializer(),v)}
  fun person(v:PlayerDraft){pj=SaveCodec.json.encodeToString(PlayerDraft.serializer(),v)}
  fun roster(v:List<PlayerDraft>){sj=SaveCodec.json.encodeToString(listSer,v)}
+ val context=LocalContext.current
+ var pendingKitUpload by rememberSaveable{mutableStateOf("Heim")}
+ var brandingMessage by remember{mutableStateOf<String?>(null)}
+ val logoLauncher=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->
+  if(uri!=null){
+   val encoded=importBrandImage(context,uri,512,true)
+   if(encoded!=null){
+    val current=SaveCodec.json.decodeFromString(ClubDraft.serializer(),cj)
+    club(current.copy(logo=current.logo.copy(customImage=encoded)))
+    brandingMessage="Eigenes Vereinswappen übernommen und im Spielstand gespeichert."
+   }else brandingMessage="Wappen konnte nicht verarbeitet werden. Bitte PNG oder JPG mit normaler Bildgröße verwenden."
+  }
+ }
+ val kitLauncher=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){uri->
+  if(uri!=null){
+   val encoded=importBrandImage(context,uri,768,false)
+   if(encoded!=null){
+    val current=SaveCodec.json.decodeFromString(ClubDraft.serializer(),cj)
+    val currentKit=kitFor(current.kits,pendingKitUpload)
+    club(current.copy(kits=replaceKit(current.kits,pendingKitUpload,currentKit.copy(customImage=encoded))))
+    brandingMessage="$pendingKitUpload-Trikotbild übernommen und im Spielstand gespeichert."
+   }else brandingMessage="Trikotbild konnte nicht verarbeitet werden. Bitte PNG oder JPG mit normaler Bildgröße verwenden."
+  }
+ }
 
  val titles=listOf("Land & Liga","Dein Verein","Wappen & Trikots","Dein Spieler","Kader erstellen","Karriere starten")
  var page by rememberSaveable{mutableIntStateOf(0)}
@@ -192,18 +239,29 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
    2->{
     Section("Wappen"){
      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){Crest(c.logo,c.primary,c.secondary,Modifier.size(115.dp))}
-     Pick("Wappenvorlage",c.logo.template,(0..7).toList(),{"Vorlage ${it+1}"}){club(c.copy(logo=c.logo.copy(template=it)))}
-     Field("Buchstaben im Wappen",c.logo.letters){club(c.copy(logo=c.logo.copy(letters=it.uppercase().take(4))))}
-     ColorPicker("Primärfarbe",c.primary){club(c.copy(primary=it))};ColorPicker("Sekundärfarbe",c.secondary){club(c.copy(secondary=it))}
+     if(c.logo.customImage==null){
+      Pick("Wappenvorlage",c.logo.template,(0..7).toList(),{"Vorlage ${it+1}"}){club(c.copy(logo=c.logo.copy(template=it)))}
+      Field("Buchstaben im Wappen",c.logo.letters){club(c.copy(logo=c.logo.copy(letters=it.uppercase().take(4))))}
+     }else Text("Dein hochgeladenes Wappen ersetzt die generierte Vorlage. Die Vorlage bleibt als Fallback gespeichert.",color=Muted,style=MaterialTheme.typography.bodySmall)
+     ColorPicker("Primärfarbe",c.primary){club(c.copy(primary=it))}
+     ColorPicker("Sekundärfarbe",c.secondary){club(c.copy(secondary=it))}
+     Action(if(c.logo.customImage==null)"Eigenes Wappen hochladen" else "Wappenbild ersetzen",secondary=true){logoLauncher.launch("image/*")}
+     if(c.logo.customImage!=null)Action("Eigenes Wappen entfernen",secondary=true){club(c.copy(logo=c.logo.copy(customImage=null)));brandingMessage="Eigenes Wappen entfernt. Die Gründerelf-Vorlage ist wieder aktiv."}
+     Text("PNG/JPG wird automatisch verkleinert und direkt in den exportierbaren Spielstand eingebettet.",color=Muted,style=MaterialTheme.typography.labelSmall)
     }
     Section("Trikots"){
-     Pick("Kleidung",clothing,listOf("Heim","Auswärts","Drittes Trikot","Torwart","Training")){clothing=it}
-     val kit=when(clothing){"Auswärts"->c.kits.away;"Drittes Trikot"->c.kits.third?:Kit();"Torwart"->c.kits.keeper;"Training"->c.kits.training;else->c.kits.home}
-     fun change(k:Kit){club(c.copy(kits=when(clothing){"Auswärts"->c.kits.copy(away=k);"Drittes Trikot"->c.kits.copy(third=k);"Torwart"->c.kits.copy(keeper=k);"Training"->c.kits.copy(training=k);else->c.kits.copy(home=k)}))}
+     Pick("Kleidung",clothing,kitKinds){clothing=it}
+     val kit=kitFor(c.kits,clothing)
+     fun change(k:Kit){club(c.copy(kits=replaceKit(c.kits,clothing,k)))}
      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.Center){Shirt(kit,Modifier.size(130.dp))}
-     Pick("Trikotmuster",kit.pattern,(0..3).toList(),{listOf("Einfarbig","Längsstreifen","Schärpe","Brustring")[it]}){change(kit.copy(pattern=it))}
-     ColorPicker("Stofffarbe",kit.primary){change(kit.copy(primary=it))};ColorPicker("Kontrastfarbe",kit.secondary){change(kit.copy(secondary=it))}
+     Pick("Trikotmuster",kit.pattern,kitPatternNames.indices.toList(),{kitPatternNames[it]}){change(kit.copy(pattern=it))}
+     ColorPicker("Stofffarbe",kit.primary){change(kit.copy(primary=it))}
+     ColorPicker("Kontrastfarbe",kit.secondary){change(kit.copy(secondary=it))}
+     Action(if(kit.customImage==null)"Eigenes Trikotbild hochladen" else "Trikotbild ersetzen",secondary=true){pendingKitUpload=clothing;kitLauncher.launch("image/*")}
+     if(kit.customImage!=null)Action("Trikotbild entfernen",secondary=true){change(kit.copy(customImage=null));brandingMessage="$clothing-Trikotbild entfernt. Das generierte Design ist wieder aktiv."}
+     Text(if(kit.customImage==null)"10 neue Generator-Designs stehen zur Auswahl. Alternativ kannst du ein fertiges Trikotbild importieren." else "Das hochgeladene Bild wird in die Trikotform eingepasst. Farben und Muster bleiben als Fallback erhalten.",color=Muted,style=MaterialTheme.typography.bodySmall)
     }
+    brandingMessage?.let{Text(it,color=Grass,style=MaterialTheme.typography.bodySmall)}
    }
    3->{Section("Spielertrainer"){PlayerDraftEditor(p,{person(it)},false);PlayerPortrait(p.appearance,c.kits.home,Modifier.size(120.dp))};AttributeEditor(p){person(it)}}
    4->{
