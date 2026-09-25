@@ -107,18 +107,17 @@ fun BmwDeveloperShell(state:GameState,vm:GameViewModel,slots:List<SaveSummary>,m
     composable("kader"){SquadScreen(w,vm){nav.navigate("spieler/$it")}}
     composable("spiel"){MatchScreen(state,vm,matchSpeed)}
     composable("bmw_tech"){BmwTechnologyScreen(w,vm){nav.navigate(it)}}
-    composable("bmw_more"){BmwMoreScreen(w,{nav.navigate(it)}){exit=true}}
+    composable("bmw_more"){BmwMoreScreen(w,vm,{nav.navigate(it)}){exit=true}}
     composable("bmw_rankings"){BmwWorldRankingScreen(w)}
     composable("bmw_infrastructure"){BmwInfrastructureScreen(w)}
     composable("bmw_medical"){BmwMedicalScreen(w,vm)}
     composable("bmw_roster"){BmwRosterDataScreen(w)}
     composable("liga"){LeagueScreen(w)}
-    composable("verein"){ClubScreen(w,vm){nav.navigate("speichern")}}
+    composable("verein"){ClubScreen(w,vm){vm.saveAs(BMW_DEVELOPER_SAVE_SLOT)}}
     composable("training"){TrainingScreen(w,vm)}
     composable("transfers"){TransfersScreen(w,vm){nav.navigate("spieler/$it")}}
     composable("karriere"){CareerScreen(w,vm)}
     composable("einstellungen"){SettingsScreen(vm)}
-    composable("speichern"){SavesScreen(vm,slots,state){nav.popBackStack()}}
     composable("spieler/{id}"){back->ProfileScreen(w,back.arguments?.getString("id")?.toIntOrNull()?:w.user.playerId,vm){nav.popBackStack()}}
    }
    if(state.busy)LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
@@ -275,7 +274,7 @@ private fun BmwRosterDataScreen(w:World){
 }
 
 @Composable
-private fun BmwMoreScreen(w:World,onNavigate:(String)->Unit,onExit:()->Unit){
+private fun BmwMoreScreen(w:World,vm:GameViewModel,onNavigate:(String)->Unit,onExit:()->Unit){
  Page("BMW FC Operations","DEVELOPER CONTROL CENTER"){
   Section{BmwFcMark(74.dp);Spacer(Modifier.height(6.dp));MPerformanceMark();Text("Versteckter Developer-Spielstand",color=Muted)}
   Action("Global Rankings",secondary=true){onNavigate("bmw_rankings")}
@@ -287,7 +286,7 @@ private fun BmwMoreScreen(w:World,onNavigate:(String)->Unit,onExit:()->Unit){
   Action("Liga & Wettbewerbe",secondary=true){onNavigate("liga")}
   Action("Verein & Finanzen",secondary=true){onNavigate("verein")}
   Action("Karriere",secondary=true){onNavigate("karriere")}
-  Action("Speicherstände / Export",secondary=true){onNavigate("speichern")}
+  Action("BMW Developer-Spielstand sichern",secondary=true){vm.saveAs(BMW_DEVELOPER_SAVE_SLOT)}
   Action("Einstellungen",secondary=true){onNavigate("einstellungen")}
   Action("BMW FC Experience verlassen",secondary=true,onClick=onExit)
  }
