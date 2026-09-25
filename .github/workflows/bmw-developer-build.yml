@@ -1,5 +1,9 @@
 name: BMW Developer Build
 
+concurrency:
+  group: bmw-developer-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   push:
