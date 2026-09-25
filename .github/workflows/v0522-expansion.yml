@@ -1,12 +1,12 @@
-name: Gründerelf v0.5.22 Expansion CI
+name: Gründerelf v0.5.23 Branding CI
 on:
   push:
-    branches: [ "feat/v0.5.22-expansion" ]
+    branches: [ "feat/v0.5.22-expansion", "feature/v0.5.23-branding-upload" ]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: v0522-expansion-${{ github.ref }}
+  group: v0523-branding-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   verify-and-build:
@@ -26,7 +26,7 @@ jobs:
       - name: Upload installable debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gruenderelf-v0.5.22-HCTR-expansion-installable
+          name: Gruenderelf-v0.5.23-branding-installable
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Engine tests
@@ -40,6 +40,6 @@ jobs:
       - name: Upload unsigned release APK
         uses: actions/upload-artifact@v4
         with:
-          name: Gruenderelf-v0.5.22-HCTR-expansion-unsigned
+          name: Gruenderelf-v0.5.23-branding-unsigned
           path: app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
