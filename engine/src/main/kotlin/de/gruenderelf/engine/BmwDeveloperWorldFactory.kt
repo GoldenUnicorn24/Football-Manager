@@ -75,7 +75,7 @@ object BmwDeveloperWorldFactory {
   val dev=BmwDeveloperState(enabled=true,bmwClubId=club.id)
   fun install(p:Player,s:BmwPlayerSeed){
    p.firstName=s.first;p.lastName=s.last;p.birthYear=s.born;p.nationality=s.nationality;p.position=s.position
-   p.secondary=s.secondary.toMutableList();p.number=s.number;p.foot=s.foot;p.attributes=attributesFor(s.position,s.rating)
+   p.secondary=s.secondary.toMutableList();p.number=s.number;p.foot=s.foot;p.attributes=attributesFor(s.position,s.rating);tuneOverall(p,s.rating)
    p.hidden.potential=s.potential;p.hidden.professionalism=96;p.hidden.consistency=94;p.hidden.development=98;p.hidden.pressure=96;p.hidden.ambition=90
    p.fitness=99.0;p.morale=95;p.form=7.5;p.sharpness=96;p.wage=(s.annualSalary/52).toInt();p.contractYears=5
    p.promisedRole=if(s.rating>=92)SquadRole.STAR else if(s.rating>=86)SquadRole.STARTER else SquadRole.ROTATION
@@ -96,6 +96,25 @@ object BmwDeveloperWorldFactory {
   w.news.clear()
   w.news("BMW FC Experience aktiviert","BMW Performance Arena, NEXUS, ORIGIN, PROJECT ZERO, Weltranglisten und Longevity-Forschung sind aktiv.","good")
   return w
+ }
+
+ private fun tuneOverall(p:Player,target:Int){
+  fun adjust(delta:Int){
+   when(p.position){
+    Position.TW->p.attributes.keeping=(p.attributes.keeping+delta).coerceIn(1,99)
+    Position.IV,Position.LV,Position.RV,Position.DM->p.attributes.tackling=(p.attributes.tackling+delta).coerceIn(1,99)
+    Position.ZM->p.attributes.passing=(p.attributes.passing+delta).coerceIn(1,99)
+    Position.OM->p.attributes.vision=(p.attributes.vision+delta).coerceIn(1,99)
+    Position.LA,Position.RA->p.attributes.technique=(p.attributes.technique+delta).coerceIn(1,99)
+    Position.ST->p.attributes.finishing=(p.attributes.finishing+delta).coerceIn(1,99)
+   }
+  }
+  var guard=0
+  while(p.ca!=target&&guard++<30){
+   val before=p.ca
+   adjust(if(before<target)1 else -1)
+   if(p.ca==before&&((before<target&&target>=99)||(before>target&&target<=1)))break
+  }
  }
 
  private fun attributesFor(pos:Position,rating:Int):Attributes{
