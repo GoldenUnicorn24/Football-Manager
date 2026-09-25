@@ -6,7 +6,9 @@ plugins {
 }
 val stableUpdatePassword = providers.gradleProperty("gruenderelfKeystorePassword").orNull
  ?: System.getenv("GRUENDERELF_KEYSTORE_PASSWORD")
- ?: error("Signing password missing: set GRUENDERELF_KEYSTORE_PASSWORD or -PgruenderelfKeystorePassword")
+val releaseRequested = gradle.startParameter.taskNames.any { it.contains("release", ignoreCase=true) }
+if(releaseRequested && stableUpdatePassword.isNullOrBlank())
+ error("Signing password missing: set GRUENDERELF_KEYSTORE_PASSWORD or -PgruenderelfKeystorePassword")
 
 android {
  namespace="de.gruenderelf.app"
@@ -18,7 +20,7 @@ android {
   testInstrumentationRunner="androidx.test.runner.AndroidJUnitRunner"
  }
  signingConfigs {
-  create("stableUpdate") {
+  if(!stableUpdatePassword.isNullOrBlank())create("stableUpdate") {
    storeFile=file("gruenderelf-update.jks")
    storePassword=stableUpdatePassword
    keyAlias="gruenderelf"
@@ -26,10 +28,13 @@ android {
   }
  }
  buildTypes {
-  debug { isDebuggable=true; signingConfig=signingConfigs.getByName("stableUpdate") }
+  debug {
+   isDebuggable=true
+   if(!stableUpdatePassword.isNullOrBlank())signingConfig=signingConfigs.getByName("stableUpdate")
+  }
   release {
    isMinifyEnabled=true; isShrinkResources=true
-   signingConfig=signingConfigs.getByName("stableUpdate")
+   if(!stableUpdatePassword.isNullOrBlank())signingConfig=signingConfigs.getByName("stableUpdate")
    proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"),"proguard-rules.pro")
   }
  }
