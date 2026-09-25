@@ -413,7 +413,7 @@ object MatchEngine {
    controlGame(m,home)->if(attack).91 else 1.07
    else->1.0
   }
-  return (value*(if(attack)1+(mentality-3)*.055+(effective.tempo-3)*.02 else 1-(mentality-3)*.04+(effective.pressing-3)*.02)*modeFactor*MatchIntelligence.teamFactor(c,attack)*TacticalInstructionSystem.teamFactor(c,ids,attack)).coerceAtLeast(4.0)
+  return (value*(if(attack)1+(mentality-3)*.055+(effective.tempo-3)*.02 else 1-(mentality-3)*.04+(effective.pressing-3)*.02)*modeFactor*MatchIntelligence.teamFactor(c,attack)*BmwDeveloperSystems.matchFactor(w,c.id,attack)*TacticalInstructionSystem.teamFactor(c,ids,attack)).coerceAtLeast(4.0)
  }
 
  private fun averageFitness(w: World,m: LiveMatch,home: Boolean): Double = xi(m,home).filter{it!=0&&it !in m.injured}.map{w.players.getValue(it).fitness}.average().takeIf{!it.isNaN()}?:70.0
