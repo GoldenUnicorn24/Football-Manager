@@ -3,7 +3,7 @@ package de.gruenderelf.engine
 import kotlinx.serialization.Serializable
 import kotlin.math.roundToInt
 
-const val SAVE_VERSION = 9
+const val SAVE_VERSION = 10
 @Serializable enum class Difficulty(val label: String,val money: Double) { CASUAL("Entspannt",1.25), NORMAL("Normal",1.0), REALISTIC("Realistisch",.85), HARDCORE("Hart",.7), SANDBOX("Sandbox",5.0) }
 @Serializable enum class Position(val label: String) { TW("Torwart"),IV("Innenverteidiger"),LV("Linksverteidiger"),RV("Rechtsverteidiger"),DM("Defensives Mittelfeld"),ZM("Zentrales Mittelfeld"),OM("Offensives Mittelfeld"),LA("Linksaußen"),RA("Rechtsaußen"),ST("Stürmer") }
 
@@ -155,8 +155,8 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP,Compe
   else->"positionsfremd"
  }
 }
-@Serializable data class Logo(var template: Int=0,var letters: String="GE")
-@Serializable data class Kit(var primary: Long=0xFF287254,var secondary: Long=0xFFE7EEE5,var pattern: Int=0)
+@Serializable data class Logo(var template: Int=0,var letters: String="GE",var customImage: String?=null)
+@Serializable data class Kit(var primary: Long=0xFF287254,var secondary: Long=0xFFE7EEE5,var pattern: Int=0,var customImage: String?=null)
 @Serializable data class Kits(var home: Kit=Kit(),var away: Kit=Kit(0xFFE7EEE5,0xFF287254,1),var third: Kit?=null,var keeper: Kit=Kit(0xFFDF663D,0xFF17251E),var training: Kit=Kit(0xFF1A2722,0xFFE7EEE5,2))
 @Serializable data class Stadium(var name: String="Sportplatz am Waldrand",var capacity: Int=250,var seats: Int=0,var pitchQuality: Int=35,var surface: Surface=Surface.HARD,var floodlights: Boolean=false,var cabin: Int=15,var stand: Int=5,var training: Int=15,var clubhouse: Int=12,var youth: Int=10,var gym: Int=0,var medicine: Int=5)
 @Serializable data class SavedTactic(var formation:String="4-4-2",var mentality:Int=3,var pressing:Int=3,var line:Int=3,var tempo:Int=3,var width:Int=3,var buildUp:BuildUp=BuildUp.MIXED)
