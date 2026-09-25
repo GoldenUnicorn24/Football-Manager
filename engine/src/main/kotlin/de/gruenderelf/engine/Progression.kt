@@ -96,7 +96,7 @@ object SeasonEngine {
   for(f in w.fixtures.filter{it.competition==CompetitionType.LEAGUE&&it.matchday==w.calendar.matchday&&!it.played})MatchEngine.record(w,MatchEngine.simulateFullMatch(w,f))
   // Ist der Nutzer in einem Zusatzwettbewerb nicht vertreten, werden diese Partien mit derselben MatchEngine im Hintergrund gespielt.
   simulateScheduledCompetitionBackground(w,w.calendar.matchday)
-  TrainingEngine.apply(w);ConstructionEngine.advance(w)
+  TrainingEngine.apply(w);ConstructionEngine.advance(w);BmwDeveloperSystems.weekly(w)
   for(c in w.clubs.values){
    c.wageBill=w.squad(c.id).sumOf{it.wage};EconomySystem.weekly(w,c)
    for(p in w.squad(c.id)){
@@ -180,9 +180,9 @@ object SeasonEngine {
    for(p in w.players.values.toList()){
     if(p.retired)continue
     if(p.stats.appearances>0)p.career.add(PlayerSeason(w.calendar.season,w.clubs[p.clubId]?.name?:"Vereinslos",p.stats.copy()))
-    p.stats=Stats();val age=w.calendar.season+1-p.birthYear
-    if(age>=35){p.attributes.pace=(p.attributes.pace-1).coerceAtLeast(1);p.attributes.stamina=(p.attributes.stamina-1).coerceAtLeast(1)}
-    if(p.id!=w.user.playerId&&age>=36&&rng.chance(.15+(age-36)*.12)){p.retired=true;p.clubId=0;continue}
+    p.stats=Stats();val age=BmwDeveloperSystems.effectiveAge(w,p,w.calendar.season+1)
+    if(age>=35){val keep=w.developer.longevity[p.id]?.primeRetention?:0.0;if(!w.developer.enabled||rng.chance((1.0-keep).coerceIn(.08,1.0))){p.attributes.pace=(p.attributes.pace-1).coerceAtLeast(1);p.attributes.stamina=(p.attributes.stamina-1).coerceAtLeast(1)}}
+    if(p.id!=w.user.playerId&&age>=36&&rng.chance((.15+(age-36)*.12)*(1.0-(w.developer.longevity[p.id]?.primeRetention?:0.0)*.72))){p.retired=true;p.clubId=0;continue}
     if(age<=23&&rng.chance(.7))p.attributes.improve(rng.pick(Focus.entries),p.hidden.potential)
     if(p.youth&&age>=23)p.youth=false else if(p.youth)p.youthSquad=if(age<=18)YouthSquad.U19 else YouthSquad.U23
     p.fitness=95.0;p.sharpness=55;p.injuryWeeks=(p.injuryWeeks-4).coerceAtLeast(0);p.unavailableWeeks=0;p.unavailableReason=null;if(p.injuryWeeks==0)p.injury=""
