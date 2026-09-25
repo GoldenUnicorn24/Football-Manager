@@ -24,7 +24,15 @@ import de.gruenderelf.engine.*
 import java.text.NumberFormat
 import java.util.Locale
 
-val Ink=Color(0xFF07110D);val Panel=Color(0xFF12231B);val Grass=Color(0xFF7BDBA8);val Chalk=Color(0xFFF0F6F2);val Muted=Color(0xFF9CB1A4);val Clay=Color(0xFFE48C73);val Blue=Color(0xFF79AEEA);val Gold=Color(0xFFE0BE73)
+object UiBrand{var bmwMode:Boolean=false}
+val Ink get()=if(UiBrand.bmwMode)Color(0xFF05070A) else Color(0xFF07110D)
+val Panel get()=if(UiBrand.bmwMode)Color(0xFF111820) else Color(0xFF12231B)
+val Grass get()=if(UiBrand.bmwMode)Color(0xFF00ADEF) else Color(0xFF7BDBA8)
+val Chalk get()=if(UiBrand.bmwMode)Color(0xFFF4F7FA) else Color(0xFFF0F6F2)
+val Muted get()=if(UiBrand.bmwMode)Color(0xFFA7B1BA) else Color(0xFF9CB1A4)
+val Clay get()=if(UiBrand.bmwMode)Color(0xFFE4002B) else Color(0xFFE48C73)
+val Blue get()=if(UiBrand.bmwMode)Color(0xFF0066B1) else Color(0xFF79AEEA)
+val Gold get()=if(UiBrand.bmwMode)Color(0xFF6DCFF6) else Color(0xFFE0BE73)
 val Palette=listOf(0xFF287254,0xFFE7EEE5,0xFF17251E,0xFF365F89,0xFFA13E38,0xFF818C84,0xFFCC643E,0xFF2F8992)
 private val Display=FontFamily(Typeface.create("sans-serif-condensed",Typeface.BOLD))
 @Composable fun GruenderelfTheme(content: @Composable ()->Unit){MaterialTheme(colorScheme=darkColorScheme(primary=Grass,onPrimary=Ink,secondary=Color(0xFFB4C9BE),background=Ink,onBackground=Chalk,surface=Panel,onSurface=Chalk,surfaceVariant=Color(0xFF243A2E),onSurfaceVariant=Muted,error=Clay),typography=Typography(displaySmall=androidx.compose.ui.text.TextStyle(fontFamily=Display,fontSize=36.sp,lineHeight=38.sp),headlineLarge=androidx.compose.ui.text.TextStyle(fontFamily=Display,fontSize=32.sp,lineHeight=34.sp),headlineMedium=androidx.compose.ui.text.TextStyle(fontFamily=Display,fontSize=27.sp,lineHeight=30.sp),titleLarge=androidx.compose.ui.text.TextStyle(fontFamily=Display,fontSize=23.sp,lineHeight=26.sp),bodyLarge=androidx.compose.ui.text.TextStyle(fontSize=16.sp,lineHeight=23.sp),bodyMedium=androidx.compose.ui.text.TextStyle(fontSize=14.sp,lineHeight=20.sp)),content=content)}
