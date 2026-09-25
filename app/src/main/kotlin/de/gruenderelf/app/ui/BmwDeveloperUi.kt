@@ -86,7 +86,9 @@ fun BmwDeveloperShell(state:GameState,vm:GameViewModel,slots:List<SaveSummary>,m
  val nav=rememberNavController()
  val entry by nav.currentBackStackEntryAsState()
  val route=entry?.destination?.route?:"bmw_home"
+ val snack=remember{SnackbarHostState()}
  var exit by remember{mutableStateOf(false)}
+ LaunchedEffect(state.message){state.message?.let{snack.showSnackbar(it);vm.clearMessage()}}
  val tabs=listOf(
   Triple("bmw_home","Command",Icons.Default.Home),
   Triple("kader","Kader",Icons.Default.Person),
@@ -94,7 +96,7 @@ fun BmwDeveloperShell(state:GameState,vm:GameViewModel,slots:List<SaveSummary>,m
   Triple("bmw_tech","NEXUS",Icons.Default.Build),
   Triple("bmw_more","Mehr",Icons.Default.MoreVert)
  )
- Scaffold(containerColor=Ink,bottomBar={
+ Scaffold(containerColor=Ink,snackbarHost={SnackbarHost(snack)},bottomBar={
   NavigationBar(containerColor=Ink,tonalElevation=0.dp){
    tabs.forEach{(dest,label,icon)->
     NavigationBarItem(selected=route==dest,onClick={if(route!=dest)nav.navigate(dest){launchSingleTop=true}},icon={Icon(icon,label)},label={Text(label)})
