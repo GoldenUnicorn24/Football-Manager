@@ -8,7 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-const val WHATS_NEW_VERSION="0.5.22"
+const val WHATS_NEW_VERSION="0.5.23"
 // Kompatibilitätsalias: bestehende Preferences/Tests behalten ihren bisherigen Schlüssel.
 const val CHANGELOG_VERSION=WHATS_NEW_VERSION
 const val CHANGELOG_LOADING="__loading__"
@@ -19,7 +19,7 @@ const val CHANGELOG_LOADING="__loading__"
 }
 
 @Composable private fun WhatsNewContent(){
- Text("Gründerelf 0.5.22 bündelt die großen Erweiterungen seit Einführung des geführten Tutorials und die zuletzt behobenen Matchday-/UI-Probleme.",color=Chalk)
+ Text("Gründerelf 0.5.23 erweitert den individuellen Verein um echte Bild-Uploads und deutlich vielseitigere Trikotdesigns.",color=Chalk)\n WhatIsNewBlock("Eigene Vereinswappen hochladen","Beim individuellen Verein kannst du jetzt PNG- oder JPG-Wappen aus Dateien oder Galerie auswählen. Das Bild wird verkleinert, direkt im Spielstand gespeichert und bleibt auch beim Export der Karriere erhalten.")\n WhatIsNewBlock("Eigene Trikots hochladen","Heim-, Auswärts-, Dritt-, Torwart- und Trainingskleidung können jeweils ein eigenes Bild erhalten. Transparente PNGs werden über der Grundfarbe dargestellt; der Generator bleibt als Fallback erhalten.")\n WhatIsNewBlock("10 Trikotmuster","Der integrierte Generator wurde von vier auf zehn Designs erweitert: unter anderem Halbierung, Mittelstreifen, Querstreifen, Kontrastärmel, Chevron und Nadelstreifen.")
  WhatIsNewBlock("Sofort sichtbare Bedienung","Schalter, Aufstellung, Formation und Taktikänderungen werden nach einer Aktion sofort neu dargestellt. Änderungen sind nicht mehr erst nach erneutem Öffnen eines Screens sichtbar.")
  WhatIsNewBlock("Matchday-Bank selbst bestimmen","Vor dem Spiel wählst du deine sieben Ersatzspieler selbst. Die Auswahl bleibt erhalten und wird beim Anpfiff nicht mehr heimlich neu aufgebaut. Nur ungültige oder fehlende Plätze werden repariert.")
  WhatIsNewBlock("Neue Live-Aufstellung","Im Taktik-/Wechselbereich siehst du die komplette Formation. Spieler antippen wählt sie für einen Wechsel aus. Per Halten und Ziehen kannst du Positionen direkt tauschen. Nach einem Platzverweis bleibt die freie Position als sichtbare Lücke und kann taktisch verschoben werden.")
