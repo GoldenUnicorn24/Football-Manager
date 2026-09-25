@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feature/bmw-fc-developer-mode
+      - feature/bmw-fc-developer-mode-v0523
   pull_request:
     branches:
-      - main
+      - feature/v0.5.23-branding-upload
 
 jobs:
   test-and-build:
