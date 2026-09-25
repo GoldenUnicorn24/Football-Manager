@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - feature/bmw-fc-developer-mode
+  pull_request:
+    branches:
+      - main
 
 jobs:
   test-and-build:
