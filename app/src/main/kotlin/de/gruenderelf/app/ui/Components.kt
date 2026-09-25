@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.gruenderelf.engine.*
@@ -44,27 +45,56 @@ fun dec(value: Double)=String.format(Locale.GERMANY,"%.1f",value)
 @Composable fun StepSlider(label: String,value: Int,enabled: Boolean=true,onChange: (Int)->Unit){var local by remember(value){mutableFloatStateOf(value.toFloat())};Column{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(label,Modifier.weight(1f));Text("${local.toInt()}",color=Grass)};Slider(local,{local=it},onValueChangeFinished={onChange(local.toInt())},valueRange=1f..5f,steps=3,enabled=enabled)}}
 @Composable fun Confirm(title: String,text: String,onDismiss: ()->Unit,onConfirm: ()->Unit){AlertDialog(onDismissRequest=onDismiss,title={Text(title)},text={Text(text)},confirmButton={TextButton(onConfirm){Text("Bestätigen")}},dismissButton={TextButton(onDismiss){Text("Abbrechen")}})}
 @Composable fun Crest(logo: Logo,primary: Long,secondary: Long,modifier: Modifier=Modifier.size(64.dp)){
- Canvas(modifier.semantics{contentDescription="Vereinswappen ${logo.letters}, Vorlage ${logo.template+1}"}){
+ val custom=remember(logo.customImage){decodeBrandImage(logo.customImage)?.asImageBitmap()}
+ Canvas(modifier.semantics{contentDescription=if(custom!=null)"Eigenes Vereinswappen" else "Vereinswappen ${logo.letters}, Vorlage ${logo.template+1}"}){
   val w=size.width;val h=size.height
-  val path=Path().apply{when(logo.template%8){
-   0->{moveTo(w*.13f,h*.1f);lineTo(w*.87f,h*.1f);lineTo(w*.85f,h*.62f);quadraticTo(w*.8f,h*.84f,w*.5f,h*.95f);quadraticTo(w*.2f,h*.84f,w*.15f,h*.62f);close()}
-   1->addOval(androidx.compose.ui.geometry.Rect(w*.07f,h*.07f,w*.93f,h*.93f))
-   2->{moveTo(w*.5f,h*.03f);lineTo(w*.94f,h*.5f);lineTo(w*.5f,h*.97f);lineTo(w*.06f,h*.5f);close()}
-   3->{moveTo(w*.5f,h*.03f);lineTo(w*.91f,h*.26f);lineTo(w*.91f,h*.74f);lineTo(w*.5f,h*.97f);lineTo(w*.09f,h*.74f);lineTo(w*.09f,h*.26f);close()}
-   4->{moveTo(w*.1f,h*.13f);lineTo(w*.9f,h*.13f);lineTo(w*.9f,h*.78f);lineTo(w*.5f,h*.95f);lineTo(w*.1f,h*.78f);close()}
-   5->addRoundRect(androidx.compose.ui.geometry.RoundRect(w*.1f,h*.1f,w*.9f,h*.9f,w*.2f,h*.2f))
-   6->{moveTo(w*.08f,h*.13f);quadraticTo(w*.5f,-h*.02f,w*.92f,h*.13f);lineTo(w*.77f,h*.79f);lineTo(w*.5f,h*.97f);lineTo(w*.23f,h*.79f);close()}
-   else->{moveTo(w*.5f,h*.04f);lineTo(w*.93f,h*.22f);lineTo(w*.83f,h*.7f);lineTo(w*.5f,h*.96f);lineTo(w*.17f,h*.7f);lineTo(w*.07f,h*.22f);close()}
-  }}
-  drawPath(path,Color(primary));clipPath(path){drawLine(Color(secondary).copy(alpha=.25f),Offset(0f,h*.9f),Offset(w,h*.05f),w*.25f)};drawPath(path,Color(secondary),style=Stroke(w*.035f))
-  drawContext.canvas.nativeCanvas.drawText(logo.letters.take(4),w*.5f,h*.58f,Paint(Paint.ANTI_ALIAS_FLAG).apply{color=Color(secondary).toArgb();textAlign=Paint.Align.CENTER;textSize=w*(if(logo.letters.length>3).25f else .32f);typeface=Typeface.create("sans-serif-condensed",Typeface.BOLD)})
+  if(custom!=null){
+   drawImage(custom,dstSize=IntSize(w.toInt().coerceAtLeast(1),h.toInt().coerceAtLeast(1)))
+  }else{
+   val path=Path().apply{when(logo.template%8){
+    0->{moveTo(w*.13f,h*.1f);lineTo(w*.87f,h*.1f);lineTo(w*.85f,h*.62f);quadraticTo(w*.8f,h*.84f,w*.5f,h*.95f);quadraticTo(w*.2f,h*.84f,w*.15f,h*.62f);close()}
+    1->addOval(androidx.compose.ui.geometry.Rect(w*.07f,h*.07f,w*.93f,h*.93f))
+    2->{moveTo(w*.5f,h*.03f);lineTo(w*.94f,h*.5f);lineTo(w*.5f,h*.97f);lineTo(w*.06f,h*.5f);close()}
+    3->{moveTo(w*.5f,h*.03f);lineTo(w*.91f,h*.26f);lineTo(w*.91f,h*.74f);lineTo(w*.5f,h*.97f);lineTo(w*.09f,h*.74f);lineTo(w*.09f,h*.26f);close()}
+    4->{moveTo(w*.1f,h*.13f);lineTo(w*.9f,h*.13f);lineTo(w*.9f,h*.78f);lineTo(w*.5f,h*.95f);lineTo(w*.1f,h*.78f);close()}
+    5->addRoundRect(androidx.compose.ui.geometry.RoundRect(w*.1f,h*.1f,w*.9f,h*.9f,w*.2f,h*.2f))
+    6->{moveTo(w*.08f,h*.13f);quadraticTo(w*.5f,-h*.02f,w*.92f,h*.13f);lineTo(w*.77f,h*.79f);lineTo(w*.5f,h*.97f);lineTo(w*.23f,h*.79f);close()}
+    else->{moveTo(w*.5f,h*.04f);lineTo(w*.93f,h*.22f);lineTo(w*.83f,h*.7f);lineTo(w*.5f,h*.96f);lineTo(w*.17f,h*.7f);lineTo(w*.07f,h*.22f);close()}
+   }}
+   drawPath(path,Color(primary))
+   clipPath(path){drawLine(Color(secondary).copy(alpha=.25f),Offset(0f,h*.9f),Offset(w,h*.05f),w*.25f)}
+   drawPath(path,Color(secondary),style=Stroke(w*.035f))
+   drawContext.canvas.nativeCanvas.drawText(logo.letters.take(4),w*.5f,h*.58f,Paint(Paint.ANTI_ALIAS_FLAG).apply{color=Color(secondary).toArgb();textAlign=Paint.Align.CENTER;textSize=w*(if(logo.letters.length>3).25f else .32f);typeface=Typeface.create("sans-serif-condensed",Typeface.BOLD)})
+  }
  }
 }
 @Composable fun Shirt(kit: Kit,modifier: Modifier=Modifier.size(100.dp),number: String="10"){
- Canvas(modifier.semantics{contentDescription="Trikot, Muster ${kit.pattern+1}, Nummer $number"}){
-  val w=size.width;val h=size.height;val p=Path().apply{moveTo(w*.3f,h*.08f);lineTo(w*.15f,h*.15f);lineTo(w*.01f,h*.4f);lineTo(w*.2f,h*.5f);lineTo(w*.25f,h*.4f);lineTo(w*.25f,h*.94f);lineTo(w*.75f,h*.94f);lineTo(w*.75f,h*.4f);lineTo(w*.8f,h*.5f);lineTo(w*.99f,h*.4f);lineTo(w*.85f,h*.15f);lineTo(w*.7f,h*.08f);quadraticTo(w*.5f,h*.32f,w*.3f,h*.08f);close()}
-  drawPath(p,Color(kit.primary));clipPath(p){when(kit.pattern%4){1->for(i in 0..4)drawRect(Color(kit.secondary),Offset(w*(.13f+i*.2f),0f),Size(w*.07f,h));2->drawLine(Color(kit.secondary),Offset(0f,0f),Offset(w,h),w*.2f);3->drawRect(Color(kit.secondary),Offset(0f,h*.38f),Size(w,h*.18f));else->drawLine(Color(kit.secondary),Offset(w*.25f,h*.13f),Offset(w*.75f,h*.13f),w*.025f)}};drawPath(p,Chalk.copy(alpha=.4f),style=Stroke(1.5.dp.toPx()))
-  drawContext.canvas.nativeCanvas.drawText(number,w*.5f,h*.73f,Paint(Paint.ANTI_ALIAS_FLAG).apply{color=Color(kit.secondary).toArgb();textAlign=Paint.Align.CENTER;textSize=w*.22f;typeface=Typeface.DEFAULT_BOLD;setShadowLayer(2f,1f,1f,android.graphics.Color.BLACK)})
+ val custom=remember(kit.customImage){decodeBrandImage(kit.customImage)?.asImageBitmap()}
+ Canvas(modifier.semantics{contentDescription=if(custom!=null)"Eigenes Trikotbild" else "Trikot, Muster ${kit.pattern+1}, Nummer $number"}){
+  val w=size.width;val h=size.height
+  val p=Path().apply{moveTo(w*.3f,h*.08f);lineTo(w*.15f,h*.15f);lineTo(w*.01f,h*.4f);lineTo(w*.2f,h*.5f);lineTo(w*.25f,h*.4f);lineTo(w*.25f,h*.94f);lineTo(w*.75f,h*.94f);lineTo(w*.75f,h*.4f);lineTo(w*.8f,h*.5f);lineTo(w*.99f,h*.4f);lineTo(w*.85f,h*.15f);lineTo(w*.7f,h*.08f);quadraticTo(w*.5f,h*.32f,w*.3f,h*.08f);close()}
+  if(custom!=null){
+   clipPath(p){drawImage(custom,dstSize=IntSize(w.toInt().coerceAtLeast(1),h.toInt().coerceAtLeast(1)))}
+   drawPath(p,Chalk.copy(alpha=.55f),style=Stroke(1.5.dp.toPx()))
+  }else{
+   drawPath(p,Color(kit.primary))
+   clipPath(p){
+    when(kit.pattern%10){
+     1->for(i in 0..4)drawRect(Color(kit.secondary),Offset(w*(.13f+i*.2f),0f),Size(w*.07f,h))
+     2->drawLine(Color(kit.secondary),Offset(0f,0f),Offset(w,h),w*.2f)
+     3->drawRect(Color(kit.secondary),Offset(0f,h*.38f),Size(w,h*.18f))
+     4->drawRect(Color(kit.secondary),Offset(w*.5f,0f),Size(w*.5f,h))
+     5->drawRect(Color(kit.secondary),Offset(w*.39f,0f),Size(w*.22f,h))
+     6->for(i in 0..5)drawRect(Color(kit.secondary),Offset(0f,h*(.12f+i*.14f)),Size(w,h*.055f))
+     7->{drawRect(Color(kit.secondary),Offset(0f,0f),Size(w*.27f,h*.55f));drawRect(Color(kit.secondary),Offset(w*.73f,0f),Size(w*.27f,h*.55f))}
+     8->{drawLine(Color(kit.secondary),Offset(w*.16f,h*.28f),Offset(w*.5f,h*.5f),w*.09f);drawLine(Color(kit.secondary),Offset(w*.84f,h*.28f),Offset(w*.5f,h*.5f),w*.09f)}
+     9->for(i in 1..8)drawRect(Color(kit.secondary),Offset(w*(i/9f),0f),Size(w*.016f,h))
+     else->drawLine(Color(kit.secondary),Offset(w*.31f,h*.135f),Offset(w*.69f,h*.135f),w*.025f)
+    }
+   }
+   drawPath(p,Chalk.copy(alpha=.4f),style=Stroke(1.5.dp.toPx()))
+   drawContext.canvas.nativeCanvas.drawText(number,w*.5f,h*.73f,Paint(Paint.ANTI_ALIAS_FLAG).apply{color=Color(kit.secondary).toArgb();textAlign=Paint.Align.CENTER;textSize=w*.22f;typeface=Typeface.DEFAULT_BOLD;setShadowLayer(2f,1f,1f,android.graphics.Color.BLACK)})
+  }
  }
 }
 @OptIn(ExperimentalLayoutApi::class)
