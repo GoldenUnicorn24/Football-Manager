@@ -206,6 +206,7 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP,Compe
  var passesCompleted: Int=0,
  var turnovers: Int=0,
  var defensiveActions: Int=0,
+ var saves: Int=0,
  var yellows: Int=0,
  var red: Int=0,
  var goalsConceded: Int=0,
