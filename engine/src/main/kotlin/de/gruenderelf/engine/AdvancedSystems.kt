@@ -72,7 +72,7 @@ object YouthEngine {
      1.12+profile+style+w.assistantCoach.youthAggression.coerceIn(1,5)*.012
     }else 1.0
     p.trainingProgress+=.014*(.55+y.learning/100.0)*(1+c.stadium.youth/140.0+ecosystem/240.0)*spark*path*assistantDevelopment*youthSquadDevelopment
-    if(p.trainingProgress>=1.0){p.trainingProgress-=1.0;p.attributes.improve(rng.pick(Focus.entries),p.hidden.potential)}
+    if(p.trainingProgress>=1.0){p.trainingProgress-=1.0;p.attributes.improve(rng.pick(Focus.entries),minOf(p.hidden.potential,REGULAR_DEVELOPMENT_CAP))}
     if(y.adviserPressure>82&&readiness(w,p)>68&&rng.chance(.04)){p.wantsMove=true;p.morale=(p.morale-4).coerceAtLeast(5)}
     if(y.schoolStress>75)p.sharpness=(p.sharpness-2).coerceAtLeast(0);if(y.familySupport<35&&p.hidden.professionalism<45&&rng.chance(.025)){p.morale=(p.morale-5).coerceAtLeast(5);y.confidence=(y.confidence-4).coerceAtLeast(5);y.schoolStress=(y.schoolStress+4).coerceAtMost(100)}
     y.homegrownYears=(y.homegrownYears+if(w.calendar.absoluteWeek%40==0)1 else 0).coerceAtMost(20)
@@ -102,7 +102,7 @@ object TrainingSystems {
     val foci=sessions.mapNotNull{when(it){UnitType.TECHNIQUE,UnitType.POSITIONAL->Focus.TECHNIQUE;UnitType.TACTICS,UnitType.VIDEO,UnitType.GAME,UnitType.MENTAL,UnitType.TEAM_BONDING->Focus.VISION;UnitType.FITNESS->Focus.PACE;UnitType.DUELS->Focus.TACKLING;UnitType.FINISHING,UnitType.SET_PIECES->Focus.FINISHING;UnitType.GOALKEEPING->if(p.position==Position.TW)Focus.KEEPING else null;else->null}}+(if(c.id==w.user.clubId)plan.extra.filter{it.playerId==p.id}.map{it.focus}else emptyList())+careerFocus
     val age=w.calendar.season-p.birthYear;val ageEffect=when{age<23->1.2;age>33->.25;else->.7};val careerMultiplier=if(p.id==w.user.playerId&&w.user.playerCareerFocus!=PlayerCareerFocus.BALANCED)1.08 else 1.0;p.trainingProgress+=foci.size*.026*(1+c.stadium.training*.009+c.stadium.gym*.004)*(.5+p.hidden.professionalism*.01)*ageEffect*staff*careerMultiplier
     if(p.id==w.user.playerId&&w.user.playerCareerFocus==PlayerCareerFocus.CLUB_ICON&&w.calendar.absoluteWeek%4==0){p.morale=(p.morale+1).coerceAtMost(100);p.hidden.loyalty=(p.hidden.loyalty+1).coerceAtMost(100)}
-    if(p.trainingProgress>=1&&foci.isNotEmpty()){p.trainingProgress-=1;val focus=rng.pick(foci);if(p.attributes.improve(focus,p.hidden.potential)&&c.id==w.user.clubId)report.gains.add("${p.name}: ${focus.label} +1")}
+    if(p.trainingProgress>=1&&foci.isNotEmpty()){p.trainingProgress-=1;val focus=rng.pick(foci);if(p.attributes.improve(focus,minOf(p.hidden.potential,REGULAR_DEVELOPMENT_CAP))&&c.id==w.user.clubId)report.gains.add("${p.name}: ${focus.label} +1")}
     IntensiveTrainingSystem.applyWeek(w,c,p,report,rng)
     val risk=sessions.count{it==UnitType.FITNESS||it==UnitType.DUELS||it==UnitType.GAME}*.0045*intensity/3.0*(1+p.hidden.injuryProneness*.01)*(1-c.stadium.medicine*.006)*(if(p.fitness<50)2.0 else 1.0)*(if(p.youthProfile.growthSpurtWeeks>0)1.6 else 1.0)
     if(rng.chance(risk)){p.injuryWeeks=rng.int(1,3)+1;p.injury="Trainingszerrung";if(c.id==w.user.clubId)report.injuries.add("${p.name}: ${p.injuryWeeks-1} Wochen")}
