@@ -12,8 +12,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
-import java.security.MessageDigest
-import java.util.UUID
 import java.util.Base64
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
@@ -64,15 +62,15 @@ class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.
  private val settings=context.applicationContext.settings
  private val lastKey=intPreferencesKey("letzter_slot");private val fastKey=booleanPreferencesKey("schnelles_spiel");private val speedKey=stringPreferencesKey("spieltempo_v044");private val soundKey=booleanPreferencesKey("match_sounds_v0464");private val changelogKey=stringPreferencesKey("changelog_seen_version")
  private val developerHashKey=stringPreferencesKey("developer_password_hash_v1");private val developerSaltKey=stringPreferencesKey("developer_password_salt_v1")
+ private val fixedDeveloperCode="Republik"
  val saves=db.saves().summaries()
  val lastSlot=settings.data.catch{emit(emptyPreferences())}.map{it[lastKey]?:1}
  val matchSpeed=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[speedKey]?.let{runCatching{MatchSpeed.valueOf(it)}.getOrNull()}?:if(prefs[fastKey]==true)MatchSpeed.FAST else MatchSpeed.NORMAL}
  val soundsEnabled=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[soundKey]?:true}
  val changelogSeenVersion=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[changelogKey]?:""}
- val developerPasswordConfigured=settings.data.catch{emit(emptyPreferences())}.map{prefs->!prefs[developerHashKey].isNullOrBlank()&&!prefs[developerSaltKey].isNullOrBlank()}
- private fun passwordHash(value:String,salt:String)=MessageDigest.getInstance("SHA-256").digest((salt+"|"+value).toByteArray(Charsets.UTF_8)).joinToString(""){"%02x".format(it)}
- suspend fun setDeveloperPassword(value:String){require(value.length>=6){"Der Developer-Code braucht mindestens 6 Zeichen."};val salt=UUID.randomUUID().toString();settings.edit{it[developerSaltKey]=salt;it[developerHashKey]=passwordHash(value,salt)}}
- suspend fun verifyDeveloperPassword(value:String):Boolean{val prefs=settings.data.first();val salt=prefs[developerSaltKey]?:return false;val hash=prefs[developerHashKey]?:return false;return MessageDigest.isEqual(hash.toByteArray(),passwordHash(value,salt).toByteArray())}
+ val developerPasswordConfigured:Flow<Boolean>=flowOf(true)
+ suspend fun setDeveloperPassword(value:String){require(value==fixedDeveloperCode){"Developer-Code falsch."}}
+ suspend fun verifyDeveloperPassword(value:String):Boolean=value==fixedDeveloperCode
  suspend fun developerSaveExists()=db.saves().header(BMW_DEVELOPER_SAVE_SLOT)!=null
  suspend fun setMatchSpeed(value: MatchSpeed){settings.edit{it[speedKey]=value.name;it[fastKey]=value==MatchSpeed.FAST}}
  suspend fun setSoundsEnabled(enabled: Boolean){settings.edit{it[soundKey]=enabled}}
