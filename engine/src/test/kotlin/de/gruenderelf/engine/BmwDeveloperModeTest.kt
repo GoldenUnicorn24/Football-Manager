@@ -142,6 +142,7 @@ class BmwDeveloperModeTest {
  @Test fun otherClubsMustPayAndWaitBeforeStartingAi(){
   val w=BmwDeveloperWorldFactory.create(261012L)
   val bayern=w.clubs.values.first{it.name.contains("Bayern",true)||it.shortName=="FCB"};bayern.budget=500_000_000L
+  w.clubs.values.filter{it.id!=w.user.clubId&&!it.name.contains("Barcelona",true)&&!it.name.contains("Bayern",true)}.forEach{it.reputation=80;it.budget=100_000_000L}
   val candidate=w.clubs.values.first{it.id!=w.user.clubId&&!it.name.contains("Barcelona",true)&&!it.name.contains("Bayern",true)&&it.tier>0}
   candidate.reputation=99;candidate.budget=900_000_000L
   candidate.stadium.training=100;candidate.stadium.medicine=100;candidate.stadium.youth=100;candidate.stadium.gym=100;candidate.stadium.pitchQuality=100
