@@ -25,5 +25,5 @@ jobs:
         run: ./gradlew :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: gruenderelf-v0.5.23-bmw4
+          name: gruenderelf-v0.5.23-bmw5
           path: app/build/outputs/apk/debug/*.apk
