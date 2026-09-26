@@ -37,25 +37,68 @@ object TrainingEngine {
  fun apply(w: World)=TrainingSystems.applyAll(w)
 }
 object ConstructionEngine {
- fun price(w: World,f: Facility)=(f.baseCost*(1+(10-w.club().tier)*.45)).toLong()
- fun weeks(w: World,f: Facility)=f.weeks+(10-w.club().tier)/3
+ private fun scalable(f:Facility)=f !in listOf(Facility.CAPACITY,Facility.ARTIFICIAL,Facility.FLOODLIGHTS)
  fun level(s: Stadium,f: Facility): Int=when(f){Facility.PITCH->s.pitchQuality;Facility.TRAINING->s.training;Facility.GYM->s.gym;Facility.MEDICINE->s.medicine;Facility.CABIN->s.cabin;Facility.STAND->s.stand;Facility.CLUBHOUSE->s.clubhouse;Facility.YOUTH->s.youth;Facility.CAPACITY->s.capacity;Facility.FLOODLIGHTS->if(s.floodlights)100 else 0;Facility.ARTIFICIAL->if(s.surface==Surface.ARTIFICIAL)100 else 0}
+ private fun eliteMinimumCost(f:Facility,level:Int):Long{
+  val base=when(f){Facility.TRAINING->75_000_000L;Facility.MEDICINE->90_000_000L;Facility.GYM->65_000_000L;Facility.YOUTH->80_000_000L;Facility.PITCH->45_000_000L;Facility.CLUBHOUSE->35_000_000L;Facility.CABIN->25_000_000L;Facility.STAND->55_000_000L;else->25_000_000L}
+  val stage=when{level>=140->10.0;level>=130->6.0;level>=120->3.5;level>=110->2.0;else->1.0}
+  return (base*stage).toLong()
+ }
+ fun price(w: World,f: Facility):Long{
+  val normal=(f.baseCost*(1+(10-w.club().tier)*.45)).toLong()
+  if(!scalable(f))return normal
+  val current=level(w.club().stadium,f)
+  return if(current<100)normal else maxOf(normal,eliteMinimumCost(f,current))
+ }
+ fun weeks(w: World,f: Facility):Int{
+  val normal=f.weeks+(10-w.club().tier)/3
+  if(!scalable(f))return normal
+  val current=level(w.club().stadium,f)
+  return when{current<100->normal;current<110->maxOf(normal,8);current<120->maxOf(normal,10);current<130->maxOf(normal,12);current<140->maxOf(normal,15);else->maxOf(normal,18)}
+ }
+ private fun delta(s:Stadium,f:Facility):Int{
+  if(f==Facility.CAPACITY)return 250
+  if(!scalable(f))return 0
+  return when(level(s,f)){in Int.MIN_VALUE..99->15;in 100..119->5;in 120..134->3;in 135..144->2;else->1}
+ }
  fun reason(w: World,f: Facility): String? {val c=w.club();val s=c.stadium;return when{
-  w.construction.count{it.clubId==c.id}>=(if(!w.privateTopClubMode&&c.tier>=7)1 else 2)->"Alle Baustellen sind belegt."
+  w.construction.count{it.clubId==c.id}>=(if(!w.privateTopClubMode&&c.tier>=7)1 else if(w.developer.enabled)3 else 2)->"Alle Baustellen sind belegt."
   w.construction.any{it.clubId==c.id&&it.facility==f}->"Dieser Ausbau läuft bereits."
   f==Facility.FLOODLIGHTS&&s.floodlights->"Flutlicht ist vorhanden."
   f==Facility.ARTIFICIAL&&s.surface!=Surface.HARD->"Kunstrasen ersetzt nur Hartplatz."
-  f !in listOf(Facility.CAPACITY,Facility.ARTIFICIAL,Facility.FLOODLIGHTS)&&level(s,f)>=100->"Maximal ausgebaut."
-  c.budget<price(w,f)->"Vereinskasse reicht nicht aus."
+  scalable(f)&&level(s,f)>=FACILITY_LEVEL_MAX->"Elite-Maximum 150 erreicht."
+  c.budget<price(w,f)->"Vereinskasse reicht für ${price(w,f)} € nicht aus."
   else->null
  }}
- fun start(w: World,f: Facility){require(w.live==null){"Baustart nach dem Spiel."};require(reason(w,f)==null){reason(w,f)?:"Ausbau nicht möglich."};val cost=price(w,f);val weeks=weeks(w,f);w.club().budget-=cost;w.construction.add(ConstructionProject(w.nextIds.construction++,w.user.clubId,f,weeks,weeks,cost,if(f==Facility.CAPACITY)250*(11-w.club().tier) else 15));w.news("Baustart: ${f.label}","$cost € investiert. Bauzeit: $weeks Wochen.")}
+ fun start(w: World,f: Facility){
+  require(w.live==null){"Baustart nach dem Spiel."};require(reason(w,f)==null){reason(w,f)?:"Ausbau nicht möglich."}
+  val cost=price(w,f);val duration=weeks(w,f);w.club().budget-=cost
+  val d=if(f==Facility.CAPACITY)250*(11-w.club().tier) else delta(w.club().stadium,f)
+  w.construction.add(ConstructionProject(w.nextIds.construction++,w.user.clubId,f,duration,duration,cost,d))
+  w.news("Baustart: ${f.label}","$cost € investiert. Bauzeit: $duration Wochen. ${if(scalable(f)&&level(w.club().stadium,f)>=100)"Eliteausbau über Stufe 100: kleine Schritte, exponentiell höhere Kosten." else ""}")
+ }
  fun advance(w: World){for(p in w.construction.toList()){
-  p.weeksLeft--;if(p.weeksLeft>0)continue;val c=w.clubs.getValue(p.clubId);val s=c.stadium;fun plus(v: Int)=(v+p.delta).coerceAtMost(100)
-  when(p.facility){Facility.FLOODLIGHTS->s.floodlights=true;Facility.ARTIFICIAL->{s.surface=Surface.ARTIFICIAL;s.pitchQuality=85};Facility.PITCH->s.pitchQuality=plus(s.pitchQuality);Facility.TRAINING->s.training=plus(s.training);Facility.GYM->s.gym=plus(s.gym);Facility.MEDICINE->s.medicine=plus(s.medicine);Facility.CABIN->s.cabin=plus(s.cabin);Facility.STAND->{s.stand=plus(s.stand);s.seats=(s.seats+100).coerceAtMost(s.capacity)};Facility.CAPACITY->s.capacity+=p.delta;Facility.CLUBHOUSE->{s.clubhouse=plus(s.clubhouse);c.members+=15;w.squad(c.id).forEach{it.morale=(it.morale+5).coerceAtMost(100)}};Facility.YOUTH->s.youth=plus(s.youth)}
-  w.construction.remove(p);if(p.clubId==w.user.clubId)w.news("${p.facility.label} fertig","Die Bauarbeiten sind abgeschlossen. Der Ausbau wirkt ab sofort.","good")
+  p.weeksLeft--;if(p.weeksLeft>0)continue
+  val c=w.clubs.getValue(p.clubId);val s=c.stadium
+  fun plus(v: Int)=(v+p.delta).coerceAtMost(FACILITY_LEVEL_MAX)
+  when(p.facility){
+   Facility.FLOODLIGHTS->s.floodlights=true
+   Facility.ARTIFICIAL->{s.surface=Surface.ARTIFICIAL;s.pitchQuality=maxOf(s.pitchQuality,85)}
+   Facility.PITCH->s.pitchQuality=plus(s.pitchQuality)
+   Facility.TRAINING->s.training=plus(s.training)
+   Facility.GYM->s.gym=plus(s.gym)
+   Facility.MEDICINE->s.medicine=plus(s.medicine)
+   Facility.CABIN->s.cabin=plus(s.cabin)
+   Facility.STAND->{s.stand=plus(s.stand);s.seats=(s.seats+maxOf(100,p.delta*100)).coerceAtMost(s.capacity)}
+   Facility.CAPACITY->s.capacity+=p.delta
+   Facility.CLUBHOUSE->{s.clubhouse=plus(s.clubhouse);c.members+=15;w.squad(c.id).forEach{it.morale=(it.morale+5).coerceAtMost(100)}}
+   Facility.YOUTH->s.youth=plus(s.youth)
+  }
+  w.construction.remove(p)
+  if(p.clubId==w.user.clubId)w.news("${p.facility.label} fertig","Die Bauarbeiten sind abgeschlossen. Ausbaustand: ${if(scalable(p.facility))level(s,p.facility) else "aktiv"}.","good")
  }}
 }
+
 object EventsEngine {
  fun apply(w: World)=w.random{rng->
   val c=w.club();if(!rng.chance(if(!w.privateTopClubMode&&c.tier>=7).65 else .22))return@random
