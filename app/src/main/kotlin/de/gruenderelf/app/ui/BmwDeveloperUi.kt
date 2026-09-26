@@ -16,10 +16,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.*
 import de.gruenderelf.app.GameState
@@ -77,7 +79,7 @@ fun MPerformanceMark(compact:Boolean=false){
   Box(Modifier.width(if(compact)4.dp else 5.dp).height(if(compact)15.dp else 19.dp).background(Color(0xFF55B8FF),RoundedCornerShape(1.dp)))
   Box(Modifier.width(if(compact)4.dp else 5.dp).height(if(compact)15.dp else 19.dp).background(Color(0xFF1261A0),RoundedCornerShape(1.dp)))
   Box(Modifier.width(if(compact)4.dp else 5.dp).height(if(compact)15.dp else 19.dp).background(BmwMRed,RoundedCornerShape(1.dp)))
-  Text("M PERFORMANCE",color=Chalk,fontWeight=FontWeight.Black,style=if(compact)MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,letterSpacing=.7.dp.value.sp)
+  Text("M PERFORMANCE",color=Chalk,fontWeight=FontWeight.Black,style=if(compact)MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,letterSpacing=.7.sp)
  }
 }
 
