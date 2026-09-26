@@ -133,7 +133,7 @@ fun BmwDeveloperShell(state:GameState,vm:GameViewModel,slots:List<SaveSummary>,m
 private fun BmwCommandCenterScreen(w:World,onNavigate:(String)->Unit){
  val c=w.club()
  val tech=BmwDeveloperSystems.profile(w,c.id)
- val power=BmwDeveloperSystems.clubPowerRanking(w)
+ val power=remember(w.calendar.absoluteWeek,w.developer.weeksActive,w.players.size){BmwDeveloperSystems.clubPowerRanking(w)}
  val rank=power.indexOfFirst{it.clubId==c.id}+1
  val next=w.nextFixture()
  Page("BMW FC","BMW MOTORSPORT DNA · FOOTBALL PERFORMANCE"){
