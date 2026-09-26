@@ -20,6 +20,10 @@ object TrainingEngine {
    pace+=20;finishing+=20;passing+=20;technique+=20;tackling+=20;strength+=20;stamina+=20;vision+=20;heading+=20;keeping+=20;setPieces+=20
    // Signatur-Boni über das reine +20 hinaus: enge Ballführung, Spielwitz, Abschluss und Standards.
    technique+=8;vision+=8;finishing+=6;passing+=5;pace+=4;setPieces+=6
+   pace=pace.coerceAtMost(PLAYER_RATING_MAX);finishing=finishing.coerceAtMost(PLAYER_RATING_MAX);passing=passing.coerceAtMost(PLAYER_RATING_MAX)
+   technique=technique.coerceAtMost(PLAYER_RATING_MAX);tackling=tackling.coerceAtMost(PLAYER_RATING_MAX);strength=strength.coerceAtMost(PLAYER_RATING_MAX)
+   stamina=stamina.coerceAtMost(PLAYER_RATING_MAX);vision=vision.coerceAtMost(PLAYER_RATING_MAX);heading=heading.coerceAtMost(PLAYER_RATING_MAX)
+   keeping=keeping.coerceAtMost(PLAYER_RATING_MAX);setPieces=setPieces.coerceAtMost(PLAYER_RATING_MAX)
   }
   p.hidden.consistency=(p.hidden.consistency+22).coerceAtMost(120);p.hidden.pressure=(p.hidden.pressure+25).coerceAtMost(120)
   p.hidden.professionalism=(p.hidden.professionalism+12).coerceAtMost(120);p.hidden.development=(p.hidden.development+15).coerceAtMost(120);p.hidden.potential=maxOf(p.hidden.potential,120)
