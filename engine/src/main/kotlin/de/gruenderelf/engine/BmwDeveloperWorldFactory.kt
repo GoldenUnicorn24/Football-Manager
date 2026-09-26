@@ -70,8 +70,8 @@ object BmwDeveloperWorldFactory {
   club.dynamics.mentalHardness=96;club.dynamics.staffQuality=100
   listOf("AUFBAU","PRESSINGFALLE","HALBRAUM","RESTVERTEIDIGUNG","DIAGONALE").forEach{club.dynamics.patterns[it]=99}
   club.dynamics.patterns["RESTVERTEIDIGUNG"]=100
-  club.tactics.formation="4-4-1-1";club.tactics.mentality=4;club.tactics.pressing=4;club.tactics.line=4
-  club.tactics.tempo=4;club.tactics.width=4;club.tactics.buildUp=BuildUp.MIXED
+  club.tactics.formation="4-2-3-1";club.tactics.mentality=4;club.tactics.pressing=4;club.tactics.line=3
+  club.tactics.tempo=3;club.tactics.width=4;club.tactics.buildUp=BuildUp.SHORT
 
   val dev=BmwDeveloperState(enabled=true,bmwClubId=club.id,technologyModelVersion=2)
   fun install(p:Player,s:BmwPlayerSeed){
@@ -97,7 +97,13 @@ object BmwDeveloperWorldFactory {
   w.developer=dev
   BmwDeveloperSystems.seedTechnology(w)
   w.squad(club.id).firstOrNull{it.lastName=="Neuer"}?.let{dev.longevity[it.id]=LongevityProfile(it.id,true,.8,.92,.88)}
-  WorldFactory.autoLineup(w,club.id)
+  // BMWs feste Startelf: exakt die getestete 4-2-3-1-Besetzung.
+  fun squadId(name:String)=w.squad(club.id).first{it.name==name}.id
+  club.tactics.xi=mutableListOf(
+   squadId("Manuel Neuer"),squadId("Finn Lorenz"),squadId("Tiago Valente"),squadId("Lennart Krüger"),squadId("Noah Reiter"),
+   squadId("Gavi"),squadId("Joshua Kimmich"),squadId("Jamal Musiala"),squadId("Julián Álvarez"),squadId("Michael Olise"),squadId("Leon Stark")
+  )
+  WorldFactory.rebuildBench(w,club)
   w.news.clear()
   w.news("BMW FC Experience aktiviert","BMW Performance Arena, NEXUS, ORIGIN, PROJECT ZERO, Weltranglisten und Longevity-Forschung sind aktiv.","good")
   return w
