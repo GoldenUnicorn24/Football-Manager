@@ -92,8 +92,9 @@ object ShotModel {
     /** Actual scoring probability after chance quality, shooter execution and goalkeeper quality. */
     fun goalProbability(xg: Double, shooter: Player, keeper: Player?, context: ShotContext): Double {
         val prime = shooter.messiMentored
-        val finishing = (.96 + (shooter.attributes.finishing - 50) * .0033).coerceIn(.78, if (prime) 1.34 else 1.15)
-        val technique = (.985 + (shooter.attributes.technique - 50) * .0013).coerceIn(.93, if (prime) 1.14 else 1.055)
+        val elite = shooter.attributes.finishing > REGULAR_DEVELOPMENT_CAP || shooter.attributes.technique > REGULAR_DEVELOPMENT_CAP
+        val finishing = (.96 + (shooter.attributes.finishing - 50) * .0033).coerceIn(.78, if (prime) 1.42 else 1.32)
+        val technique = (.985 + (shooter.attributes.technique - 50) * .0013).coerceIn(.93, if (prime) 1.22 else 1.15)
         val consistency = (.99 + (shooter.hidden.consistency - 50) * .0010).coerceIn(.94, 1.06)
         val bigMoment = (.995 + (shooter.hidden.pressure - 50) * .0007).coerceIn(.96, 1.03)
         val form = (1.0 + (shooter.form - 6.5) * .022).coerceIn(.92, 1.08)
@@ -114,7 +115,11 @@ object ShotModel {
         val keeperModifier = (1.0 - (keeperQuality - 50.0) * keeperImpact).coerceIn(.74, 1.24)
         val primeExecution = if (prime) 1.10 else 1.0
         val raw = xg * finishing * technique * consistency * bigMoment * form * fitness * foot * executionUnderPressure * keeperModifier * primeExecution
-        val ceiling = if (prime) minOf(.95, xg * 1.58 + .018) else minOf(.92, xg * 1.34 + .006)
+        val ceiling = when {
+            prime -> minOf(.97, xg * 1.70 + .020)
+            elite -> minOf(.95, xg * 1.52 + .012)
+            else -> minOf(.92, xg * 1.34 + .006)
+        }
         return raw.coerceIn(.002, ceiling)
     }
 
@@ -154,7 +159,9 @@ object ShotModel {
         val block = blockProbability(context)
         if (shooter.messiMentored) raw += .075
         val available = 1.0 - block
-        return maxOf(goalProbability + .025, raw.coerceIn(.22, if (shooter.messiMentored) .94 else .84) * available).coerceAtMost(available)
+        val elite = shooter.attributes.finishing > REGULAR_DEVELOPMENT_CAP || shooter.attributes.technique > REGULAR_DEVELOPMENT_CAP
+        val targetCeiling=when{shooter.messiMentored->.96;elite->.93;else->.84}
+        return maxOf(goalProbability + .025, raw.coerceIn(.22,targetCeiling) * available).coerceAtMost(available)
     }
 
     fun shotSpeed(shooter: Player, context: ShotContext): Double {
