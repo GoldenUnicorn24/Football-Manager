@@ -98,6 +98,12 @@ object BmwDeveloperSystems {
   return ((p.ai+p.analytics-100.0)/18.0).roundToInt().coerceIn(0,9)
  }
 
+ fun finishingMultiplier(w:World,clubId:Int):Double{
+  val p=profile(w,clubId)?:return 1.0
+  val execution=p.ai*.32+p.analytics*.28+p.training*.28+p.medicine*.12
+  return (1.0+(execution-70.0).coerceAtLeast(0.0)*.00225).coerceIn(1.0,1.10)
+ }
+
  fun enrollLongevity(w:World,playerId:Int){
   val p=w.players[playerId]?:error("Spieler nicht gefunden.")
   require(w.developer.enabled&&p.clubId==w.user.clubId&&!p.retired){"Spieler ist nicht verfügbar."}
