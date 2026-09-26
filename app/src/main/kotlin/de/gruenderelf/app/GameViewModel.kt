@@ -70,11 +70,15 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  fun setSoundsEnabled(enabled: Boolean)=preferenceWrite("Die Sound-Einstellung konnte nicht gespeichert werden."){repo.setSoundsEnabled(enabled)}
  fun markChangelogSeen(version:String=CHANGELOG_VERSION)=preferenceWrite("Der Changelog-Status konnte nicht gespeichert werden."){repo.markChangelogSeen(version)}
  fun openDeveloperMode(password:String,configure:Boolean=false)=work{
-  if(configure)repo.setDeveloperPassword(password) else require(repo.verifyDeveloperPassword(password)){"Developer-Code falsch."}
+  require(repo.verifyDeveloperPassword(password)){"Developer-Code falsch."}
   val exists=repo.developerSaveExists()
-  val world=if(exists)repo.load(BMW_DEVELOPER_SAVE_SLOT) else BmwDeveloperWorldFactory.create()
-  require(world.developer.enabled){"Der Developer-Spielstand ist ungültig."}
-  if(!exists)repo.save(BMW_DEVELOPER_SAVE_SLOT,world)
+  var world:World?=null
+  if(exists)world=runCatching{repo.load(BMW_DEVELOPER_SAVE_SLOT)}.getOrNull()
+  if(world?.developer?.enabled!=true){
+   if(exists)runCatching{repo.delete(BMW_DEVELOPER_SAVE_SLOT)}
+   world=withContext(Dispatchers.Default){BmwDeveloperWorldFactory.create()}
+   repo.save(BMW_DEVELOPER_SAVE_SLOT,world)
+  }
   mutable.value=GameState(world,BMW_DEVELOPER_SAVE_SLOT,revision=mutable.value.revision+1,message="BMW FC Experience geladen.")
  }
  fun resetDeveloperWorld()=work{
