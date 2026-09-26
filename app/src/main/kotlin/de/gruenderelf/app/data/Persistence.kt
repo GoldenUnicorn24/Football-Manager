@@ -68,7 +68,7 @@ class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.
  val matchSpeed=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[speedKey]?.let{runCatching{MatchSpeed.valueOf(it)}.getOrNull()}?:if(prefs[fastKey]==true)MatchSpeed.FAST else MatchSpeed.NORMAL}
  val soundsEnabled=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[soundKey]?:true}
  val changelogSeenVersion=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[changelogKey]?:""}
- val developerPasswordConfigured:Flow<Boolean>=flowOf(true)
+ val developerPasswordConfigured: Flow<Boolean> = flowOf(true)
  suspend fun setDeveloperPassword(value:String){require(value==fixedDeveloperCode){"Developer-Code falsch."}}
  suspend fun verifyDeveloperPassword(value:String):Boolean=value==fixedDeveloperCode
  suspend fun developerSaveExists()=db.saves().header(BMW_DEVELOPER_SAVE_SLOT)!=null
