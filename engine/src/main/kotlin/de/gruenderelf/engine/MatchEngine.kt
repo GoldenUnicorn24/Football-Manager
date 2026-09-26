@@ -419,7 +419,11 @@ object MatchEngine {
   val c=w.clubs.getValue(clubId(m,home));val effective=effectiveTactics(w,m,home);val ids=xi(m,home);val slots=Formations.positions(formation(m,home))
   val value=ids.mapIndexed{i,id->val p=w.players[id];if(p==null||id in m.injured)0.0 else{
    val slot=slots.getOrElse(i){p.position}
-   val skill=if(attack)p.attributes.overall(slot)*.58+p.attributes.passing*.20+p.attributes.finishing*.22 else p.attributes.overall(slot)*.64+p.attributes.tackling*.25+p.attributes.vision*.11
+   val skill=if(slot==Position.TW){
+    if(attack)p.attributes.keeping*.34+p.attributes.passing*.32+p.attributes.vision*.24+p.attributes.technique*.10
+    else p.attributes.keeping*.78+p.attributes.vision*.10+p.attributes.strength*.07+p.attributes.pace*.05
+   }else if(attack)p.attributes.overall(slot)*.58+p.attributes.passing*.20+p.attributes.finishing*.22
+   else p.attributes.overall(slot)*.64+p.attributes.tackling*.25+p.attributes.vision*.11
    val fatigue=(.62+p.fitness*.0038).coerceIn(.65,1.0);val mental=MatchIntelligence.playerMentalFactor(w,m,p);val roleFit=when(p.effectiveRole()){PlayerRole.BALL_PLAYING_CB,PlayerRole.DEEP_PLAYMAKER,PlayerRole.PLAYMAKER->if(attack)1.025 else 1.0;PlayerRole.STOPPER,PlayerRole.ANCHOR,PlayerRole.INVERTED_FULLBACK->if(attack).99 else 1.03;PlayerRole.PRESSING_FORWARD->if(attack)1.02 else 1.015;PlayerRole.TARGET_FORWARD->if(attack&&effective.buildUp in listOf(BuildUp.DIRECT,BuildUp.WIDE))1.035 else 1.0;else->1.0}
    skill*p.fit(slot)*(.86+p.form*.02)*fatigue*(.88+p.morale*.002)*(.9+p.sharpness*.001)*mental*roleFit
   }}.sum()/11
