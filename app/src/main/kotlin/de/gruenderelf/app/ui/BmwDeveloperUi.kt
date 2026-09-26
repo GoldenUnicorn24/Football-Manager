@@ -386,18 +386,38 @@ private fun BmwInfrastructureScreen(w:World){
 
 @Composable
 private fun BmwMedicalScreen(w:World,vm:GameViewModel){
- Page("Human Performance","MEDIZIN · REGENERATION · LONGEVITY"){
-  Section("Grundsatz"){Text("Das Programm simuliert legale Sportmedizin, Prävention und Regeneration. Es verlangsamt altersbedingten Leistungsabfall, kann Alterung aber nicht unbegrenzt rückgängig machen.",color=Muted)}
+ Page("Human Performance","BMW MEDICAL · RECOVERY · LONGEVITY"){
+  Surface(shape=RoundedCornerShape(12.dp),color=Color(0xFF0A1118),border=androidx.compose.foundation.BorderStroke(1.dp,Color(0xFF285144)),modifier=Modifier.fillMaxWidth()){
+   Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+     Column{Text("BMW HUMAN PERFORMANCE",color=Chalk,fontWeight=FontWeight.Black,style=MaterialTheme.typography.headlineMedium);Text("Medical Research Wing",color=Color(0xFF9ED9B7))}
+     BmwStatusPill("MEDICAL ONLINE")
+    }
+    Text("Regeneration, Prävention und Longevity werden als Sportmedizin-System simuliert. Das biologische Leistungsalter kann begrenzt verbessert werden; Alterung wird nie vollständig ausgeschaltet.",color=Muted)
+   }
+  }
+
   w.squad().filter{!it.youth}.sortedByDescending{w.calendar.season-it.birthYear}.forEach{p->
    val chronological=w.calendar.season-p.birthYear
    if(chronological>=28||p.id in w.developer.longevity){
     val lp=w.developer.longevity[p.id]
-    Section(p.name){
-     Text("Alter $chronological · biologisches Leistungsalter "+"%.1f".format(BmwDeveloperSystems.effectiveAge(w,p)),style=MaterialTheme.typography.titleMedium)
-     if(lp?.active==true){
-      Text("Programm aktiv · Reduktion "+"%.2f".format(lp.biologicalYearsReduced)+" Jahre",color=Grass)
-      Text("Prime-Erhalt "+(lp.primeRetention*100).roundToInt()+" % · Recovery "+(lp.recoveryBoost*100).roundToInt()+" %",color=Muted)
-     }else Action("Longevity-Programm starten · 250 Mio. €",secondary=true){vm.enrollLongevity(p.id)}
+    Surface(shape=RoundedCornerShape(10.dp),color=Color(0xFF0D1218),border=androidx.compose.foundation.BorderStroke(1.dp,BmwLine),modifier=Modifier.fillMaxWidth()){
+     Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
+      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+       Column{Text(p.name,color=Chalk,fontWeight=FontWeight.Black,style=MaterialTheme.typography.titleLarge);Text("#"+p.number+" · "+p.position.label,color=Muted)}
+       if(lp?.active==true)BmwStatusPill("PROGRAM ACTIVE") else BmwStatusPill("AVAILABLE",false)
+      }
+      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+       BmwMetricTile("Age",chronological.toString(),Modifier.weight(1f))
+       BmwMetricTile("Bio Age","%.1f".format(BmwDeveloperSystems.effectiveAge(w,p)),Modifier.weight(1f),Color(0xFF70D79B))
+       BmwMetricTile("Fitness","%.0f%%".format(p.fitness),Modifier.weight(1f),Color(0xFF55B8FF))
+      }
+      if(lp?.active==true){
+       Meter("Prime Retention",(lp.primeRetention*100).roundToInt())
+       Meter("Recovery",(lp.recoveryBoost*100).roundToInt())
+       Text("Biologische Reduktion: "+"%.2f".format(lp.biologicalYearsReduced)+" Jahre",color=Color(0xFF9ED9B7),fontWeight=FontWeight.Bold)
+      }else Action("Longevity Program · 250 Mio. €",secondary=true){vm.enrollLongevity(p.id)}
+     }
     }
    }
   }
@@ -406,13 +426,34 @@ private fun BmwMedicalScreen(w:World,vm:GameViewModel){
 
 @Composable
 private fun BmwRosterDataScreen(w:World){
- Page("BMW FC Kaderdaten","RATING · POTENZIAL · MARKTWERT · GEHALT"){
-  w.squad().filter{!it.youth}.sortedWith(compareBy<Player>{it.position.ordinal}.thenBy{it.number}).forEach{p->
+ Page("BMW FC Kaderdaten","BMW SQUAD INTELLIGENCE · PERFORMANCE DATA"){
+  val squad=w.squad().filter{!it.youth}.sortedWith(compareBy<Player>{it.position.ordinal}.thenBy{it.number})
+  Section("Squad Overview"){
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+    BmwMetricTile("Players",squad.size.toString(),Modifier.weight(1f))
+    BmwMetricTile("Ø GES","%.1f".format(squad.map{it.ca}.average()),Modifier.weight(1f),Color(0xFF55B8FF))
+    BmwMetricTile("Market",euros(squad.sumOf{w.developer.playerMeta[it.id]?.marketValue?:0L}),Modifier.weight(1f),BmwMRed)
+   }
+  }
+  squad.forEach{p->
    val meta=w.developer.playerMeta[p.id]
-   Section("#"+p.number+" · "+p.name){
-    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Metric("GES",p.ca.toString());Metric("POT",(meta?.potential?:p.hidden.potential).toString());Metric("Alter",(w.calendar.season-p.birthYear).toString())}
-    Text(p.position.name+(if(p.secondary.isNotEmpty())" / "+p.secondary.joinToString(" / "){it.name} else ""),color=Muted)
-    Text("Marktwert "+euros(meta?.marketValue?:0L)+" · Gehalt/Jahr "+euros(meta?.annualSalary?:p.wage.toLong()*52),color=Grass)
+   val isLeon=p.firstName=="Leon"&&p.lastName=="Stark"
+   Surface(shape=RoundedCornerShape(10.dp),color=if(isLeon)Color(0xFF0B2035) else Color(0xFF0D1218),border=androidx.compose.foundation.BorderStroke(1.dp,if(isLeon)Color(0xFF2A70B3) else BmwLine),modifier=Modifier.fillMaxWidth()){
+    Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
+     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+      Column(Modifier.weight(1f)){Text("#"+p.number+"  "+p.name,color=Chalk,fontWeight=FontWeight.Black,style=MaterialTheme.typography.titleLarge);Text(p.position.label+(if(p.secondary.isNotEmpty())" · "+p.secondary.joinToString(" / "){it.label} else ""),color=Muted,style=MaterialTheme.typography.bodySmall)}
+      if(isLeon)BmwStatusPill("CAPTAIN")
+     }
+     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+      BmwMetricTile("GES",p.ca.toString(),Modifier.weight(1f))
+      BmwMetricTile("POT",(meta?.potential?:p.hidden.potential).toString(),Modifier.weight(1f),Color(0xFF55B8FF))
+      BmwMetricTile("Age",(w.calendar.season-p.birthYear).toString(),Modifier.weight(1f),Color(0xFF70D79B))
+     }
+     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+      Column{Text("MARKTWERT",color=Color(0xFF9EABB9),style=MaterialTheme.typography.labelSmall);Text(euros(meta?.marketValue?:0L),color=Chalk,fontWeight=FontWeight.Bold)}
+      Column(horizontalAlignment=Alignment.End){Text("GEHALT / JAHR",color=Color(0xFF9EABB9),style=MaterialTheme.typography.labelSmall);Text(euros(meta?.annualSalary?:p.wage.toLong()*52),color=Chalk,fontWeight=FontWeight.Bold)}
+     }
+    }
    }
   }
  }
@@ -420,19 +461,32 @@ private fun BmwRosterDataScreen(w:World){
 
 @Composable
 private fun BmwMoreScreen(w:World,vm:GameViewModel,onNavigate:(String)->Unit,onExit:()->Unit){
- Page("BMW FC Operations","DEVELOPER CONTROL CENTER"){
-  Section{Crest(w.club().logo,w.club().primary,w.club().secondary,Modifier.size(74.dp));Spacer(Modifier.height(6.dp));MPerformanceMark();Text("Versteckter Developer-Spielstand",color=Muted)}
-  Action("Global Rankings",secondary=true){onNavigate("bmw_rankings")}
-  Action("Performance Campus",secondary=true){onNavigate("bmw_infrastructure")}
-  Action("Human Performance / Longevity",secondary=true){onNavigate("bmw_medical")}
-  Action("Kaderdaten & Finanzen",secondary=true){onNavigate("bmw_roster")}
-  Action("Training & Co-Trainer",secondary=true){onNavigate("training")}
-  Action("Transfers & Jugend",secondary=true){onNavigate("transfers")}
-  Action("Liga & Wettbewerbe",secondary=true){onNavigate("liga")}
-  Action("Verein & Finanzen",secondary=true){onNavigate("verein")}
-  Action("Karriere",secondary=true){onNavigate("karriere")}
-  Action("BMW Developer-Spielstand sichern",secondary=true){vm.saveAs(BMW_DEVELOPER_SAVE_SLOT)}
-  Action("Einstellungen",secondary=true){onNavigate("einstellungen")}
-  Action("BMW FC Experience verlassen",secondary=true,onClick=onExit)
+ Page("BMW FC Operations","BMW PERFORMANCE OS · CONTROL CENTER"){
+  Surface(shape=RoundedCornerShape(12.dp),color=Color(0xFF0A1118),border=androidx.compose.foundation.BorderStroke(1.dp,BmwLine),modifier=Modifier.fillMaxWidth()){
+   Row(Modifier.padding(16.dp).fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(15.dp)){
+    Crest(w.club().logo,w.club().primary,w.club().secondary,Modifier.size(78.dp))
+    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)){MPerformanceMark();Text("BMW FC OPERATIONS",color=Chalk,fontWeight=FontWeight.Black,style=MaterialTheme.typography.headlineMedium);Text("Private Developer Environment",color=Muted)}
+   }
+  }
+  Section("Intelligence & Performance"){
+   Action("Global Intelligence Rankings",secondary=true){onNavigate("bmw_rankings")}
+   Action("NEXUS PRIME",secondary=true){onNavigate("bmw_tech")}
+   Action("BMW Performance Campus",secondary=true){onNavigate("bmw_infrastructure")}
+   Action("Human Performance & Longevity",secondary=true){onNavigate("bmw_medical")}
+   Action("Kaderdaten & Finanzen",secondary=true){onNavigate("bmw_roster")}
+  }
+  Section("Football Operations"){
+   Action("Training & Co-Trainer",secondary=true){onNavigate("training")}
+   Action("Transfers & Jugend",secondary=true){onNavigate("transfers")}
+   Action("Liga & Wettbewerbe",secondary=true){onNavigate("liga")}
+   Action("Verein & Finanzen",secondary=true){onNavigate("verein")}
+   Action("Karriere",secondary=true){onNavigate("karriere")}
+  }
+  Section("Developer"){
+   Action("BMW Developer-Spielstand sichern",secondary=true){vm.saveAs(BMW_DEVELOPER_SAVE_SLOT)}
+   Action("Einstellungen",secondary=true){onNavigate("einstellungen")}
+   Action("BMW FC Experience verlassen",secondary=true,onClick=onExit)
+  }
  }
 }
+
