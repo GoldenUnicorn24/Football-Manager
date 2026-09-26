@@ -257,49 +257,89 @@ private fun BmwCommandCenterScreen(w:World,onNavigate:(String)->Unit){
 @Composable
 private fun BmwTechnologyScreen(w:World,vm:GameViewModel,onNavigate:(String)->Unit){
  val p=BmwDeveloperSystems.profile(w,w.user.clubId)?:return
- Page("NEXUS PRIME","BMW FOOTBALL INTELLIGENCE"){
-  Section("Technologiestand"){
-   TechDomain.entries.forEach{d->Meter(d.label,p.value(d).roundToInt(),130)}
-   Text("Gesamtindex: "+"%.1f".format(p.overall)+" / 130",color=Grass,style=MaterialTheme.typography.titleLarge)
-   Text("Konkurrenz entwickelt eigene Systeme jede Spielwoche. Finanzkraft, Reputation und Infrastruktur bestimmen, wie schnell sie aufholt.",color=Muted)
+ Page("NEXUS PRIME","BMW INTELLIGENCE · PERFORMANCE COMPUTE"){
+  Surface(shape=RoundedCornerShape(12.dp),color=Color(0xFF0A111A),border=androidx.compose.foundation.BorderStroke(1.dp,Color(0xFF234B72)),modifier=Modifier.fillMaxWidth()){
+   Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+     Column{Text("BMW NEXUS PRIME",color=Chalk,fontWeight=FontWeight.Black,style=MaterialTheme.typography.headlineMedium);Text("Unified Football Intelligence",color=Color(0xFF9BCBFF))}
+     BmwStatusPill("ONLINE")
+    }
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+     BmwMetricTile("System Index","%.1f".format(p.overall),Modifier.weight(1f))
+     BmwMetricTile("Research",euros(p.researchBudget),Modifier.weight(1f),Color(0xFF55B8FF))
+    }
+    Text("Technologie ist kein kosmetischer Wert: Analyse, Training und NEXUS wirken auf Entwicklung, Entscheidungsqualität und Match-Ausführung.",color=Muted,style=MaterialTheme.typography.bodyMedium)
+   }
   }
-  TechDomain.entries.forEach{domain->
-   Section(domain.label){
-    Text("Aktuell: "+"%.1f".format(p.value(domain)),style=MaterialTheme.typography.titleLarge)
-    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-     Button({vm.investTechnology(domain,250_000_000L)},modifier=Modifier.weight(1f)){Text("+ 250 Mio.")}
-     OutlinedButton({vm.investTechnology(domain,1_000_000_000L)},modifier=Modifier.weight(1f)){Text("+ 1 Mrd.")}
+
+  Section("Technology Stack"){
+   TechDomain.entries.forEach{d->Meter(d.label,p.value(d).roundToInt(),130)}
+  }
+
+  Section("Research Control"){
+   TechDomain.entries.forEach{domain->
+    Surface(shape=RoundedCornerShape(8.dp),color=Color(0xFF0C1015),border=androidx.compose.foundation.BorderStroke(1.dp,Color(0xFF29323C)),modifier=Modifier.fillMaxWidth()){
+     Column(Modifier.padding(13.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
+      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+       Column{Text(domain.label,color=Chalk,fontWeight=FontWeight.Bold);Text("Aktueller Index",color=Muted,style=MaterialTheme.typography.bodySmall)}
+       Text("%.1f".format(p.value(domain)),color=Color(0xFF9BCBFF),fontWeight=FontWeight.Black,style=MaterialTheme.typography.titleLarge)
+      }
+      Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+       Button({vm.investTechnology(domain,250_000_000L)},modifier=Modifier.weight(1f),shape=RoundedCornerShape(7.dp)){Text("250 Mio. €",color=Color.White,fontWeight=FontWeight.Bold)}
+       OutlinedButton({vm.investTechnology(domain,1_000_000_000L)},modifier=Modifier.weight(1f),shape=RoundedCornerShape(7.dp),border=androidx.compose.foundation.BorderStroke(1.dp,BmwLine)){Text("1 Mrd. €",color=Chalk,fontWeight=FontWeight.Bold)}
+      }
+     }
     }
    }
   }
-  Action("Technologie-Weltrangliste",secondary=true){onNavigate("bmw_rankings")}
+
+  Section("Competitive Intelligence"){
+   Text("Andere Vereine bauen eigene Systeme auf und entwickeln sie über die Saison weiter. BMW startet technologisch vorne, bleibt aber nicht automatisch uneinholbar.",color=Muted)
+   Action("Technology World Ranking",secondary=true){onNavigate("bmw_rankings")}
+  }
  }
 }
 
 @Composable
 private fun BmwWorldRankingScreen(w:World){
- val power=BmwDeveloperSystems.clubPowerRanking(w)
- val tech=BmwDeveloperSystems.technologyRanking(w)
- val infra=BmwDeveloperSystems.infrastructureRanking(w)
- Page("Global Intelligence","VEREINSSTÄRKE · TECHNOLOGIE · INFRASTRUKTUR"){
+ val power=remember(w.calendar.absoluteWeek,w.developer.weeksActive){BmwDeveloperSystems.clubPowerRanking(w)}
+ val tech=remember(w.calendar.absoluteWeek,w.developer.weeksActive){BmwDeveloperSystems.technologyRanking(w)}
+ val infra=remember(w.calendar.absoluteWeek){BmwDeveloperSystems.infrastructureRanking(w)}
+ Page("Global Intelligence","BMW CLUB INTELLIGENCE · LIVE WORLD INDEX"){
   Section("Club Power Ranking"){
+   Text("Bewertung aus Kader, Form, Technologie, Infrastruktur und Finanzkraft.",color=Muted,style=MaterialTheme.typography.bodySmall)
    power.take(20).forEachIndexed{i,r->
-    val c=w.clubs.getValue(r.clubId)
-    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text((i+1).toString()+". "+c.name,fontWeight=if(c.id==w.user.clubId)FontWeight.Black else FontWeight.Normal);Text("%.1f".format(r.score),color=if(c.id==w.user.clubId)Grass else Chalk)}
-    Text("Kader %.1f · Form %.1f · Tech %.1f · Campus %.1f".format(r.squad,r.form,r.technology,r.infrastructure),color=Muted,style=MaterialTheme.typography.bodySmall)
+    val club=w.clubs.getValue(r.clubId);val own=club.id==w.user.clubId
+    Surface(shape=RoundedCornerShape(7.dp),color=if(own)Color(0xFF0C2137) else Color(0xFF0C1015),border=androidx.compose.foundation.BorderStroke(1.dp,if(own)Color(0xFF2B6FAE) else Color(0xFF262D36)),modifier=Modifier.fillMaxWidth()){
+     Column(Modifier.padding(11.dp),verticalArrangement=Arrangement.spacedBy(5.dp)){
+      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+       Text((i+1).toString().padStart(2,'0')+"  "+club.name,color=Chalk,fontWeight=if(own)FontWeight.Black else FontWeight.SemiBold)
+       Text("%.1f".format(r.score),color=if(own)Color(0xFF9BCBFF) else Chalk,fontWeight=FontWeight.Black)
+      }
+      Text("Kader %.1f   Form %.1f   Tech %.1f   Campus %.1f".format(r.squad,r.form,r.technology,r.infrastructure),color=Color(0xFFB4BEC9),style=MaterialTheme.typography.bodySmall)
+     }
+    }
    }
   }
+
   Section("Technology Ranking"){
    tech.take(20).forEachIndexed{i,p->
-    val c=w.clubs[p.clubId]?:return@forEachIndexed
-    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text((i+1).toString()+". "+c.name);Text("%.1f".format(p.overall),color=if(c.id==w.user.clubId)Grass else Chalk)}
-    Text(p.systemName,color=Muted,style=MaterialTheme.typography.bodySmall)
+    val club=w.clubs[p.clubId]?:return@forEachIndexed;val own=club.id==w.user.clubId
+    Row(Modifier.fillMaxWidth().padding(vertical=4.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+     Column(Modifier.weight(1f)){Text((i+1).toString().padStart(2,'0')+"  "+club.name,color=Chalk,fontWeight=if(own)FontWeight.Black else FontWeight.Medium);Text(p.systemName,color=if(own)Color(0xFF9BCBFF) else Muted,style=MaterialTheme.typography.bodySmall)}
+     Text("%.1f".format(p.overall),color=if(own)Color(0xFF9BCBFF) else Chalk,fontWeight=FontWeight.Bold)
+    }
+    if(i<19)HorizontalDivider(color=Color.White.copy(alpha=.06f))
    }
   }
+
   Section("Infrastructure Ranking"){
    infra.take(20).forEachIndexed{i,r->
-    val c=w.clubs.getValue(r.clubId)
-    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text((i+1).toString()+". "+c.name);Text("%.1f".format(r.score),color=if(c.id==w.user.clubId)Grass else Chalk)}
+    val club=w.clubs.getValue(r.clubId);val own=club.id==w.user.clubId
+    Row(Modifier.fillMaxWidth().padding(vertical=5.dp),horizontalArrangement=Arrangement.SpaceBetween){
+     Text((i+1).toString().padStart(2,'0')+"  "+club.name,color=Chalk,fontWeight=if(own)FontWeight.Black else FontWeight.Medium)
+     Text("%.1f".format(r.score),color=if(own)Color(0xFF9BCBFF) else Chalk,fontWeight=FontWeight.Bold)
+    }
    }
   }
  }
@@ -309,16 +349,37 @@ private fun BmwWorldRankingScreen(w:World){
 private fun BmwInfrastructureScreen(w:World){
  val s=w.club().stadium
  val rank=BmwDeveloperSystems.infrastructureRanking(w).indexOfFirst{it.clubId==w.user.clubId}+1
- Page("Performance Campus","BMW HUMAN PERFORMANCE CENTER"){
-  Section("BMW Performance Arena"){Crest(w.club().logo,w.club().primary,w.club().secondary,Modifier.size(76.dp));Text(s.name,style=MaterialTheme.typography.headlineMedium);Text(s.capacity.toString()+" Plätze · Hybridrasen · vollständige Performance-Infrastruktur",color=Muted)}
-  Section("Einrichtungen"){
-   Meter("Training",s.training);Meter("Medizin",s.medicine);Meter("Kraftraum",s.gym);Meter("Jugend",s.youth);Meter("Platzqualität",s.pitchQuality);Meter("Clubhouse",s.clubhouse)
-   Text("Infrastructure Ranking: #"+rank,color=Grass)
+ Page("Performance Campus","BMW M · HUMAN PERFORMANCE CENTER"){
+  Surface(shape=RoundedCornerShape(12.dp),color=Color(0xFF0A1118),border=androidx.compose.foundation.BorderStroke(1.dp,BmwLine),modifier=Modifier.fillMaxWidth()){
+   Row(Modifier.padding(16.dp).fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
+    Crest(w.club().logo,w.club().primary,w.club().secondary,Modifier.size(82.dp))
+    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){MPerformanceMark(compact=true);Text(s.name,color=Chalk,style=MaterialTheme.typography.headlineMedium);Text(s.capacity.toString()+" Plätze · München",color=Muted)}
+   }
   }
-  Section("Spezialanlagen"){
-   Text("56 spezialisierte Trainingsflächen")
-   Text("BLACK PITCH II · 4 ORIGIN-Felder · 3 PROJECT-ZERO-Felder",color=Muted)
-   Text("2 GK-NEXUS-Hallen · Neuro-Vision-Arenen · Biomechanics Research Wing",color=Muted)
+  Section("Campus Status"){
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+    BmwMetricTile("World Rank","#"+rank,Modifier.weight(1f))
+    BmwMetricTile("Surfaces","56",Modifier.weight(1f),Color(0xFF55B8FF))
+    BmwMetricTile("Status","100%",Modifier.weight(1f),Color(0xFF70D79B))
+   }
+  }
+  Section("Core Facilities"){
+   Meter("Training",s.training);Meter("Medizin",s.medicine);Meter("Kraftraum",s.gym);Meter("Jugend",s.youth);Meter("Platzqualität",s.pitchQuality);Meter("Clubhouse",s.clubhouse)
+  }
+  Section("M Performance Facilities"){
+   listOf(
+    "BLACK PITCH II" to "Adaptive Spielsituationen und Entscheidungsdruck",
+    "ORIGIN Fields" to "Vier datenadaptive Trainingsfelder",
+    "PROJECT ZERO Fields" to "Drei spezialisierte Defensiv- und Restverteidigungsfelder",
+    "GK NEXUS" to "Zwei Torwart-Hallen mit Szenario-Simulation",
+    "Neuro-Vision Arena" to "Scanning, Wahrnehmung und Vororientierung",
+    "Biomechanics Research Wing" to "Bewegungsanalyse, Prävention und Performance"
+   ).forEach{(name,detail)->
+    Row(Modifier.fillMaxWidth().padding(vertical=3.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+     Column(Modifier.weight(1f)){Text(name,color=Chalk,fontWeight=FontWeight.Bold);Text(detail,color=Muted,style=MaterialTheme.typography.bodySmall)}
+     BmwStatusPill("ACTIVE")
+    }
+   }
   }
  }
 }
