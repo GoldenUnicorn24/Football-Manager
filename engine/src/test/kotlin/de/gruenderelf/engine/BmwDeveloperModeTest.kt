@@ -71,4 +71,36 @@ class BmwDeveloperModeTest {
   assertTrue(ratio>.62,"BMW chance conversion is too weak relative to xG: $ratio")
   assertTrue(wins>=12,"BMW elite squad underperforms too often: $wins wins / 24")
  }
+
+ @Test fun leonStartsWithMessiMasterclassOpenAndCanExceedOneHundred(){
+  val w=BmwDeveloperWorldFactory.create(261002L)
+  val leon=w.squad().first{it.name=="Leon Stark"}
+  assertFalse(leon.messiMentored)
+  assertEquals("BMW Free 10",leon.archetype)
+  assertNull(TrainingEngine.messiMasterclassReason(w,leon.id))
+  assertTrue(leon.attributes.values().values.all{it<=100})
+  TrainingEngine.bookMessiMasterclass(w,leon.id)
+  assertTrue(leon.messiMentored)
+  assertEquals("Prime-Messi-Masterclass",leon.archetype)
+  assertTrue(leon.attributes.values().values.any{it>100})
+  assertTrue(leon.attributes.technique>100)
+  assertTrue(leon.attributes.vision>100)
+  assertTrue(leon.attributes.finishing>100)
+ }
+
+ @Test fun legacyBmwSaveWithFalseCompletionFlagIsRepairedButRealMasterclassIsKept(){
+  val w=BmwDeveloperWorldFactory.create(261003L)
+  val leon=w.squad().first{it.name=="Leon Stark"}
+  leon.messiMentored=true
+  leon.archetype="Prime-Messi-Masterclass"
+  assertTrue(BmwDeveloperWorldFactory.repairDeveloperSave(w))
+  assertFalse(leon.messiMentored)
+  assertEquals("BMW Free 10",leon.archetype)
+
+  TrainingEngine.bookMessiMasterclass(w,leon.id)
+  val technique=leon.attributes.technique
+  assertFalse(BmwDeveloperWorldFactory.repairDeveloperSave(w))
+  assertTrue(leon.messiMentored)
+  assertEquals(technique,leon.attributes.technique)
+ }
 }
