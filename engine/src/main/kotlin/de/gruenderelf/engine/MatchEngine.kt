@@ -1277,7 +1277,7 @@ object MatchEngine {
     if(behind&&m.minute>=58&&attackDelta>1.5)factors+="mehr Offensivwirkung"
     if(ahead&&m.minute>=68&&defendDelta>1.5)factors+="mehr Stabilität"
     if(factors.isEmpty())factors+="Belastung/Matchup"
-    val reason=factors.take(3).joinToString(" · ")+" · ${incoming.lastName}: $inRating/99 ${target.name}, ${incoming.fitness.roundToInt()} % fit, Form ${(incoming.form*10).roundToInt()/10.0}"
+    val reason=factors.take(3).joinToString(" · ")+" · ${incoming.shortName}: $inRating/$PLAYER_RATING_MAX ${target.name}, ${incoming.fitness.roundToInt()} % fit, Form ${(incoming.form*10).roundToInt()/10.0}"
     result.add(SubSuggestion(outId,inId,target,score,reason))
    }
   }}
