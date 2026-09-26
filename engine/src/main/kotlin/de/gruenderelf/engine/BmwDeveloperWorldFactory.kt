@@ -57,8 +57,8 @@ object BmwDeveloperWorldFactory {
    training=Kit(0xFF111820,0xFF00ADEF,3)
   )
   club.stadium=Stadium(
-   name="BMW Performance Arena",capacity=92_500,seats=92_500,pitchQuality=100,surface=Surface.GRASS,floodlights=true,
-   cabin=100,stand=100,training=100,clubhouse=100,youth=100,gym=100,medicine=100
+   name="BMW Performance Arena",capacity=92_500,seats=92_500,pitchQuality=125,surface=Surface.GRASS,floodlights=true,
+   cabin=115,stand=112,training=125,clubhouse=115,youth=118,gym=122,medicine=124
   )
   club.budget=60_000_000_000L
   club.philosophy="Technologie. Leistung. Freiheit."
@@ -73,7 +73,7 @@ object BmwDeveloperWorldFactory {
   club.tactics.formation="4-4-1-1";club.tactics.mentality=4;club.tactics.pressing=4;club.tactics.line=4
   club.tactics.tempo=4;club.tactics.width=4;club.tactics.buildUp=BuildUp.MIXED
 
-  val dev=BmwDeveloperState(enabled=true,bmwClubId=club.id)
+  val dev=BmwDeveloperState(enabled=true,bmwClubId=club.id,technologyModelVersion=2)
   fun install(p:Player,s:BmwPlayerSeed){
    p.firstName=s.first;p.lastName=s.last;p.birthYear=s.born;p.nationality=s.nationality;p.position=s.position
    p.secondary=s.secondary.toMutableList();p.number=s.number;p.foot=s.foot;p.attributes=attributesFor(s.position,s.rating);tuneOverall(p,s.rating)
@@ -105,17 +105,23 @@ object BmwDeveloperWorldFactory {
 
  fun repairDeveloperSave(w:World):Boolean{
   if(!w.developer.enabled)return false
-  val leon=w.squad(w.developer.bmwClubId).firstOrNull{it.firstName=="Leon"&&it.lastName=="Stark"}?:return false
-  // Older BMW builds incorrectly used messiMentored=true as a match-engine boost even though
-  // the Masterclass attribute package had never been applied. Detect only that exact legacy
-  // state: completed flag + no attribute above 100. A genuinely completed Masterclass remains untouched.
-  if(leon.messiMentored&&((leon.attributes.values().values.maxOrNull()?:0)<=100)){
+  var changed=false
+  val club=w.clubs[w.developer.bmwClubId]
+  if(club!=null){
+   val s=club.stadium
+   fun floor(current:Int,target:Int,set:(Int)->Unit){if(current<target){set(target);changed=true}}
+   floor(s.pitchQuality,125){s.pitchQuality=it};floor(s.training,125){s.training=it};floor(s.medicine,124){s.medicine=it}
+   floor(s.gym,122){s.gym=it};floor(s.youth,118){s.youth=it};floor(s.cabin,115){s.cabin=it};floor(s.clubhouse,115){s.clubhouse=it};floor(s.stand,112){s.stand=it}
+  }
+  val leon=w.squad(w.developer.bmwClubId).firstOrNull{it.firstName=="Leon"&&it.lastName=="Stark"}
+  if(leon!=null&&leon.messiMentored&&((leon.attributes.values().values.maxOrNull()?:0)<=100)){
    leon.messiMentored=false
    leon.archetype="BMW Free 10"
    w.news("Messi-Masterclass freigeschaltet","Leon Stark hat die Masterclass noch nicht absolviert. Sie kann jetzt regulär gebucht werden und hebt seine individuellen Attribute über 100.","good")
-   return true
+   changed=true
   }
-  return false
+  if(BmwDeveloperSystems.migrateTechnologyLandscape(w))changed=true
+  return changed
  }
 
  private fun tuneOverall(p:Player,target:Int){
