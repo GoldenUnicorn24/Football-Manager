@@ -201,4 +201,37 @@ class BmwDeveloperModeTest {
   assertTrue(mult in .90..1.0)
   assertTrue(mult<1.0,"BMW GK NEXUS should reduce scoring probability, multiplier=$mult")
  }
+
+ @Test fun manuelNeuerIsActualStartingKeeperAndMateriallyReducesShotConversion(){
+  val w=BmwDeveloperWorldFactory.create(261004L)
+  val club=w.club()
+  val neuer=w.squad().first{it.name=="Manuel Neuer"}
+  val slots=Formations.positions(club.tactics.formation)
+  val keeperSlot=slots.indexOf(Position.TW)
+  assertTrue(keeperSlot>=0)
+  assertEquals(neuer.id,club.tactics.xi[keeperSlot],"Manuel Neuer must occupy the goalkeeper slot")
+  assertEquals(Position.TW,neuer.position)
+  assertTrue(neuer.attributes.keeping>=90)
+
+  val shooter=Player(
+   id=991001,position=Position.ST,foot=Foot.RIGHT,
+   attributes=Attributes(pace=90,finishing=92,passing=82,technique=91,tackling=35,strength=82,stamina=88,vision=86,heading=84,keeping=8,setPieces=82),
+   hidden=Hidden(consistency=86,pressure=86),fitness=98.0,sharpness=92,form=7.5
+  )
+  val averageKeeper=Player(
+   id=991002,position=Position.TW,
+   attributes=Attributes(pace=52,finishing=8,passing=62,technique=58,tackling=20,strength=72,stamina=70,vision=61,heading=35,keeping=72,setPieces=20),
+   hidden=Hidden(consistency=68,pressure=66),fitness=98.0,sharpness=82,form=6.8
+  )
+  val box=ShotContext(.5f,.115f,true,ShotType.BOX_SHOT,pressure=.30,defendersNearby=1,passQuality=.74,clearChance=false)
+  val one=ShotContext(.5f,.095f,true,ShotType.ONE_ON_ONE,pressure=.08,defendersNearby=0,passQuality=.82,clearChance=true,counter=true)
+  val boxXg=ShotModel.xg(box);val oneXg=ShotModel.xg(one)
+  val vsNeuerBox=ShotModel.goalProbability(boxXg,shooter,neuer,box)*BmwDeveloperSystems.goalkeeperShotMultiplier(w,club.id)
+  val vsAverageBox=ShotModel.goalProbability(boxXg,shooter,averageKeeper,box)
+  val vsNeuerOne=ShotModel.goalProbability(oneXg,shooter,neuer,one)*BmwDeveloperSystems.goalkeeperShotMultiplier(w,club.id)
+  val vsAverageOne=ShotModel.goalProbability(oneXg,shooter,averageKeeper,one)
+  println("NEUER_DIAGNOSTIC keeping=${neuer.attributes.keeping} ca=${neuer.ca} box=$vsNeuerBox avgBox=$vsAverageBox one=$vsNeuerOne avgOne=$vsAverageOne")
+  assertTrue(vsNeuerBox<vsAverageBox*.90,"Neuer should materially suppress normal box-shot conversion")
+  assertTrue(vsNeuerOne<vsAverageOne*.90,"Neuer should materially suppress one-on-one conversion")
+ }
 }
