@@ -93,6 +93,9 @@ object BmwDeveloperWorldFactory {
   leon.messiMentored=false
   leon.archetype="BMW Free 10"
   club.tactics.captainId=leon.id;club.tactics.targetPlayerId=leon.id;club.tactics.penaltyTakerId=leon.id;club.tactics.freeKickTakerId=leon.id
+  val musiala=w.squad(club.id).first{it.name=="Jamal Musiala"};val olise=w.squad(club.id).first{it.name=="Michael Olise"}
+  // Stark bleibt bei Ecken im Strafraum: der Eckenschütze kann in der Engine nicht zugleich Flankenziel sein.
+  club.tactics.cornerLeftTakerId=musiala.id;club.tactics.cornerRightTakerId=olise.id
   w.user.difficulty=Difficulty.SANDBOX;w.user.tutorialEnabled=false;w.user.tutorialCompleted=true
   w.developer=dev
   BmwDeveloperSystems.seedTechnology(w)
