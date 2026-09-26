@@ -130,6 +130,14 @@ object BmwDeveloperSystems {
 
  fun goalkeeperShotMultiplier(w:World,clubId:Int):Double{
   val p=profile(w,clubId)?:return 1.0
+  // Goalkeeping tech may support positioning, preparation and recovery, but it must not
+  // replace the keeper's own attributes. The player model remains the dominant factor.
+  val support=p.goalkeeping*.55+p.analytics*.25+p.medicine*.20
+  return (1.0-(support-70.0).coerceAtLeast(0.0)*.0018).coerceIn(.90,1.0)
+ }
+
+ fun goalkeeperShotMultiplier(w:World,clubId:Int):Double{
+  val p=profile(w,clubId)?:return 1.0
   val score=p.goalkeeping*.62+p.analytics*.23+p.medicine*.15
   // Technology supports positioning, shot preparation and recovery without replacing keeper skill.
   return (1.0-(score-55.0).coerceAtLeast(0.0)*.00095).coerceIn(.935,1.0)
