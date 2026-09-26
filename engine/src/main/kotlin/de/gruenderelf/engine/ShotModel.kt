@@ -112,7 +112,9 @@ object ShotModel {
             ShotType.ONE_ON_ONE -> .0050
             else -> .0048
         }
-        val keeperModifier = (1.0 - (keeperQuality - 50.0) * keeperImpact).coerceIn(.74, 1.24)
+        val normalKeeperQuality = keeperQuality.coerceAtMost(100.0)
+        val eliteKeeperQuality = (keeperQuality - 100.0).coerceAtLeast(0.0)
+        val keeperModifier = (1.0 - (normalKeeperQuality - 50.0) * keeperImpact - eliteKeeperQuality * keeperImpact * .35).coerceIn(.62, 1.24)
         val primeExecution = if (prime) 1.10 else 1.0
         val raw = xg * finishing * technique * consistency * bigMoment * form * fitness * foot * executionUnderPressure * keeperModifier * primeExecution
         val ceiling = when {
