@@ -51,6 +51,28 @@ fun DeveloperAccessDialog(vm:GameViewModel,configured:Boolean,onDismiss:()->Unit
 }
 
 @Composable
+fun BmwRoundelMark(size:Dp=52.dp){
+ Box(Modifier.size(size),contentAlignment=Alignment.Center){
+  Canvas(Modifier.fillMaxSize()){
+   val r=this.size.minDimension/2f
+   val center=Offset(this.size.width/2f,this.size.height/2f)
+   drawCircle(Color(0xFF111111),r,center)
+   drawCircle(Color(0xFFF4F4F4),r*.70f,center)
+   val inner=r*.57f
+   val tl=Offset(center.x-inner,center.y-inner)
+   val sz=Size(inner*2,inner*2)
+   drawArc(Color(0xFF0066B1),0f,90f,true,tl,sz)
+   drawArc(Color.White,90f,90f,true,tl,sz)
+   drawArc(Color(0xFF0066B1),180f,90f,true,tl,sz)
+   drawArc(Color.White,270f,90f,true,tl,sz)
+   drawCircle(Color(0xFF111111),r*.72f,center,style=androidx.compose.ui.graphics.drawscope.Stroke(r*.105f))
+   drawCircle(Color(0xFFF5F5F5),r*.96f,center,style=androidx.compose.ui.graphics.drawscope.Stroke(r*.035f))
+  }
+  Text("BMW",modifier=Modifier.align(Alignment.TopCenter).padding(top=size*.055f),color=Color.White,fontWeight=FontWeight.Black,style=MaterialTheme.typography.labelSmall)
+ }
+}
+
+@Composable
 fun BmwFcMark(size:Dp=92.dp){
  Box(Modifier.size(size),contentAlignment=Alignment.Center){
   Canvas(Modifier.fillMaxSize()){
@@ -200,7 +222,7 @@ private fun BmwCommandCenterScreen(w:World,onNavigate:(String)->Unit){
      Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
       Crest(c.logo,c.primary,c.secondary,Modifier.size(90.dp))
       Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)){
-       MPerformanceMark()
+       Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){BmwRoundelMark(42.dp);MPerformanceMark()}
        Text("BMW FC EXPERIENCE",color=Chalk,style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Black)
        Text("München · BMW Performance Arena",color=Color(0xFFD8DEE6),style=MaterialTheme.typography.bodyMedium)
       }
@@ -353,7 +375,7 @@ private fun BmwInfrastructureScreen(w:World){
   Surface(shape=RoundedCornerShape(12.dp),color=Color(0xFF0A1118),border=androidx.compose.foundation.BorderStroke(1.dp,BmwLine),modifier=Modifier.fillMaxWidth()){
    Row(Modifier.padding(16.dp).fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
     Crest(w.club().logo,w.club().primary,w.club().secondary,Modifier.size(82.dp))
-    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){MPerformanceMark(compact=true);Text(s.name,color=Chalk,style=MaterialTheme.typography.headlineMedium);Text(s.capacity.toString()+" Plätze · München",color=Muted)}
+    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){BmwRoundelMark(34.dp);MPerformanceMark(compact=true)};Text(s.name,color=Chalk,style=MaterialTheme.typography.headlineMedium);Text(s.capacity.toString()+" Plätze · München",color=Muted)}
    }
   }
   Section("Campus Status"){
@@ -465,7 +487,7 @@ private fun BmwMoreScreen(w:World,vm:GameViewModel,onNavigate:(String)->Unit,onE
   Surface(shape=RoundedCornerShape(12.dp),color=Color(0xFF0A1118),border=androidx.compose.foundation.BorderStroke(1.dp,BmwLine),modifier=Modifier.fillMaxWidth()){
    Row(Modifier.padding(16.dp).fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(15.dp)){
     Crest(w.club().logo,w.club().primary,w.club().secondary,Modifier.size(78.dp))
-    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)){MPerformanceMark();Text("BMW FC OPERATIONS",color=Chalk,fontWeight=FontWeight.Black,style=MaterialTheme.typography.headlineMedium);Text("Private Developer Environment",color=Muted)}
+    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)){Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(9.dp)){BmwRoundelMark(38.dp);MPerformanceMark()};Text("BMW FC OPERATIONS",color=Chalk,fontWeight=FontWeight.Black,style=MaterialTheme.typography.headlineMedium);Text("Private Developer Environment",color=Muted)}
    }
   }
   Section("Intelligence & Performance"){
