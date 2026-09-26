@@ -109,7 +109,7 @@ object BmwDeveloperWorldFactory {
   // Older BMW builds incorrectly used messiMentored=true as a match-engine boost even though
   // the Masterclass attribute package had never been applied. Detect only that exact legacy
   // state: completed flag + no attribute above 100. A genuinely completed Masterclass remains untouched.
-  if(leon.messiMentored&&leon.attributes.values().values.maxOrNull()?:0<=100){
+  if(leon.messiMentored&&((leon.attributes.values().values.maxOrNull()?:0)<=100)){
    leon.messiMentored=false
    leon.archetype="BMW Free 10"
    w.news("Messi-Masterclass freigeschaltet","Leon Stark hat die Masterclass noch nicht absolviert. Sie kann jetzt regulär gebucht werden und hebt seine individuellen Attribute über 100.","good")
