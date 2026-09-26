@@ -88,7 +88,10 @@ object BmwDeveloperWorldFactory {
    install(p,s);w.players[p.id]=p
   }
   val leon=w.squad(club.id).first{it.firstName=="Leon"&&it.lastName=="Stark"}
-  leon.messiMentored=true
+  // Leon starts as BMW's 99-rated franchise player, but the Messi-Masterclass is deliberately
+  // still open. Booking it later is what pushes the individual attributes beyond 100.
+  leon.messiMentored=false
+  leon.archetype="BMW Free 10"
   club.tactics.captainId=leon.id;club.tactics.targetPlayerId=leon.id;club.tactics.penaltyTakerId=leon.id;club.tactics.freeKickTakerId=leon.id
   w.user.difficulty=Difficulty.SANDBOX;w.user.tutorialEnabled=false;w.user.tutorialCompleted=true
   w.developer=dev
@@ -98,6 +101,21 @@ object BmwDeveloperWorldFactory {
   w.news.clear()
   w.news("BMW FC Experience aktiviert","BMW Performance Arena, NEXUS, ORIGIN, PROJECT ZERO, Weltranglisten und Longevity-Forschung sind aktiv.","good")
   return w
+ }
+
+ fun repairDeveloperSave(w:World):Boolean{
+  if(!w.developer.enabled)return false
+  val leon=w.squad(w.developer.bmwClubId).firstOrNull{it.firstName=="Leon"&&it.lastName=="Stark"}?:return false
+  // Older BMW builds incorrectly used messiMentored=true as a match-engine boost even though
+  // the Masterclass attribute package had never been applied. Detect only that exact legacy
+  // state: completed flag + no attribute above 100. A genuinely completed Masterclass remains untouched.
+  if(leon.messiMentored&&leon.attributes.values().values.maxOrNull()?:0<=100){
+   leon.messiMentored=false
+   leon.archetype="BMW Free 10"
+   w.news("Messi-Masterclass freigeschaltet","Leon Stark hat die Masterclass noch nicht absolviert. Sie kann jetzt regulär gebucht werden und hebt seine individuellen Attribute über 100.","good")
+   return true
+  }
+  return false
  }
 
  private fun tuneOverall(p:Player,target:Int){
