@@ -73,9 +73,11 @@ class GameViewModel(application: Application): AndroidViewModel(application){
   require(repo.verifyDeveloperPassword(password)){"Developer-Code falsch."}
   val exists=repo.developerSaveExists()
   var world:World?=null
-  if(exists)world=runCatching{repo.load(BMW_DEVELOPER_SAVE_SLOT)}.getOrNull()
+  if(exists){
+   world=try{repo.load(BMW_DEVELOPER_SAVE_SLOT)}catch(_:Exception){null}
+  }
   if(world?.developer?.enabled!=true){
-   if(exists)runCatching{repo.delete(BMW_DEVELOPER_SAVE_SLOT)}
+   if(exists)try{repo.delete(BMW_DEVELOPER_SAVE_SLOT)}catch(_:Exception){}
    world=withContext(Dispatchers.Default){BmwDeveloperWorldFactory.create()}
    repo.save(BMW_DEVELOPER_SAVE_SLOT,world)
   }
