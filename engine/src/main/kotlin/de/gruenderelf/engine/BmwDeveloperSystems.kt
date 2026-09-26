@@ -154,7 +154,7 @@ object BmwDeveloperSystems {
  private fun advanceCompetitor(w:World,c:Club,p:ClubTechnologyProfile){
   val type=when{isBarcelona(c)->0;isBayern(c)->1;else->2}
   val tranche=when(type){0->20_000_000L;1->30_000_000L;else->50_000_000L}
-  val funded=if(w.developer.weeksActive%13==c.id.mod(13))fundCompetitor(c,p,tranche) else true
+  val funded=if(w.developer.weeksActive%13==((c.id%13)+13)%13)fundCompetitor(c,p,tranche) else true
   val cap=when(type){0->88.0;1->84.0;else->78.0}
   val project=p.projects.firstOrNull()?:return
   val finance=(log10((p.researchBudget.coerceAtLeast(1L)).toDouble())-7.0).coerceIn(0.0,3.0)
