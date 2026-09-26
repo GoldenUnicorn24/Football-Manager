@@ -114,7 +114,13 @@ object ShotModel {
         }
         val normalKeeperQuality = keeperQuality.coerceAtMost(100.0)
         val eliteKeeperQuality = (keeperQuality - 100.0).coerceAtLeast(0.0)
-        val keeperModifier = (1.0 - (normalKeeperQuality - 50.0) * keeperImpact - eliteKeeperQuality * keeperImpact * .35).coerceIn(.62, 1.24)
+        val anticipationQuality = keeper?.let { it.attributes.vision * .55 + it.attributes.pace * .25 + it.attributes.technique * .20 } ?: 50.0
+        val sweeperBonus = when(context.type) {
+            ShotType.ONE_ON_ONE -> (anticipationQuality - 55.0).coerceAtLeast(0.0) * .0011
+            ShotType.CUTBACK, ShotType.REBOUND -> (anticipationQuality - 60.0).coerceAtLeast(0.0) * .0004
+            else -> 0.0
+        }
+        val keeperModifier = (1.0 - (normalKeeperQuality - 50.0) * keeperImpact - eliteKeeperQuality * keeperImpact * .35 - sweeperBonus).coerceIn(.60, 1.24)
         val primeExecution = if (prime) 1.10 else 1.0
         val raw = xg * finishing * technique * consistency * bigMoment * form * fitness * foot * executionUnderPressure * keeperModifier * primeExecution
         val ceiling = when {
