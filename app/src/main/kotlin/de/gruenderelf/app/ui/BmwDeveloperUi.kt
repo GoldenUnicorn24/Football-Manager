@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -71,12 +72,48 @@ fun BmwFcMark(size:Dp=92.dp){
 }
 
 @Composable
-fun MPerformanceMark(){
- Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(4.dp)){
-  Box(Modifier.width(5.dp).height(18.dp).background(Color(0xFF00ADEF)))
-  Box(Modifier.width(5.dp).height(18.dp).background(Color(0xFF0066B1)))
-  Box(Modifier.width(5.dp).height(18.dp).background(Color(0xFFE4002B)))
-  Text("M PERFORMANCE",fontWeight=FontWeight.Black,style=MaterialTheme.typography.labelLarge)
+fun MPerformanceMark(compact:Boolean=false){
+ Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(if(compact)3.dp else 4.dp)){
+  Box(Modifier.width(if(compact)4.dp else 5.dp).height(if(compact)15.dp else 19.dp).background(Color(0xFF55B8FF),RoundedCornerShape(1.dp)))
+  Box(Modifier.width(if(compact)4.dp else 5.dp).height(if(compact)15.dp else 19.dp).background(Color(0xFF1261A0),RoundedCornerShape(1.dp)))
+  Box(Modifier.width(if(compact)4.dp else 5.dp).height(if(compact)15.dp else 19.dp).background(BmwMRed,RoundedCornerShape(1.dp)))
+  Text("M PERFORMANCE",color=Chalk,fontWeight=FontWeight.Black,style=if(compact)MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge,letterSpacing=.7.dp.value.sp)
+ }
+}
+
+@Composable
+private fun BmwStatusPill(text:String,active:Boolean=true){
+ val color=if(active)Color(0xFF70D79B) else Color(0xFFFFC36B)
+ Surface(color=color.copy(alpha=.10f),contentColor=color,shape=RoundedCornerShape(5.dp),border=androidx.compose.foundation.BorderStroke(1.dp,color.copy(alpha=.42f))){
+  Text(text.uppercase(),Modifier.padding(horizontal=9.dp,vertical=5.dp),style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.Bold,letterSpacing=.8.sp)
+ }
+}
+
+@Composable
+private fun BmwMetricTile(label:String,value:String,modifier:Modifier=Modifier,accent:Color=BmwMBlue){
+ Surface(modifier=modifier,shape=RoundedCornerShape(8.dp),color=Color(0xFF0D1117),border=androidx.compose.foundation.BorderStroke(1.dp,BmwLine)){
+  Column(Modifier.padding(horizontal=12.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(5.dp)){
+   Box(Modifier.width(24.dp).height(2.dp).background(accent))
+   Text(label.uppercase(),color=Color(0xFF9DA9B6),style=MaterialTheme.typography.labelSmall,letterSpacing=.6.sp)
+   Text(value,color=Chalk,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Black)
+  }
+ }
+}
+
+@Composable
+private fun BmwProjectCard(project:TechProject){
+ Surface(shape=RoundedCornerShape(9.dp),color=Color(0xFF0C1015),border=androidx.compose.foundation.BorderStroke(1.dp,Color(0xFF2A323D)),modifier=Modifier.fillMaxWidth()){
+  Column(Modifier.padding(13.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+    Column(Modifier.weight(1f)){Text(project.name,color=Chalk,fontWeight=FontWeight.Bold,style=MaterialTheme.typography.titleMedium);Text(project.domain.label,color=Muted,style=MaterialTheme.typography.bodySmall)}
+    BmwStatusPill(if(project.active)"ONLINE" else "PAUSIERT",project.active)
+   }
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+    Text("LEVEL",color=Muted,style=MaterialTheme.typography.labelSmall)
+    Text("%.1f".format(project.level),color=Color(0xFF9BCBFF),fontWeight=FontWeight.Bold)
+   }
+   LinearProgressIndicator(progress={project.progress.toFloat().coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(6.dp),color=BmwMBlue,trackColor=Color(0xFF252D37))
+  }
  }
 }
 
@@ -97,9 +134,22 @@ fun BmwDeveloperShell(state:GameState,vm:GameViewModel,slots:List<SaveSummary>,m
   Triple("bmw_more","Mehr",Icons.Default.MoreVert)
  )
  Scaffold(containerColor=Ink,snackbarHost={SnackbarHost(snack)},bottomBar={
-  NavigationBar(containerColor=Ink,tonalElevation=0.dp){
-   tabs.forEach{(dest,label,icon)->
-    NavigationBarItem(selected=route==dest,onClick={if(route!=dest)nav.navigate(dest){launchSingleTop=true}},icon={Icon(icon,label)},label={Text(label)})
+  Surface(color=Color(0xFF090C10),shadowElevation=12.dp,tonalElevation=0.dp){
+   NavigationBar(containerColor=Color.Transparent,tonalElevation=0.dp){
+    tabs.forEach{(dest,label,icon)->
+     val selected=route==dest||(dest=="bmw_more"&&route !in tabs.map{it.first})
+     NavigationBarItem(
+      selected=selected,
+      onClick={if(route!=dest)nav.navigate(dest){launchSingleTop=true}},
+      icon={Icon(icon,label)},
+      label={Text(label,fontWeight=if(selected)FontWeight.Bold else FontWeight.Medium)},
+      colors=NavigationBarItemDefaults.colors(
+       selectedIconColor=Color.White,selectedTextColor=Color.White,
+       indicatorColor=Color(0xFF14365D),
+       unselectedIconColor=Color(0xFF8995A3),unselectedTextColor=Color(0xFFA8B1BC)
+      )
+     )
+    }
    }
   }
  }){padding->
@@ -136,39 +186,69 @@ private fun BmwCommandCenterScreen(w:World,onNavigate:(String)->Unit){
  val power=remember(w.calendar.absoluteWeek,w.developer.weeksActive,w.players.size){BmwDeveloperSystems.clubPowerRanking(w)}
  val rank=power.indexOfFirst{it.clubId==c.id}+1
  val next=w.nextFixture()
- Page("BMW FC","BMW MOTORSPORT DNA · FOOTBALL PERFORMANCE"){
-  Section{
-   Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(18.dp)){
-    Crest(c.logo,c.primary,c.secondary,Modifier.size(88.dp))
-    Column(Modifier.weight(1f)){MPerformanceMark();Spacer(Modifier.height(8.dp));Text("BMW FC EXPERIENCE",style=MaterialTheme.typography.headlineMedium);Text("Developer Mode · München",color=Muted)}
+ Page("BMW FC","BMW PERFORMANCE OS · M DIVISION"){
+  Surface(shape=RoundedCornerShape(12.dp),color=Color(0xFF0B1016),border=androidx.compose.foundation.BorderStroke(1.dp,BmwLine),modifier=Modifier.fillMaxWidth()){
+   Box(Modifier.fillMaxWidth()){
+    Canvas(Modifier.matchParentSize()){
+     drawRect(Brush.horizontalGradient(listOf(Color(0xFF0A315B).copy(alpha=.70f),Color.Transparent)),Offset.Zero,Size(size.width*.72f,size.height))
+     drawLine(Color.White.copy(alpha=.08f),Offset(size.width*.62f,0f),Offset(size.width*.38f,size.height),1.dp.toPx())
+     drawLine(Color.White.copy(alpha=.05f),Offset(size.width*.78f,0f),Offset(size.width*.54f,size.height),1.dp.toPx())
+    }
+    Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
+     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
+      Crest(c.logo,c.primary,c.secondary,Modifier.size(90.dp))
+      Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)){
+       MPerformanceMark()
+       Text("BMW FC EXPERIENCE",color=Chalk,style=MaterialTheme.typography.headlineMedium,fontWeight=FontWeight.Black)
+       Text("München · BMW Performance Arena",color=Color(0xFFD8DEE6),style=MaterialTheme.typography.bodyMedium)
+      }
+     }
+     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+      BmwStatusPill("SYSTEM READY")
+      Text("DEVELOPER MODE",color=Color(0xFF9DA9B6),style=MaterialTheme.typography.labelSmall,letterSpacing=1.2.sp)
+     }
+    }
    }
   }
+
   Section("Command Center"){
-   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
-    Metric("Weltrang","#"+rank)
-    Metric("NEXUS",tech?.overall?.let{"%.1f".format(it)}?:"—")
-    Metric("Budget",euros(c.budget))
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+    BmwMetricTile("World Rank","#"+rank,Modifier.weight(1f),Color(0xFF55B8FF))
+    BmwMetricTile("NEXUS",tech?.overall?.let{"%.1f".format(it)}?:"—",Modifier.weight(1f),Color(0xFF1261A0))
+    BmwMetricTile("Budget",euros(c.budget),Modifier.weight(1f),BmwMRed)
    }
-   Text("Stadion: "+c.stadium.name+" · "+c.stadium.capacity+" Plätze",color=Muted)
-   next?.let{Text("Nächstes Spiel: "+w.clubs.getValue(if(it.homeId==c.id)it.awayId else it.homeId).name+" · "+it.competition.label,color=Grass)}
-  }
-  Section("Aktive Projekte"){
-   tech?.projects?.sortedByDescending{it.level}?.forEach{p->
-    Text(p.name,style=MaterialTheme.typography.titleMedium)
-    Text(p.domain.label+" · Level "+"%.1f".format(p.level),color=Grass)
-    LinearProgressIndicator(progress={p.progress.toFloat().coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
+   Text("BMW Performance Arena · "+c.stadium.capacity+" Plätze",color=Muted,style=MaterialTheme.typography.bodyMedium)
+   next?.let{
+    Surface(shape=RoundedCornerShape(8.dp),color=Color(0xFF0B1826),border=androidx.compose.foundation.BorderStroke(1.dp,Color(0xFF1E4D7B)),modifier=Modifier.fillMaxWidth()){
+     Row(Modifier.padding(12.dp).fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+      Column(Modifier.weight(1f)){Text("NEXT MATCH",color=Color(0xFF9BCBFF),style=MaterialTheme.typography.labelSmall,letterSpacing=.8.sp);Text(w.clubs.getValue(if(it.homeId==c.id)it.awayId else it.homeId).name,color=Chalk,fontWeight=FontWeight.Bold)}
+      Text(it.competition.label,color=Muted,style=MaterialTheme.typography.bodySmall)
+     }
+    }
    }
   }
+
+  Section("BMW Intelligence Projects"){
+   tech?.projects?.sortedByDescending{it.level}?.forEach{BmwProjectCard(it)}
+  }
+
   Section("BMW Group Technology"){
-   Metric("Automotive Tech","%.1f".format(w.developer.automotiveTechnology))
-   Metric("Produktions-KI","%.1f".format(w.developer.productionTechnology))
-   Metric("Medical Research","%.1f".format(w.developer.medicalResearch))
-   Metric("Brand Power","%.1f".format(w.developer.brandPower))
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+    BmwMetricTile("Automotive","%.1f".format(w.developer.automotiveTechnology),Modifier.weight(1f))
+    BmwMetricTile("Production AI","%.1f".format(w.developer.productionTechnology),Modifier.weight(1f),Color(0xFF55B8FF))
+   }
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+    BmwMetricTile("Medical","%.1f".format(w.developer.medicalResearch),Modifier.weight(1f),Color(0xFF70D79B))
+    BmwMetricTile("Brand","%.1f".format(w.developer.brandPower),Modifier.weight(1f),BmwMRed)
+   }
   }
-  Action("Globale Rankings",secondary=true){onNavigate("bmw_rankings")}
-  Action("Performance Campus",secondary=true){onNavigate("bmw_infrastructure")}
-  Action("Human Performance / Longevity",secondary=true){onNavigate("bmw_medical")}
-  Action("Kaderdaten · POT · Marktwerte · Gehälter",secondary=true){onNavigate("bmw_roster")}
+
+  Section("Performance Services"){
+   Action("Global Intelligence Rankings",secondary=true){onNavigate("bmw_rankings")}
+   Action("BMW Performance Campus",secondary=true){onNavigate("bmw_infrastructure")}
+   Action("Human Performance & Longevity",secondary=true){onNavigate("bmw_medical")}
+   Action("BMW FC Kaderdaten",secondary=true){onNavigate("bmw_roster")}
+  }
  }
 }
 
