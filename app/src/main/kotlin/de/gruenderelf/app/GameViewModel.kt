@@ -78,8 +78,9 @@ class GameViewModel(application: Application): AndroidViewModel(application){
   }
   if(world?.developer?.enabled!=true){
    if(exists)try{repo.delete(BMW_DEVELOPER_SAVE_SLOT)}catch(_:Exception){}
-   world=withContext(Dispatchers.Default){BmwDeveloperWorldFactory.create()}
-   repo.save(BMW_DEVELOPER_SAVE_SLOT,world)
+   val fresh=withContext(Dispatchers.Default){BmwDeveloperWorldFactory.create()}
+   repo.save(BMW_DEVELOPER_SAVE_SLOT,fresh)
+   world=fresh
   }
   mutable.value=GameState(world,BMW_DEVELOPER_SAVE_SLOT,revision=mutable.value.revision+1,message="BMW FC Experience geladen.")
  }
