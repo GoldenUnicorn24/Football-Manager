@@ -695,7 +695,10 @@ object MatchEngine {
    setBallPhase(m,phase,home,detail="Einwurf schnell ausgeführt",reason=reason)
   }else{
    m.chainStep=0;m.chainTicks=0;m.counterTicksRemaining=0
-   setBallPhase(m,LivePhase.POSSESSION,home,detail=reason.label,reason=reason)
+   val keeperRestart=reason in setOf(PossessionChangeReason.SAVE,PossessionChangeReason.GOAL_KICK)
+   val restartPlayer=if(keeperRestart)goalkeeperId(w,m,home) else 0
+   val detail=when(reason){PossessionChangeReason.SAVE->"Torwart hält den Ball";PossessionChangeReason.GOAL_KICK->"Torwart eröffnet";else->reason.label}
+   setBallPhase(m,LivePhase.POSSESSION,home,restartPlayer,detail,reason)
   }
   log(m,"${w.clubs.getValue(id).shortName} setzt mit ${reason.label.lowercase()} fort.")
   m.rngState=rng.state
@@ -1024,10 +1027,14 @@ object MatchEngine {
   val mentality=effective.mentality
   val modeRisk=when{allOut(m,home)->.036;controlGame(m,home)->-.038;conserve(m,home)->.012;else->0.0}
   val primeCarrier=w.players[m.livePlayerId]?.messiMentored==true
+  val keeperBuildUpBonus=keeperCarrier?.takeIf{it.position==Position.TW&&it.clubId==c.id}?.let{
+   val distribution=it.attributes.passing*.42+it.attributes.vision*.30+it.attributes.technique*.18+it.attributes.keeping*.10
+   ((distribution-55.0).coerceAtLeast(0.0)*.00075).coerceAtMost(.055)
+  }?:0.0
   val patternKey=when(m.livePhase){LivePhase.POSSESSION->"AUFBAU";LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK->if(effective.width>=4)"FLUEGEL" else "HALBRAUM";LivePhase.COUNTER->"DIAGONALE";else->"RESTVERTEIDIGUNG"};val automatismRisk=(1-MatchIntelligence.patternFactor(c,patternKey))*.055
   val chainSecurity=when(effective.buildUp){BuildUp.TIKI_TAKA,BuildUp.SHORT->m.chainPasses.coerceAtMost(7)*.0028;BuildUp.MIXED,BuildUp.WIDE->m.chainPasses.coerceAtMost(5)*.0014;else->0.0}
   val turnoverChance=((when(m.livePhase){LivePhase.POSSESSION->.034;LivePhase.ATTACK->.048;LivePhase.DANGEROUS_ATTACK->.068;LivePhase.COUNTER->.064;else->.075}
-   +buildRisk(effective.buildUp)+(effective.tempo-3)*.006+(mentality-3)*.004-controlEdge*.034+(1-fatigue)*.075+modeRisk+automatismRisk-(if(primeCarrier).040 else 0.0)-chainSecurity)*calibration.turnover).coerceIn(if(primeCarrier).006 else .016,.34)
+   +buildRisk(effective.buildUp)+(effective.tempo-3)*.006+(mentality-3)*.004-controlEdge*.034+(1-fatigue)*.075+modeRisk+automatismRisk-(if(primeCarrier).040 else 0.0)-keeperBuildUpBonus-chainSecurity)*calibration.turnover).coerceIn(if(primeCarrier).006 else .012,.34)
   if(rng.chance(turnoverChance)){
    transferPossession(w,m,!home,if(rng.chance(.55))PossessionChangeReason.INTERCEPTION else PossessionChangeReason.TACKLE,rng,true);m.rngState=rng.state;return
   }
@@ -1358,7 +1365,7 @@ object MatchEngine {
   val baseGeometry=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home))
   val type=typeHint?:when{baseGeometry.distanceMeters>=23.5->ShotType.LONG_RANGE;baseGeometry.distanceMeters<=8.5->ShotType.CLOSE_RANGE;else->ShotType.BOX_SHOT}
   val context=buildShotContext(w,m,home,p,type,rng,assist);val geometry=ShotModel.geometry(context)
-  val shotXg=ShotModel.xg(context);val baseGoalProbability=ShotModel.goalProbability(shotXg,p,keeper,context);val goalProbability=(baseGoalProbability*LeagueCalibration.forMatch(w,m).conversion*BmwDeveloperSystems.finishingMultiplier(w,clubId(m,home))).coerceIn(.002,.94)
+  val shotXg=ShotModel.xg(context);val baseGoalProbability=ShotModel.goalProbability(shotXg,p,keeper,context);val goalProbability=(baseGoalProbability*LeagueCalibration.forMatch(w,m).conversion*BmwDeveloperSystems.finishingMultiplier(w,clubId(m,home))*BmwDeveloperSystems.goalkeeperShotMultiplier(w,clubId(m,!home))).coerceIn(.002,.94)
   val blockProbability=ShotModel.blockProbability(context);val onTargetProbability=ShotModel.onTargetProbability(goalProbability,p,context)
   val savedOnTarget=(onTargetProbability-goalProbability).coerceAtLeast(0.0)
   val woodworkProbability=(.012+shotXg*.060+(if(type in setOf(ShotType.CLOSE_RANGE,ShotType.ONE_ON_ONE)).006 else 0.0)).coerceIn(.010,.052)
@@ -1373,10 +1380,11 @@ object MatchEngine {
 
   if(outcome==ShotOutcome.SAVED){
    val speed=ShotModel.shotSpeed(p,context)
-   val keeperQuality=keeper?.let{(it.attributes.keeping*.72+it.hidden.consistency*.10+it.sharpness*.08+it.fitness*.05+it.form*5.0*.05).coerceIn(10.0,99.0)}?:20.0
-   val secure=(.30+(keeperQuality-45)*.0045+(geometry.distanceMeters-10).coerceIn(0.0,25.0)*.006-speed*.16).coerceIn(.22,.68)
-   val rebound=((.18+speed*.16-(keeperQuality-45)*.0025)+(if(type==ShotType.CLOSE_RANGE||type==ShotType.REBOUND).06 else 0.0)).coerceIn(.08,.34)
-   val corner=(.15+speed*.09+(if(kotlin.math.abs(geometry.lateralMeters)>10).04 else 0.0)).coerceIn(.12,.29)
+   val keeperQuality=keeper?.let{(it.attributes.keeping*.72+it.hidden.consistency*.10+it.sharpness*.08+it.fitness*.05+it.form*5.0*.05).coerceIn(10.0,PLAYER_RATING_MAX.toDouble())}?:20.0
+   val eliteHandling=(keeperQuality-99.0).coerceAtLeast(0.0)
+   val secure=(.30+(keeperQuality-45)*.0045+eliteHandling*.0014+(geometry.distanceMeters-10).coerceIn(0.0,25.0)*.006-speed*.16).coerceIn(.22,.78)
+   val rebound=((.18+speed*.16-(keeperQuality-45)*.0025-eliteHandling*.0010)+(if(type==ShotType.CLOSE_RANGE||type==ShotType.REBOUND).06 else 0.0)).coerceIn(.05,.34)
+   val corner=(.15+speed*.09-eliteHandling*.0005+(if(kotlin.math.abs(geometry.lateralMeters)>10).04 else 0.0)).coerceIn(.09,.29)
    val kr=rng.nextDouble()
    outcome=when{kr<secure->ShotOutcome.SAVED;kr<secure+corner->ShotOutcome.CORNER;kr<secure+corner+rebound&&allowRebound->ShotOutcome.REBOUND;else->ShotOutcome.DEFLECTED}
   }
@@ -1415,19 +1423,19 @@ object MatchEngine {
     s.shotsOffTarget++;perf.shotsOffTarget++;setBallPhase(m,LivePhase.SHOT_OFF_TARGET,home,id,"${target.third} · ${type.label}");log(m,"${p.name} schießt ${target.third}.");queueRestart(m,clubId(m,!home),PossessionChangeReason.GOAL_KICK)
    }
    ShotOutcome.SAVED->{
-    s.shotsOnTarget++;perf.shotsOnTarget++;if(keeperId!=0)ensurePerformance(w,m,keeperId).defensiveActions++
+    s.shotsOnTarget++;perf.shotsOnTarget++;if(keeperId!=0)ensurePerformance(w,m,keeperId).let{it.defensiveActions++;it.saves++}
     setBallPhase(m,LivePhase.SHOT_ON_TARGET,home,id,"${target.third} · gehalten");log(m,"${p.lastName} schießt ${target.third} – der Torwart hält sicher.");queueRestart(m,clubId(m,!home),PossessionChangeReason.SAVE)
    }
    ShotOutcome.CORNER->{
-    s.shotsOnTarget++;perf.shotsOnTarget++;if(keeperId!=0)ensurePerformance(w,m,keeperId).defensiveActions++
+    s.shotsOnTarget++;perf.shotsOnTarget++;if(keeperId!=0)ensurePerformance(w,m,keeperId).let{it.defensiveActions++;it.saves++}
     setBallPhase(m,LivePhase.SHOT_ON_TARGET,home,id,"${target.third} · Parade zur Ecke");log(m,"${p.lastName} schießt ${target.third} – starke Parade zur Ecke.");queueCorner(w,m,home,id,rng)
    }
    ShotOutcome.DEFLECTED->{
-    s.shotsOnTarget++;perf.shotsOnTarget++;if(keeperId!=0)ensurePerformance(w,m,keeperId).defensiveActions++
+    s.shotsOnTarget++;perf.shotsOnTarget++;if(keeperId!=0)ensurePerformance(w,m,keeperId).let{it.defensiveActions++;it.saves++}
     setBallPhase(m,LivePhase.SHOT_ON_TARGET,home,id,"${target.third} · abgewehrt");log(m,"${p.lastName} schießt ${target.third} – der Torwart wehrt ab.");queueRestart(m,clubId(m,!home),PossessionChangeReason.CLEARANCE)
    }
    ShotOutcome.REBOUND->{
-    s.shotsOnTarget++;perf.shotsOnTarget++;if(keeperId!=0)ensurePerformance(w,m,keeperId).defensiveActions++
+    s.shotsOnTarget++;perf.shotsOnTarget++;if(keeperId!=0)ensurePerformance(w,m,keeperId).let{it.defensiveActions++;it.saves++}
     setBallPhase(m,LivePhase.SHOT_ON_TARGET,home,id,"${target.third} · Parade, Abpraller");log(m,"${p.lastName} schießt ${target.third} – der Torwart kann nur abwehren. Abpraller!")
     val rebounder=selectShooter(w,m,home,rng)
     if(rebounder!=0){val d=4.5+rng.nextDouble()*7.5;setDistanceFromGoal(m,home,d,(.36+rng.nextDouble()*.28).toFloat());resolveShot(w,m,home,rebounder,rng,typeHint=ShotType.REBOUND,allowRebound=false)}
@@ -1452,8 +1460,9 @@ object MatchEngine {
   val exposure=(minutes/45.0).coerceIn(.18,1.0);var r=6.5
   val passAccuracy=if(perf.passesAttempted>=4)perf.passesCompleted.toDouble()/perf.passesAttempted else .76
   r+=(passAccuracy-.76)*1.25*exposure;r-=perf.turnovers*.035*exposure;r+=perf.chancesCreated*.09*exposure
-  val defensiveWeight=when(p.position){Position.TW->.13;Position.IV,Position.LV,Position.RV,Position.DM->.09;else->.045}
+  val defensiveWeight=when(p.position){Position.TW->.035;Position.IV,Position.LV,Position.RV,Position.DM->.09;else->.045}
   r+=perf.defensiveActions*defensiveWeight*exposure
+  if(p.position==Position.TW)r+=perf.saves*.14*exposure
   val goalWeight=when(p.position){Position.TW->1.45;Position.IV,Position.LV,Position.RV->1.18;Position.DM,Position.ZM->1.02;Position.OM,Position.LA,Position.RA->.92;Position.ST->.82}
   r+=perf.goals*goalWeight+perf.assists*.52+perf.shotsOnTarget*.06-perf.shotsOffTarget*.035
   val concededWeight=when(p.position){Position.TW->.19;Position.IV,Position.LV,Position.RV,Position.DM->.10;else->.025}
@@ -1471,6 +1480,8 @@ object MatchEngine {
    perf.goals>=2->"Überragend vor dem Tor und ständig gefährlich."
    perf.goals>0||perf.assists>0->"Entscheidend an den gefährlichen Aktionen beteiligt."
    perf.turnovers>=6&&perf.passesAttempted>0->"Viele Ballverluste und zu wenig Sicherheit im Spiel."
+   p.position==Position.TW&&perf.saves>=5&&perf.goalsConceded==0->"Überragender Torwartabend mit mehreren starken Paraden und weißer Weste."
+   p.position==Position.TW&&perf.saves>=4->"Starker Torwartauftritt mit mehreren wichtigen Paraden."
    (p.position==Position.TW||p.position in listOf(Position.IV,Position.LV,Position.RV,Position.DM))&&perf.defensiveActions>=4->"Defensiv aufmerksam mit mehreren wichtigen Aktionen."
    rating>=8.0->"Starker Auftritt, viele gefährliche Aktionen."
    rating>=7.0->"Gute Leistung mit vielen sauberen Aktionen."
