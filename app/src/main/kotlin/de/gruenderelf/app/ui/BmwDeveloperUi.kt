@@ -77,6 +77,7 @@ fun BmwRoundelMark(size:Dp=52.dp){
   drawCircle(Color(0xFFF5F5F5),r*.96f,center,style=androidx.compose.ui.graphics.drawscope.Stroke(r*.035f))
 
   // BMW text belongs in the upper black ring.
+  val labelSize=this.size.width*.145f
   drawContext.canvas.nativeCanvas.drawText(
    "BMW",
    center.x,
@@ -84,9 +85,8 @@ fun BmwRoundelMark(size:Dp=52.dp){
    android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply{
     color=android.graphics.Color.WHITE
     textAlign=android.graphics.Paint.Align.CENTER
-    textSize=this@Canvas.size.width*.145f
+    textSize=labelSize
     typeface=android.graphics.Typeface.create("sans-serif",android.graphics.Typeface.BOLD)
-    letterSpacing=.08f
    }
   )
  }
