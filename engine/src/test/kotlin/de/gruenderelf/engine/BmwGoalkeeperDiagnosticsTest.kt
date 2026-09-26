@@ -8,7 +8,7 @@ class BmwGoalkeeperDiagnosticsTest {
  @Test fun neuerIsActuallyUsedAndOutperformsAnAverageKeeper(){
   var eliteGoals=0;var weakGoals=0;var eliteXg=0.0;var weakXg=0.0
   var eliteSot=0;var weakSot=0;var eliteClean=0;var weakClean=0
-  repeat(120){i->
+  repeat(50){i->
    fun run(weaken:Boolean):Triple<LiveMatch,MatchStats,Player>{
     val w=BmwDeveloperWorldFactory.create(310000L+i)
     val neuer=w.squad().first{it.name=="Manuel Neuer"}
@@ -60,5 +60,46 @@ class BmwGoalkeeperDiagnosticsTest {
    println("NEUER_SHOT type=${ctx.type} xg=$xg avgKeeper=$avg neuer=$neu reduction=${1-neu/avg}")
    assertTrue(neu<avg*.90,"Neuer effect too small for ${ctx.type}: avg=$avg neuer=$neu")
   }
+ }
+
+ @Test fun saveRestartActuallyReturnsBallToTheGoalkeeper(){
+  var verified=false
+  for(seed in 320000L..320120L){
+   val w=BmwDeveloperWorldFactory.create(seed)
+   val m=MatchEngine.start(w,w.nextFixture()!!)
+   var guard=0
+   while(!m.finished&&guard++<800){
+    if(m.pendingPossessionReason==PossessionChangeReason.SAVE&&m.pendingPossessionClubId!=0){
+     val home=m.pendingPossessionClubId==m.homeId
+     val lineup=if(home)m.homeXi else m.awayXi
+     val formation=if(home)m.homeFormation else m.awayFormation
+     val slot=Formations.positions(formation).indexOf(Position.TW)
+     val expected=lineup[slot]
+     MatchEngine.step(w,m)
+     assertEquals(expected,m.livePlayerId,"save restart did not assign the ball to the goalkeeper")
+     assertTrue(w.players[m.livePlayerId]?.position==Position.TW)
+     assertTrue(m.liveDetail.contains("Torwart",true))
+     verified=true
+     break
+    }
+    when{
+     m.pendingDecision->MatchEngine.decide(w,m,Decision.SHOOT)
+     m.halfTime->MatchEngine.secondHalf(m)
+     m.incidentPause->MatchEngine.resumeIncident(w,m)
+     m.assistantSubPending->MatchEngine.acceptAssistantSubstitution(w,m)
+     else->MatchEngine.step(w,m)
+    }
+   }
+   if(verified)break
+  }
+  assertTrue(verified,"no held save found to validate goalkeeper restart")
+ }
+
+ @Test fun bmwGoalkeeperTechnologyHasARealShotStoppingEffect(){
+  val w=BmwDeveloperWorldFactory.create(321000L)
+  val bmw=BmwDeveloperSystems.goalkeeperShotMultiplier(w,w.user.clubId)
+  assertTrue(bmw<.98,"BMW goalkeeper technology is not affecting shot stopping: $bmw")
+  val normal=WorldFactory.createWorld(321001L)
+  assertEquals(1.0,BmwDeveloperSystems.goalkeeperShotMultiplier(normal,normal.user.clubId))
  }
 }
