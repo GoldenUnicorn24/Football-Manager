@@ -78,7 +78,8 @@ data class BmwDeveloperState(
  var productionTechnology:Double=98.0,
  var medicalResearch:Double=101.0,
  var totalResearchInvested:Long=75_000_000_000L,
- var weeksActive:Int=0
+ var weeksActive:Int=0,
+ var technologyModelVersion:Int=1
 )
 
 data class ClubPowerRow(
