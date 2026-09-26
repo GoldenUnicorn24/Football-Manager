@@ -5,47 +5,71 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 object BmwDeveloperSystems {
+ private fun isBarcelona(c:Club)=c.name.contains("Barcelona",true)||c.shortName.equals("BAR",true)
+ private fun isBayern(c:Club)=c.name.contains("Bayern",true)||c.shortName.equals("FCB",true)
+ private fun infraAverage(c:Club)=(c.stadium.training+c.stadium.medicine+c.stadium.youth+c.stadium.gym+c.stadium.pitchQuality)/5.0
+
+ private fun bmwProfile(id:Int)=ClubTechnologyProfile(
+  clubId=id,systemName="BFC NEXUS PRIME",
+  ai=112.0,analytics=110.0,training=113.0,medicine=111.0,goalkeeping=108.0,youth=105.0,infrastructure=114.0,cybersecurity=116.0,
+  researchBudget=75_000_000_000L,
+  projects=mutableListOf(
+   TechProject("NEXUS PRIME",TechDomain.AI,112.0,true,30_000_000_000L,.70),
+   TechProject("ORIGIN ARCHIVE",TechDomain.ANALYTICS,110.0,true,15_000_000_000L,.64),
+   TechProject("PROJECT ZERO",TechDomain.TRAINING,113.0,true,12_000_000_000L,.58),
+   TechProject("GK NEXUS ZERO",TechDomain.GOALKEEPING,108.0,true,6_000_000_000L,.52),
+   TechProject("BLACKBOX OMEGA",TechDomain.CYBERSECURITY,116.0,true,7_000_000_000L,.77)
+  )
+ )
+
+ private fun barcaProfile(c:Club,paid:Long)=ClubTechnologyProfile(
+  clubId=c.id,systemName="BARÇA ONE · EARLY R&D",
+  ai=14.0,analytics=22.0,training=28.0,medicine=24.0,goalkeeping=18.0,youth=26.0,infrastructure=32.0,cybersecurity=16.0,
+  researchBudget=paid,
+  projects=mutableListOf(TechProject("BARÇA ONE · Alpha",TechDomain.AI,14.0,true,paid,.025))
+ )
+
+ private fun bayernProfile(c:Club,paid:Long)=ClubTechnologyProfile(
+  clubId=c.id,systemName="FCB PERFORMANCE OS · PROTOTYPE",
+  ai=8.0,analytics=18.0,training=24.0,medicine=22.0,goalkeeping=18.0,youth=20.0,infrastructure=28.0,cybersecurity=14.0,
+  researchBudget=paid,
+  projects=mutableListOf(TechProject("FCB Performance OS · Prototype",TechDomain.AI,8.0,true,paid,.01))
+ )
+
+ private fun genericProfile(c:Club,paid:Long)=ClubTechnologyProfile(
+  clubId=c.id,systemName="${c.shortName} AI Lab · R&D",
+  ai=5.0,analytics=12.0,training=18.0,medicine=16.0,goalkeeping=12.0,youth=14.0,infrastructure=22.0,cybersecurity=10.0,
+  researchBudget=paid,
+  projects=mutableListOf(TechProject("${c.shortName} AI Lab · Foundation",TechDomain.AI,5.0,true,paid,.005))
+ )
+
  fun seedTechnology(w:World){
   val state=w.developer
   if(!state.enabled)return
-  for(c in w.clubs.values){
-   val bmw=c.id==state.bmwClubId
-   val base=(28.0+c.reputation*.46+((c.stadium.training+c.stadium.medicine+c.stadium.youth)/300.0)*18.0).coerceIn(25.0,88.0)
-   val system=when{
-    bmw->"BFC NEXUS PRIME"
-    c.name.contains("Bayern",true)->"AURORA FCB"
-    c.name.contains("Barcelona",true)->"BARÇA ONE"
-    c.name.contains("Real Madrid",true)->"REAL VISION"
-    c.name.contains("Manchester City",true)->"CITYMIND"
-    c.name.contains("Liverpool",true)->"LFC PULSE"
-    c.name.contains("Paris",true)||c.shortName=="PSG"->"PARIS LAB"
-    else->"${c.shortName} Intelligence"
-   }
-   val p=ClubTechnologyProfile(
-    clubId=c.id,systemName=system,
-    ai=if(bmw)112.0 else base,
-    analytics=if(bmw)110.0 else (base+2).coerceAtMost(94.0),
-    training=if(bmw)113.0 else (base-1).coerceAtLeast(20.0),
-    medicine=if(bmw)111.0 else (base-2).coerceAtLeast(20.0),
-    goalkeeping=if(bmw)108.0 else (base-5).coerceAtLeast(18.0),
-    youth=if(bmw)105.0 else (base-4).coerceAtLeast(18.0),
-    infrastructure=if(bmw)114.0 else base,
-    cybersecurity=if(bmw)116.0 else (base-8).coerceAtLeast(15.0),
-    researchBudget=if(bmw)30_000_000_000L else c.reputation.toLong()*12_000_000L
-   )
-   if(bmw)p.projects.addAll(listOf(
-    TechProject("NEXUS PRIME",TechDomain.AI,112.0,true,30_000_000_000L,.70),
-    TechProject("ORIGIN ARCHIVE",TechDomain.ANALYTICS,110.0,true,15_000_000_000L,.64),
-    TechProject("PROJECT ZERO",TechDomain.TRAINING,113.0,true,12_000_000_000L,.58),
-    TechProject("GK NEXUS ZERO",TechDomain.GOALKEEPING,108.0,true,6_000_000_000L,.52),
-    TechProject("BLACKBOX OMEGA",TechDomain.CYBERSECURITY,116.0,true,7_000_000_000L,.77)
-   )) else if(c.reputation>=86)p.projects.add(TechProject(system,TechDomain.AI,p.ai,true,p.researchBudget,.10))
-   state.technology[c.id]=p
+  state.technology.putIfAbsent(state.bmwClubId,bmwProfile(state.bmwClubId))
+  val barca=w.clubs.values.firstOrNull(::isBarcelona)
+  if(barca!=null&&barca.id!=state.bmwClubId&&!state.technology.containsKey(barca.id)){
+   val startup=60_000_000L
+   val paid=minOf(startup,barca.budget.coerceAtLeast(0L))
+   barca.budget-=paid
+   state.technology[barca.id]=barcaProfile(barca,paid)
+   if(paid>0)w.news("BARÇA ONE startet",barca.name+" beginnt mit einer sehr frühen eigenen Fußball-KI. Startbudget: "+(paid/1_000_000)+" Mio. €. Die Entwicklung liegt weit hinter BMW NEXUS PRIME.","normal")
   }
  }
 
+ fun migrateTechnologyLandscape(w:World):Boolean{
+  if(!w.developer.enabled||w.developer.technologyModelVersion>=2)return false
+  w.developer.technology.clear()
+  w.developer.technologyModelVersion=2
+  seedTechnology(w)
+  w.news("KI-Landschaft neu kalibriert","Nur Barcelona arbeitet zunächst an einer sehr frühen eigenen KI. Bayern darf als zweiter Verein folgen; alle weiteren Clubs müssen später hohe reale Forschungsbudgets finanzieren.","normal")
+  return true
+ }
+
  fun ensureProfiles(w:World){
-  if(w.developer.enabled&&w.developer.technology.size<w.clubs.size)seedTechnology(w)
+  if(!w.developer.enabled)return
+  if(w.developer.technologyModelVersion<2)migrateTechnologyLandscape(w)
+  seedTechnology(w)
  }
 
  fun profile(w:World,clubId:Int):ClubTechnologyProfile?{
@@ -120,32 +144,116 @@ object BmwDeveloperSystems {
   return age-reduction.coerceIn(0.0,4.0)
  }
 
+ private fun fundCompetitor(c:Club,p:ClubTechnologyProfile,amount:Long):Boolean{
+  if(c.budget<amount)return false
+  c.budget-=amount;p.researchBudget+=amount
+  p.projects.firstOrNull()?.let{it.invested+=amount}
+  return true
+ }
+
+ private fun advanceCompetitor(w:World,c:Club,p:ClubTechnologyProfile){
+  val type=when{isBarcelona(c)->0;isBayern(c)->1;else->2}
+  val tranche=when(type){0->20_000_000L;1->30_000_000L;else->50_000_000L}
+  val funded=if(w.developer.weeksActive%13==c.id.mod(13))fundCompetitor(c,p,tranche) else true
+  val cap=when(type){0->88.0;1->84.0;else->78.0}
+  val project=p.projects.firstOrNull()?:return
+  val finance=(log10((p.researchBudget.coerceAtLeast(1L)).toDouble())-7.0).coerceIn(0.0,3.0)
+  val infra=((infraAverage(c)-80.0).coerceAtLeast(0.0)/70.0)
+  val growth=if(funded)(.055+finance*.018+infra*.025) else .008
+  p.ai=(p.ai+growth).coerceAtMost(cap)
+  p.analytics=(p.analytics+growth*.62).coerceAtMost(cap-2)
+  if(project.progress>.22)p.training=(p.training+growth*.28).coerceAtMost(cap-6)
+  if(project.progress>.40)p.medicine=(p.medicine+growth*.20).coerceAtMost(cap-8)
+  if(project.progress>.55)p.goalkeeping=(p.goalkeeping+growth*.15).coerceAtMost(cap-10)
+  p.cybersecurity=(p.cybersecurity+growth*.18).coerceAtMost(cap-6)
+  p.infrastructure=(p.infrastructure+growth*.12).coerceAtMost(cap-5)
+  project.level=p.ai
+  project.progress=(project.progress+growth/9.0).coerceAtMost(1.0)
+ }
+
+ private fun maybeStartBayern(w:World){
+  if(w.developer.technology.values.any{p->w.clubs[p.clubId]?.let(::isBayern)==true})return
+  val barca=w.developer.technology.values.firstOrNull{p->w.clubs[p.clubId]?.let(::isBarcelona)==true}?:return
+  val barcaProgress=barca.projects.firstOrNull()?.progress?:0.0
+  if(w.developer.weeksActive<20||barcaProgress<.12)return
+  val bayern=w.clubs.values.firstOrNull(::isBayern)?:return
+  val startup=90_000_000L
+  if(bayern.budget<startup)return
+  bayern.budget-=startup
+  w.developer.technology[bayern.id]=bayernProfile(bayern,startup)
+  w.news("Bayern startet KI-Projekt","FC Bayern München wird nach Barcelona der zweite externe Verein mit eigener Fußball-KI. 90 Mio. € fließen zunächst in einen frühen Prototypen.","normal")
+ }
+
+ private fun maybeStartOtherClub(w:World){
+  val bayernStarted=w.developer.technology.values.any{p->w.clubs[p.clubId]?.let(::isBayern)==true}
+  if(!bayernStarted||w.developer.weeksActive<78||w.developer.weeksActive%26!=0)return
+  val existing=w.developer.technology.keys
+  val candidate=w.clubs.values.asSequence()
+   .filter{it.id!=w.developer.bmwClubId&&it.id !in existing&&!isBarcelona(it)&&!isBayern(it)}
+   .filter{it.reputation>=94&&infraAverage(it)>=90.0&&it.budget>=650_000_000L}
+   .sortedWith(compareByDescending<Club>{it.reputation}.thenByDescending{it.budget})
+   .firstOrNull()?:return
+  val startup=500_000_000L
+  candidate.budget-=startup
+  w.developer.technology[candidate.id]=genericProfile(candidate,startup)
+  w.news("Neue KI-Forschung",candidate.name+" zahlt 500 Mio. € Startbudget für ein eigenes KI-Labor. Die Entwicklung beginnt auf sehr niedrigem Niveau und wird Jahre dauern.","normal")
+ }
+
+ private fun aiFacilityDevelopment(w:World){
+  if(w.developer.weeksActive%13!=0)return
+  for(c in w.clubs.values){
+   if(c.id==w.developer.bmwClubId||c.reputation<82)continue
+   val cap=when{c.reputation>=96->125;c.reputation>=90->115;else->105}
+   val choices=listOf(
+    "training" to c.stadium.training,"medicine" to c.stadium.medicine,"youth" to c.stadium.youth,
+    "gym" to c.stadium.gym,"pitch" to c.stadium.pitchQuality
+   ).filter{it.second<cap}
+   val weakest=choices.minByOrNull{it.second}?:continue
+   val cost=10_000_000L+weakest.second.toLong()*250_000L
+   if(c.budget<cost*2)return@for
+   c.budget-=cost
+   when(weakest.first){
+    "training"->c.stadium.training=(c.stadium.training+1).coerceAtMost(cap)
+    "medicine"->c.stadium.medicine=(c.stadium.medicine+1).coerceAtMost(cap)
+    "youth"->c.stadium.youth=(c.stadium.youth+1).coerceAtMost(cap)
+    "gym"->c.stadium.gym=(c.stadium.gym+1).coerceAtMost(cap)
+    else->c.stadium.pitchQuality=(c.stadium.pitchQuality+1).coerceAtMost(cap)
+   }
+  }
+ }
+
+ private fun scheduleAiEliteTraining(w:World){
+  if(w.developer.weeksActive%12!=0)return
+  for(c in w.clubs.values){
+   if(c.id==w.user.clubId||c.reputation<88)continue
+   if(c.stadium.training<100||c.stadium.gym<100||c.stadium.medicine<100||c.dynamics.staffQuality<85)continue
+   if(w.intensiveTraining.any{pr->w.players[pr.playerId]?.clubId==c.id})continue
+   val p=w.squad(c.id).filter{!it.retired&&!it.youth&&it.ca>=94&&it.hidden.professionalism>=70&&it.hidden.development>=70}
+    .maxByOrNull{it.ca+it.hidden.potential/10.0}?:continue
+   val elite=p.hidden.potential>=99||p.ca>=99
+   if(elite&&(c.stadium.training<105||c.stadium.gym<105||c.stadium.medicine<105||c.dynamics.staffQuality<92))continue
+   val cost=if(elite)35_000_000L+(p.hidden.potential-99).coerceAtLeast(0)*4_000_000L else 8_000_000L
+   if(c.budget<cost*2)continue
+   c.budget-=cost
+   val focus=when(p.position){Position.TW->Focus.KEEPING;Position.IV,Position.DM,Position.LV,Position.RV->Focus.TACKLING;Position.ZM,Position.OM->Focus.VISION;Position.LA,Position.RA->Focus.TECHNIQUE;Position.ST->Focus.FINISHING}
+   val weeks=if(elite)when{p.hidden.potential>=140->18;p.hidden.potential>=125->16;p.hidden.potential>=110->14;else->12} else 4
+   w.intensiveTraining.add(IntensiveTrainingProject(p.id,focus,weeks,weeks,cost,0.0,w.calendar.absoluteWeek,true))
+  }
+ }
+
  fun weekly(w:World){
   if(!w.developer.enabled)return
   ensureProfiles(w);w.developer.weeksActive++
   val bmw=w.developer.bmwClubId
-  for((id,p) in w.developer.technology){
-   if(id==bmw)continue
-   val c=w.clubs[id]?:continue
-   val ceiling=(72.0+c.reputation*.32).coerceIn(78.0,104.0)
-   val finance=(log10((c.budget.coerceAtLeast(0L)+1L).toDouble())-6.0).coerceIn(0.0,4.0)
-   val growth=.018+c.reputation*.00022+finance*.004
-   val domains=listOf(TechDomain.AI,TechDomain.ANALYTICS,TechDomain.TRAINING,TechDomain.MEDICINE,TechDomain.INFRASTRUCTURE)
-   val domain=domains[(w.calendar.absoluteWeek+id).mod(domains.size)]
-   p.set(domain,(p.value(domain)+growth).coerceAtMost(ceiling))
-   p.researchBudget+=(c.reputation.toLong()*85_000L).coerceAtLeast(1_000_000L)
-   if(p.projects.isEmpty()&&(p.ai>=60.0||p.infrastructure>=68.0)){
-    p.projects.add(TechProject(p.systemName,TechDomain.AI,p.ai,true,p.researchBudget,.05))
-    if(c.reputation>=82)w.news("Neue Konkurrenz-KI",c.name+" startet "+p.systemName+". Der Verein investiert in eigene Fußballanalyse und versucht technologisch aufzuholen.","normal")
-   }
-   p.projects.forEach{project->
-    if(project.active){
-     val projectGain=growth*(if(project.domain==domain)1.2 else .35)
-     project.level=(project.level+projectGain).coerceAtMost(ceiling)
-     project.progress=(project.progress+projectGain/20.0).coerceAtMost(1.0)
-    }
-   }
+
+  maybeStartBayern(w)
+  maybeStartOtherClub(w)
+  w.developer.technology.toMap().forEach{(id,p)->
+   if(id==bmw)return@forEach
+   val c=w.clubs[id]?:return@forEach
+   advanceCompetitor(w,c,p)
   }
+
   profile(w,bmw)?.let{p->
    p.projects.filter{it.active}.forEach{project->
     val gain=(.035+project.invested/50_000_000_000.0*.025).coerceAtMost(.12)
@@ -153,6 +261,10 @@ object BmwDeveloperSystems {
     project.level=p.value(project.domain);project.progress=(project.progress+gain/15.0).coerceAtMost(1.0)
    }
   }
+
+  aiFacilityDevelopment(w)
+  scheduleAiEliteTraining(w)
+
   w.developer.automotiveTechnology=(w.developer.automotiveTechnology+.025).coerceAtMost(130.0)
   w.developer.productionTechnology=(w.developer.productionTechnology+.030).coerceAtMost(130.0)
   w.developer.medicalResearch=(w.developer.medicalResearch+.028).coerceAtMost(130.0)
@@ -184,18 +296,16 @@ object BmwDeveloperSystems {
 
  fun clubPowerRanking(w:World):List<ClubPowerRow>{
   ensureProfiles(w)
-  // Performance critical: group players once. Calling w.squad(clubId) for every club scanned
-  // the complete global player database repeatedly and could freeze/ANR on large v0.5.23 worlds.
   val byClub=w.players.values.asSequence().filter{!it.retired&&!it.youth}.groupBy{it.clubId}
   val profiles=w.developer.technology
   return w.clubs.values.asSequence().filter{it.tier>0}.map{c->
    val squad=byClub[c.id].orEmpty().sortedByDescending{it.ca}.take(18)
    val squadScore=squad.map{it.ca}.average().takeIf{!it.isNaN()}?:30.0
    val form=if(c.form.isEmpty())65.0 else c.form.takeLast(8).map{if(it=="S")100.0 else if(it=="U")62.0 else 25.0}.average()
-   val tech=(profiles[c.id]?.overall?:35.0).coerceAtMost(115.0)
+   val tech=profiles[c.id]?.overall?:0.0
    val s=c.stadium
    val infra=(s.training+s.medicine+s.youth+s.gym+s.pitchQuality)/5.0
-   val finance=(45.0+(log10((c.budget.coerceAtLeast(0L)+1L).toDouble())-6.0)*11.0).coerceIn(25.0,100.0)
+   val finance=(45.0+(log10((c.budget.coerceAtLeast(0L)+1L).toDouble())-6.0)*11.0).coerceIn(25.0,110.0)
    ClubPowerRow(c.id,squadScore*.38+form*.19+tech*.19+infra*.14+finance*.10,squadScore,form,tech,infra,finance)
   }.sortedByDescending{it.score}.toList()
  }
