@@ -20,6 +20,8 @@ class BmwDeveloperModeTest {
   assertEquals(4,w.club().tactics.mentality);assertEquals(4,w.club().tactics.pressing);assertEquals(3,w.club().tactics.line)
   assertEquals(3,w.club().tactics.tempo);assertEquals(4,w.club().tactics.width);assertEquals(BuildUp.SHORT,w.club().tactics.buildUp)
   assertEquals(listOf("Manuel Neuer","Finn Lorenz","Tiago Valente","Lennart Krüger","Noah Reiter","Gavi","Joshua Kimmich","Jamal Musiala","Julián Álvarez","Michael Olise","Leon Stark"),w.club().tactics.xi.map{w.players.getValue(it).name})
+  assertEquals("Jamal Musiala",w.players.getValue(w.club().tactics.cornerLeftTakerId).name)
+  assertEquals("Michael Olise",w.players.getValue(w.club().tactics.cornerRightTakerId).name)
  }
 
  @Test fun bmwStartsTechnologyLeaderAndCompetitionCanDevelop(){
