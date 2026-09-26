@@ -81,6 +81,8 @@ class GameViewModel(application: Application): AndroidViewModel(application){
    val fresh=withContext(Dispatchers.Default){BmwDeveloperWorldFactory.create()}
    repo.save(BMW_DEVELOPER_SAVE_SLOT,fresh)
    world=fresh
+  }else if(BmwDeveloperWorldFactory.repairDeveloperSave(world)){
+   repo.save(BMW_DEVELOPER_SAVE_SLOT,world)
   }
   mutable.value=GameState(world,BMW_DEVELOPER_SAVE_SLOT,revision=mutable.value.revision+1,message="BMW FC Experience geladen.")
  }
