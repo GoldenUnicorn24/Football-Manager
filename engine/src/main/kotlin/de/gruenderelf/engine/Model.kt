@@ -4,6 +4,9 @@ import kotlinx.serialization.Serializable
 import kotlin.math.roundToInt
 
 const val SAVE_VERSION = 10
+const val PLAYER_RATING_MAX = 150
+const val REGULAR_DEVELOPMENT_CAP = 99
+const val FACILITY_LEVEL_MAX = 150
 @Serializable enum class Difficulty(val label: String,val money: Double) { CASUAL("Entspannt",1.25), NORMAL("Normal",1.0), REALISTIC("Realistisch",.85), HARDCORE("Hart",.7), SANDBOX("Sandbox",5.0) }
 @Serializable enum class Position(val label: String) { TW("Torwart"),IV("Innenverteidiger"),LV("Linksverteidiger"),RV("Rechtsverteidiger"),DM("Defensives Mittelfeld"),ZM("Zentrales Mittelfeld"),OM("Offensives Mittelfeld"),LA("Linksaußen"),RA("Rechtsaußen"),ST("Stürmer") }
 
@@ -109,7 +112,7 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP,Compe
 @Serializable data class Attributes(var pace: Int=35,var finishing: Int=35,var passing: Int=35,var technique: Int=35,var tackling: Int=35,var strength: Int=35,var stamina: Int=35,var vision: Int=35,var heading: Int=35,var keeping: Int=15,var setPieces: Int=35) {
  fun values()=linkedMapOf("Tempo" to pace,"Abschluss" to finishing,"Pässe" to passing,"Technik" to technique,"Zweikampf" to tackling,"Kraft" to strength,"Ausdauer" to stamina,"Spielwitz" to vision,"Kopfball" to heading,"Torwart" to keeping,"Standards" to setPieces)
  fun improve(focus: Focus,cap: Int): Boolean {
-  fun up(v: Int)=if(v>=cap.coerceIn(1,99))v else v+1
+  fun up(v: Int)=if(v>=cap.coerceIn(1,PLAYER_RATING_MAX))v else (v+1).coerceAtMost(PLAYER_RATING_MAX)
   val before=values()
   when(focus){Focus.FINISHING->finishing=up(finishing);Focus.PACE->pace=up(pace);Focus.TECHNIQUE->technique=up(technique);Focus.TACKLING->tackling=up(tackling);Focus.KEEPING->keeping=up(keeping);Focus.VISION->vision=up(vision)}
   return before!=values()
@@ -123,7 +126,7 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP,Compe
   Position.OM->vision*.3+technique*.25+passing*.25+finishing*.2
   Position.LA,Position.RA->pace*.3+technique*.3+passing*.15+finishing*.2+stamina*.05
   Position.ST->finishing*.4+pace*.2+technique*.15+heading*.15+strength*.1
- }.roundToInt().coerceIn(1,99)
+ }.roundToInt().coerceIn(1,PLAYER_RATING_MAX)
 }
 @Serializable data class Hidden(var potential: Int=65,var injuryProneness: Int=30,var consistency: Int=60,var professionalism: Int=60,var loyalty: Int=65,var ambition: Int=60,var development: Int=65,var pressure: Int=50)
 @Serializable data class Stats(var appearances: Int=0,var goals: Int=0,var assists: Int=0,var minutes: Int=0,var yellow: Int=0,var red: Int=0)
@@ -131,6 +134,7 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP,Compe
 @Serializable data class PlayerSeason(val season: Int,val clubName: String,val stats: Stats)
 @Serializable data class Player(val id: Int,var clubId: Int=0,var firstName: String="",var lastName: String="",var birthYear: Int=2000,var nationality: String="Deutschland",var height: Int=180,var weight: Int=78,var foot: Foot=Foot.RIGHT,var position: Position=Position.ZM,var secondary: MutableList<Position> = mutableListOf(),var number: Int=10,var appearance: Appearance=Appearance(),var archetype: String="Komplett",var attributes: Attributes=Attributes(),var hidden: Hidden=Hidden(),var fitness: Double=95.0,var morale: Int=65,var form: Double=6.5,var sharpness: Int=60,var injuryWeeks: Int=0,var injury: String="",var unavailableReason: UnavailableReason?=null,var unavailableWeeks: Int=0,var stats: Stats=Stats(),var career: MutableList<PlayerSeason> = mutableListOf(),var youth: Boolean=false,var wantsMove: Boolean=false,var wage: Int=0,var retired: Boolean=false,var trainingProgress: Double=0.0,var lastTalkWeek: Int=-1,var messiMentored: Boolean=false,var role:PlayerRole=PlayerRole.AUTO,var youthProfile:YouthProfile=YouthProfile(),var contractYears:Int=2,var promisedRole:SquadRole=SquadRole.ROTATION,var agentId:Int=0,var marketUncertainty:Int=20,var loanParentClubId:Int=0,var loanBuyerClubId:Int=0,var loanOptionFee:Long=0,var loanWeeks:Int=0,var homegrownClubId:Int=0,var releaseClause:Long=0,var buyBackClubId:Int=0,var buyBackFee:Long=0,var sellOnPercentToPrevious:Int=0,var youthSquad:YouthSquad=YouthSquad.U19,var youthTeamStats:YouthTeamStats=YouthTeamStats(),var precontractClubId:Int=0,var precontractSeason:Int=0,var precontractWage:Int=0,var precontractYears:Int=0,var loanRecallAllowed:Boolean=true,var loanReturnYouth:Boolean=false,var loanReturnYouthSquad:YouthSquad=YouthSquad.U19,var temporarySeniorCallUp:Boolean=false,var temporaryReturnSquad:YouthSquad?=null,var generated:Boolean=false) {
  val name get()=listOf(firstName,lastName).filter{it.isNotBlank()}.joinToString(" ")
+ val shortName get()=lastName.ifBlank{firstName}.ifBlank{name}
  val ca get()=attributes.overall(position)
  val available get()=!retired&&!youth&&injuryWeeks==0&&unavailableWeeks==0
  fun fit(pos: Position)=when{
@@ -138,7 +142,7 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP,Compe
   pos in secondary->.98
   else->positionAffinity(position,pos)
  }
- fun ratingAt(pos: Position)=(attributes.overall(pos)*fit(pos)).roundToInt().coerceIn(1,99)
+ fun ratingAt(pos: Position)=(attributes.overall(pos)*fit(pos)).roundToInt().coerceIn(1,PLAYER_RATING_MAX)
  fun secondaryOptions(): List<Position> {
   val base=ca
   return Position.entries.filter{it!=position&&it!=Position.TW&&position!=Position.TW}
