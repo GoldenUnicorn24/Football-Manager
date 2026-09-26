@@ -113,13 +113,20 @@ private fun BmwStatusPill(text:String,active:Boolean=true){
  }
 }
 
+private fun bmwCompactMoney(value:Long):String=when{
+ value>=1_000_000_000L->"%.1f Mrd. €".format(value/1_000_000_000.0)
+ value>=1_000_000L->"%.0f Mio. €".format(value/1_000_000.0)
+ value>=1_000L->"%.0f Tsd. €".format(value/1_000.0)
+ else->euros(value)
+}
+
 @Composable
 private fun BmwMetricTile(label:String,value:String,modifier:Modifier=Modifier,accent:Color=BmwMBlue){
  Surface(modifier=modifier,shape=RoundedCornerShape(8.dp),color=Color(0xFF0D1117),border=androidx.compose.foundation.BorderStroke(1.dp,BmwLine)){
   Column(Modifier.padding(horizontal=12.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(5.dp)){
    Box(Modifier.width(24.dp).height(2.dp).background(accent))
    Text(label.uppercase(),color=Color(0xFF9DA9B6),style=MaterialTheme.typography.labelSmall,letterSpacing=.6.sp)
-   Text(value,color=Chalk,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Black)
+   Text(value,color=Chalk,style=if(value.length>10)MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Black)
   }
  }
 }
@@ -239,7 +246,7 @@ private fun BmwCommandCenterScreen(w:World,onNavigate:(String)->Unit){
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
     BmwMetricTile("World Rank","#"+rank,Modifier.weight(1f),Color(0xFF55B8FF))
     BmwMetricTile("NEXUS",tech?.overall?.let{"%.1f".format(it)}?:"—",Modifier.weight(1f),Color(0xFF1261A0))
-    BmwMetricTile("Budget",euros(c.budget),Modifier.weight(1f),BmwMRed)
+    BmwMetricTile("Budget",bmwCompactMoney(c.budget),Modifier.weight(1f),BmwMRed)
    }
    Text("BMW Performance Arena · "+c.stadium.capacity+" Plätze",color=Muted,style=MaterialTheme.typography.bodyMedium)
    next?.let{
@@ -288,7 +295,7 @@ private fun BmwTechnologyScreen(w:World,vm:GameViewModel,onNavigate:(String)->Un
     }
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
      BmwMetricTile("System Index","%.1f".format(p.overall),Modifier.weight(1f))
-     BmwMetricTile("Research",euros(p.researchBudget),Modifier.weight(1f),Color(0xFF55B8FF))
+     BmwMetricTile("Research",bmwCompactMoney(p.researchBudget),Modifier.weight(1f),Color(0xFF55B8FF))
     }
     Text("Technologie ist kein kosmetischer Wert: Analyse, Training und NEXUS wirken auf Entwicklung, Entscheidungsqualität und Match-Ausführung.",color=Muted,style=MaterialTheme.typography.bodyMedium)
    }
@@ -454,7 +461,7 @@ private fun BmwRosterDataScreen(w:World){
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
     BmwMetricTile("Players",squad.size.toString(),Modifier.weight(1f))
     BmwMetricTile("Ø GES","%.1f".format(squad.map{it.ca}.average()),Modifier.weight(1f),Color(0xFF55B8FF))
-    BmwMetricTile("Market",euros(squad.sumOf{w.developer.playerMeta[it.id]?.marketValue?:0L}),Modifier.weight(1f),BmwMRed)
+    BmwMetricTile("Market",bmwCompactMoney(squad.sumOf{w.developer.playerMeta[it.id]?.marketValue?:0L}),Modifier.weight(1f),BmwMRed)
    }
   }
   squad.forEach{p->
