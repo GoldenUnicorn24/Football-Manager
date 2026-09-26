@@ -88,6 +88,7 @@ object BmwDeveloperWorldFactory {
    install(p,s);w.players[p.id]=p
   }
   val leon=w.squad(club.id).first{it.firstName=="Leon"&&it.lastName=="Stark"}
+  leon.messiMentored=true
   club.tactics.captainId=leon.id;club.tactics.targetPlayerId=leon.id;club.tactics.penaltyTakerId=leon.id;club.tactics.freeKickTakerId=leon.id
   w.user.difficulty=Difficulty.SANDBOX;w.user.tutorialEnabled=false;w.user.tutorialCompleted=true
   w.developer=dev
