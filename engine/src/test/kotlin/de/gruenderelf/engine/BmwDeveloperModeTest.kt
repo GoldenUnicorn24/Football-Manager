@@ -234,4 +234,40 @@ class BmwDeveloperModeTest {
   assertTrue(vsNeuerBox<vsAverageBox*.90,"Neuer should materially suppress normal box-shot conversion")
   assertTrue(vsNeuerOne<vsAverageOne*.90,"Neuer should materially suppress one-on-one conversion")
  }
+ @Test fun compareBmw4231TacticCandidates(){
+  data class Candidate(val name:String,val mentality:Int,val pressing:Int,val line:Int,val tempo:Int,val width:Int,val build:BuildUp)
+  val candidates=listOf(
+   Candidate("CURRENT_MIXED",4,4,4,4,4,BuildUp.MIXED),
+   Candidate("TIKI_CONTROL",4,4,3,3,4,BuildUp.TIKI_TAKA),
+   Candidate("TIKI_HIGHLINE",4,4,4,3,4,BuildUp.TIKI_TAKA),
+   Candidate("SHORT_CONTROL",4,4,3,3,4,BuildUp.SHORT),
+   Candidate("MIXED_CALM",4,4,3,3,4,BuildUp.MIXED),
+   Candidate("WIDE_FAST",4,4,3,4,5,BuildUp.WIDE),
+   Candidate("AGGRESSIVE_MIXED",5,4,4,4,4,BuildUp.MIXED),
+   Candidate("TIKI_PRESS5",4,5,3,3,4,BuildUp.TIKI_TAKA)
+  )
+  for(cfg in candidates){
+   val w=BmwDeveloperWorldFactory.create(262000L)
+   val c=w.club();c.tactics.formation="4-2-3-1"
+   fun id(name:String)=w.squad().first{it.name==name}.id
+   c.tactics.xi=mutableListOf(
+    id("Manuel Neuer"),id("Finn Lorenz"),id("Tiago Valente"),id("Lennart Krüger"),id("Noah Reiter"),
+    id("Gavi"),id("Joshua Kimmich"),id("Jamal Musiala"),id("Julián Álvarez"),id("Michael Olise"),id("Leon Stark")
+   )
+   WorldFactory.rebuildBench(w,c)
+   c.tactics.mentality=cfg.mentality;c.tactics.pressing=cfg.pressing;c.tactics.line=cfg.line
+   c.tactics.tempo=cfg.tempo;c.tactics.width=cfg.width;c.tactics.buildUp=cfg.build
+   val fixtures=w.fixtures.filter{it.season==w.calendar.season&&it.competition==CompetitionType.LEAGUE&&(it.homeId==c.id||it.awayId==c.id)}.sortedBy{it.matchday}.take(12)
+   var wins=0;var draws=0;var losses=0;var gf=0;var ga=0;var xgf=0.0;var xga=0.0
+   for(fix in fixtures){
+    w.squad().forEach{it.fitness=99.0;it.injuryWeeks=0;it.injury="";it.unavailableWeeks=0;it.unavailableReason=null;it.sharpness=maxOf(it.sharpness,96);it.morale=maxOf(it.morale,95)}
+    val m=MatchEngine.simulateFullMatch(w,fix)
+    val own=if(m.homeId==c.id)m.home else m.away;val opp=if(m.homeId==c.id)m.away else m.home
+    gf+=own.goals;ga+=opp.goals;xgf+=own.xg;xga+=opp.xg
+    when{own.goals>opp.goals->wins++;own.goals==opp.goals->draws++;else->losses++}
+   }
+   println("BMW_TACTIC ${cfg.name} W=$wins D=$draws L=$losses GF=$gf GA=$ga XGF=$xgf XGA=$xga XD=${xgf-xga}")
+  }
+ }
+
 }
