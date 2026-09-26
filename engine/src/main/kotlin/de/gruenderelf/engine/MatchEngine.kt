@@ -1358,7 +1358,7 @@ object MatchEngine {
   val baseGeometry=ShotModel.geometry(ShotContext(m.ballX,m.ballY,home))
   val type=typeHint?:when{baseGeometry.distanceMeters>=23.5->ShotType.LONG_RANGE;baseGeometry.distanceMeters<=8.5->ShotType.CLOSE_RANGE;else->ShotType.BOX_SHOT}
   val context=buildShotContext(w,m,home,p,type,rng,assist);val geometry=ShotModel.geometry(context)
-  val shotXg=ShotModel.xg(context);val baseGoalProbability=ShotModel.goalProbability(shotXg,p,keeper,context);val goalProbability=(baseGoalProbability*LeagueCalibration.forMatch(w,m).conversion).coerceIn(.002,.92)
+  val shotXg=ShotModel.xg(context);val baseGoalProbability=ShotModel.goalProbability(shotXg,p,keeper,context);val goalProbability=(baseGoalProbability*LeagueCalibration.forMatch(w,m).conversion*BmwDeveloperSystems.finishingMultiplier(w,clubId(m,home))).coerceIn(.002,.94)
   val blockProbability=ShotModel.blockProbability(context);val onTargetProbability=ShotModel.onTargetProbability(goalProbability,p,context)
   val savedOnTarget=(onTargetProbability-goalProbability).coerceAtLeast(0.0)
   val woodworkProbability=(.012+shotXg*.060+(if(type in setOf(ShotType.CLOSE_RANGE,ShotType.ONE_ON_ONE)).006 else 0.0)).coerceIn(.010,.052)
