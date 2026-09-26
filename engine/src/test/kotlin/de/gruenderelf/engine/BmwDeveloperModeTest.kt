@@ -172,4 +172,33 @@ class BmwDeveloperModeTest {
   val p=Player(99100,firstName="Gavi",lastName="")
   assertEquals("Gavi",p.shortName)
  }
+
+ @Test fun manuelNeuerActuallySuppressesGoalProbability(){
+  val w=BmwDeveloperWorldFactory.create(261004L)
+  val neuer=w.squad().first{it.name=="Manuel Neuer"}
+  val attacker=Player(
+   990001,position=Position.ST,
+   attributes=Attributes(pace=90,finishing=92,passing=80,technique=90,tackling=30,strength=82,stamina=86,vision=84,heading=82,keeping=10,setPieces=80),
+   hidden=Hidden(consistency=84,pressure=84),form=7.3,fitness=98.0,sharpness=92
+  )
+  val average=Player(
+   990002,position=Position.TW,
+   attributes=Attributes(keeping=72),
+   hidden=Hidden(consistency=70,pressure=70),form=6.7,fitness=96.0,sharpness=78
+  )
+  val ctx=ShotContext(.5f,.105f,true,ShotType.BOX_SHOT,pressure=.30,defendersNearby=1,passQuality=.70,clearChance=true)
+  val xg=ShotModel.xg(ctx)
+  val vsNeuer=ShotModel.goalProbability(xg,attacker,neuer,ctx)*BmwDeveloperSystems.goalkeeperShotMultiplier(w,w.user.clubId)
+  val vsAverage=ShotModel.goalProbability(xg,attacker,average,ctx)
+  println("KEEPER_CHECK xg=$xg neuerKeeping=${neuer.attributes.keeping} neuerGoal=$vsNeuer averageGoal=$vsAverage")
+  assertTrue(neuer.attributes.keeping>=90)
+  assertTrue(vsNeuer<vsAverage*.86,"Neuer is not suppressing goals enough: neuer=$vsNeuer average=$vsAverage")
+ }
+
+ @Test fun goalkeeperTechnologyNeverMakesDefendingWorse(){
+  val w=BmwDeveloperWorldFactory.create(261005L)
+  val mult=BmwDeveloperSystems.goalkeeperShotMultiplier(w,w.user.clubId)
+  assertTrue(mult in .90..1.0)
+  assertTrue(mult<1.0,"BMW GK NEXUS should reduce scoring probability, multiplier=$mult")
+ }
 }
