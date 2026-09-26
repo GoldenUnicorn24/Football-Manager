@@ -81,7 +81,7 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
   }
   Section(s.name){Text("${s.surface.label} · ${s.capacity} Plätze · ${s.seats} Sitzplätze");Text(if(s.floodlights)"Flutlicht vorhanden" else "Noch ohne Flutlicht",color=if(s.floodlights)Grass else Muted);Meter("Platzqualität",s.pitchQuality,FACILITY_LEVEL_MAX)}
   if(w.construction.isNotEmpty())Section("Laufende Arbeiten"){w.construction.forEach{p->Text(p.facility.label,style=MaterialTheme.typography.titleMedium);LinearProgressIndicator(progress={1f-p.weeksLeft.toFloat()/p.totalWeeks},modifier=Modifier.fillMaxWidth());Text("Noch ${p.weeksLeft} von ${p.totalWeeks} Wochen",color=Muted)}}
-  Text("${if(c.tier>=7)1 else 2} gleichzeitige Baustelle(n)",color=Muted)
+  Text("${if(!w.privateTopClubMode&&c.tier>=7)1 else if(w.developer.enabled)3 else 2} gleichzeitige Baustelle(n)",color=Muted)
   Facility.entries.forEach{f->Section(f.label){if(f !in listOf(Facility.FLOODLIGHTS,Facility.ARTIFICIAL,Facility.CAPACITY))Meter("Ausbaustand",ConstructionEngine.level(s,f),FACILITY_LEVEL_MAX);Text(facilityEffect(f));Text("${euros(ConstructionEngine.price(w,f))} · ${ConstructionEngine.weeks(w,f)} Wochen",color=Grass);val reason=ConstructionEngine.reason(w,f);Action("Ausbau beauftragen",reason==null&&w.live==null){confirm=f};if(reason!=null)Text(reason,color=Muted,style=MaterialTheme.typography.bodySmall)}}
  }
  confirm?.let{f->Confirm("${f.label} bauen?","${euros(ConstructionEngine.price(w,f))} werden sofort bezahlt. Bauzeit: ${ConstructionEngine.weeks(w,f)} Wochen.",{confirm=null}){confirm=null;vm.action{ConstructionEngine.start(it,f)}}}
