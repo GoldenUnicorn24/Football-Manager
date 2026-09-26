@@ -100,8 +100,12 @@ object MatchEngine {
  private fun goalkeeperId(w:World,m:LiveMatch,home:Boolean):Int{
   val lineup=xi(m,home);val slots=Formations.positions(formation(m,home));val slotIndex=slots.indexOf(Position.TW)
   val slotted=lineup.getOrNull(slotIndex)?:0
-  if(slotted!=0&&slotted !in m.injured&&slotted !in m.sentOff&&w.players[slotted]?.clubId==clubId(m,home))return slotted
-  return lineup.firstOrNull{it!=0&&it !in m.injured&&it !in m.sentOff&&w.players[it]?.position==Position.TW}
+  val slottedPlayer=w.players[slotted]
+  if(slotted!=0&&slotted !in m.injured&&slotted !in m.sentOff&&slottedPlayer?.clubId==clubId(m,home)&&slottedPlayer.position==Position.TW)return slotted
+  val genuine=lineup.firstOrNull{it!=0&&it !in m.injured&&it !in m.sentOff&&w.players[it]?.let{p->p.clubId==clubId(m,home)&&p.position==Position.TW}==true}
+  if(genuine!=null)return genuine
+  // Emergency keeper only when every real goalkeeper on the pitch is unavailable.
+  return slotted.takeIf{it!=0&&it !in m.injured&&it !in m.sentOff&&slottedPlayer?.clubId==clubId(m,home)}
    ?:lineup.firstOrNull{it!=0&&it !in m.injured&&it !in m.sentOff}
    ?:0
  }
@@ -633,7 +637,9 @@ object MatchEngine {
  private fun transferPossession(w: World,m: LiveMatch,newHome: Boolean,reason: PossessionChangeReason,rng: SeededRandom,allowCounter: Boolean=true){
   require(reason!=PossessionChangeReason.NONE)
   val oldHome=m.chainOwnerClubId==m.homeId
-  val oldPlayers=xi(m,oldHome).filter{it!=0&&it !in m.injured};if(oldPlayers.isNotEmpty())ensurePerformance(w,m,rng.pick(oldPlayers)).turnovers++
+  val oldPlayers=xi(m,oldHome).filter{it!=0&&it !in m.injured}
+  val turnoverPlayer=m.livePlayerId.takeIf{it in oldPlayers}?:oldPlayers.takeIf{it.isNotEmpty()}?.let{rng.pick(it)}?:0
+  if(turnoverPlayer!=0)ensurePerformance(w,m,turnoverPlayer).turnovers++
   val newPlayers=xi(m,newHome).filter{it!=0&&it !in m.injured};if(newPlayers.isNotEmpty())ensurePerformance(w,m,rng.pick(newPlayers)).defensiveActions++
   m.chainStep=0;m.chainTicks=0
   val counter=allowCounter&&rng.chance(counterProbability(w,m,newHome))
@@ -1016,7 +1022,10 @@ object MatchEngine {
   val calibration=LeagueCalibration.forMatch(w,m)
   val keeperCarrier=w.players[m.livePlayerId]
   if(keeperCarrier?.position==Position.TW&&keeperCarrier.clubId==clubId(m,home)&&(m.liveDetail.contains("Torwart",true)||m.possessionChangeReason==PossessionChangeReason.SAVE)){
-   m.keeperControlSeconds=if(rng.chance(.004))9 else rng.int(3,7)
+   val discipline=(keeperCarrier.hidden.professionalism*.55+keeperCarrier.hidden.pressure*.25+keeperCarrier.hidden.consistency*.20).coerceIn(1.0,100.0)
+   val deliberateWaste=(activeAi.timeWaste*.0017).coerceAtMost(.007)
+   val accidental=(.0022-(discipline-50.0)*.000025).coerceIn(.0006,.0028)
+   m.keeperControlSeconds=if(rng.chance(deliberateWaste+accidental))9 else rng.int(3,7)
    if(CompetitionRulesEngine.goalkeeperViolation(m.keeperControlSeconds,CompetitionRulesEngine.forMatch(w,m))){
     val taker=moverFor(w,m,!home,rng)
     // Die Acht-Sekunden-Sanktion ist ein echter Besitzwechsel: erst Besitz sauber an den Gegner geben, dann die Ecke vormerken.
