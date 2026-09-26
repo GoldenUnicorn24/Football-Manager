@@ -52,23 +52,43 @@ fun DeveloperAccessDialog(vm:GameViewModel,configured:Boolean,onDismiss:()->Unit
 
 @Composable
 fun BmwRoundelMark(size:Dp=52.dp){
- Box(Modifier.size(size),contentAlignment=Alignment.Center){
-  Canvas(Modifier.fillMaxSize()){
-   val r=this.size.minDimension/2f
-   val center=Offset(this.size.width/2f,this.size.height/2f)
-   drawCircle(Color(0xFF111111),r,center)
-   drawCircle(Color(0xFFF4F4F4),r*.70f,center)
-   val inner=r*.57f
-   val tl=Offset(center.x-inner,center.y-inner)
-   val sz=Size(inner*2,inner*2)
-   drawArc(Color(0xFF0066B1),0f,90f,true,tl,sz)
-   drawArc(Color.White,90f,90f,true,tl,sz)
-   drawArc(Color(0xFF0066B1),180f,90f,true,tl,sz)
-   drawArc(Color.White,270f,90f,true,tl,sz)
-   drawCircle(Color(0xFF111111),r*.72f,center,style=androidx.compose.ui.graphics.drawscope.Stroke(r*.105f))
-   drawCircle(Color(0xFFF5F5F5),r*.96f,center,style=androidx.compose.ui.graphics.drawscope.Stroke(r*.035f))
-  }
-  Text("BMW",modifier=Modifier.align(Alignment.TopCenter).padding(top=size*.055f),color=Color.White,fontWeight=FontWeight.Black,style=MaterialTheme.typography.labelSmall)
+ Canvas(Modifier.size(size)){
+  val r=this.size.minDimension/2f
+  val center=Offset(this.size.width/2f,this.size.height/2f)
+
+  // Outer black ring.
+  drawCircle(Color(0xFF0B0B0C),r,center)
+
+  // Inner roundel is deliberately smaller so the BMW lettering sits completely
+  // inside the black outer ring instead of overlapping the blue/white field.
+  val innerFieldRadius=r*.60f
+  drawCircle(Color(0xFFF4F4F4),innerFieldRadius,center)
+
+  val quadrantRadius=r*.50f
+  val tl=Offset(center.x-quadrantRadius,center.y-quadrantRadius)
+  val sz=Size(quadrantRadius*2,quadrantRadius*2)
+  drawArc(Color(0xFF0066B1),0f,90f,true,tl,sz)
+  drawArc(Color.White,90f,90f,true,tl,sz)
+  drawArc(Color(0xFF0066B1),180f,90f,true,tl,sz)
+  drawArc(Color.White,270f,90f,true,tl,sz)
+
+  // Clean separation between black ring and inner field plus the thin outer rim.
+  drawCircle(Color(0xFF0B0B0C),r*.64f,center,style=androidx.compose.ui.graphics.drawscope.Stroke(r*.075f))
+  drawCircle(Color(0xFFF5F5F5),r*.96f,center,style=androidx.compose.ui.graphics.drawscope.Stroke(r*.035f))
+
+  // BMW text belongs in the upper black ring.
+  drawContext.canvas.nativeCanvas.drawText(
+   "BMW",
+   center.x,
+   this.size.height*.225f,
+   android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply{
+    color=android.graphics.Color.WHITE
+    textAlign=android.graphics.Paint.Align.CENTER
+    textSize=this@Canvas.size.width*.145f
+    typeface=android.graphics.Typeface.create("sans-serif",android.graphics.Typeface.BOLD)
+    letterSpacing=.08f
+   }
+  )
  }
 }
 
