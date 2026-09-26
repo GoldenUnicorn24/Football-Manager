@@ -183,7 +183,7 @@ object SeasonEngine {
     p.stats=Stats();val age=BmwDeveloperSystems.effectiveAge(w,p,w.calendar.season+1)
     if(age>=35){val keep=w.developer.longevity[p.id]?.primeRetention?:0.0;if(!w.developer.enabled||rng.chance((1.0-keep).coerceIn(.08,1.0))){p.attributes.pace=(p.attributes.pace-1).coerceAtLeast(1);p.attributes.stamina=(p.attributes.stamina-1).coerceAtLeast(1)}}
     if(p.id!=w.user.playerId&&age>=36&&rng.chance((.15+(age-36)*.12)*(1.0-(w.developer.longevity[p.id]?.primeRetention?:0.0)*.72))){p.retired=true;p.clubId=0;continue}
-    if(age<=23&&rng.chance(.7))p.attributes.improve(rng.pick(Focus.entries),p.hidden.potential)
+    if(age<=23&&rng.chance(.7))p.attributes.improve(rng.pick(Focus.entries),minOf(p.hidden.potential,REGULAR_DEVELOPMENT_CAP))
     if(p.youth&&age>=23)p.youth=false else if(p.youth)p.youthSquad=if(age<=18)YouthSquad.U19 else YouthSquad.U23
     p.fitness=95.0;p.sharpness=55;p.injuryWeeks=(p.injuryWeeks-4).coerceAtLeast(0);p.unavailableWeeks=0;p.unavailableReason=null;if(p.injuryWeeks==0)p.injury=""
     w.clubs[p.clubId]?.let{club->p.wage=if(club.tier==0)p.wage.coerceAtLeast(1500) else if(w.privateTopClubMode)p.wage.coerceAtLeast(120) else if(club.tier>=7)p.wage.coerceAtMost(15) else (11-club.tier)*rng.int(150,350)}
