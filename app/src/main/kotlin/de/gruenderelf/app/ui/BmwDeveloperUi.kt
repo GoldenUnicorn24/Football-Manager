@@ -344,7 +344,7 @@ private fun BmwTechnologyScreen(w:World,vm:GameViewModel,onNavigate:(String)->Un
   }
 
   Section("Competitive Intelligence"){
-   Text("Andere Vereine bauen eigene Systeme auf und entwickeln sie über die Saison weiter. BMW startet technologisch vorne, bleibt aber nicht automatisch uneinholbar.",color=Muted)
+   Text("Barcelona arbeitet bereits an BARÇA ONE, befindet sich aber noch in einer sehr frühen R&D-Phase. Bayern darf als zweiter externer Verein ein eigenes System starten. Weitere Clubs müssen erst nachziehen, mindestens 500 Mio. € Startkapital aufbringen und jahrelang entwickeln.",color=Muted)
    Action("Technology World Ranking",secondary=true){onNavigate("bmw_rankings")}
   }
  }
@@ -414,7 +414,7 @@ private fun BmwInfrastructureScreen(w:World){
    }
   }
   Section("Core Facilities"){
-   Meter("Training",s.training);Meter("Medizin",s.medicine);Meter("Kraftraum",s.gym);Meter("Jugend",s.youth);Meter("Platzqualität",s.pitchQuality);Meter("Clubhouse",s.clubhouse)
+   Meter("Training",s.training,FACILITY_LEVEL_MAX);Meter("Medizin",s.medicine,FACILITY_LEVEL_MAX);Meter("Kraftraum",s.gym,FACILITY_LEVEL_MAX);Meter("Jugend",s.youth,FACILITY_LEVEL_MAX);Meter("Platzqualität",s.pitchQuality,FACILITY_LEVEL_MAX);Meter("Clubhouse",s.clubhouse,FACILITY_LEVEL_MAX)
   }
   Section("M Performance Facilities"){
    listOf(
