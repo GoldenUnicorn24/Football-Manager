@@ -106,7 +106,7 @@ object AssistantCoachSystem {
 }
 
 object IntensiveTrainingSystem {
- private fun eliteAttributeTier(p:Player)=p.ca>=REGULAR_DEVELOPMENT_CAP||p.hidden.potential>REGULAR_DEVELOPMENT_CAP
+ private fun eliteAttributeTier(p:Player)=p.ca>=REGULAR_DEVELOPMENT_CAP
  private fun elitePotentialTier(p:Player)=p.hidden.potential>=REGULAR_DEVELOPMENT_CAP
 
  fun duration(w:World,p:Player):Int=when{
@@ -239,7 +239,8 @@ object IntensiveTrainingSystem {
 
   if(!elitePotential)while(project.progress>=1.0){
    project.progress-=1.0
-   if(p.attributes.improve(project.focus,p.hidden.potential)&&c.id==w.user.clubId)report.gains.add("${p.name}: ${if(project.raisesPotential)"Potenzialtraining" else if(eliteAttribute)"Elite-Intensivtraining" else "Intensivtraining"} ${project.focus.label} +1")
+   val attributeCap=if(eliteAttribute)p.hidden.potential else minOf(p.hidden.potential,REGULAR_DEVELOPMENT_CAP)
+   if(p.attributes.improve(project.focus,attributeCap)&&c.id==w.user.clubId)report.gains.add("${p.name}: ${if(project.raisesPotential)"Potenzialtraining" else if(eliteAttribute)"Elite-Intensivtraining" else "Intensivtraining"} ${project.focus.label} +1")
   }
 
   val medicineProtection=(1-c.stadium.medicine.coerceAtMost(FACILITY_LEVEL_MAX)*.0055).coerceAtLeast(.12)
