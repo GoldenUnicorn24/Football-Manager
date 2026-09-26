@@ -103,4 +103,72 @@ class BmwDeveloperModeTest {
   assertTrue(leon.messiMentored)
   assertEquals(technique,leon.attributes.technique)
  }
+
+ @Test fun globalRatingsCanReach150ButEliteProgressionIsLockedBehindFacilities(){
+  val all=Attributes(150,150,150,150,150,150,150,150,150,150,150)
+  val elite=Player(99001,position=Position.ST,attributes=all,hidden=Hidden(potential=150))
+  assertEquals(150,elite.ca)
+  assertEquals(150,elite.ratingAt(Position.ST))
+  assertFalse(elite.attributes.improve(Focus.FINISHING,200))
+
+  val w=WorldFactory.createWorld(261010L);val p=w.self()
+  p.position=Position.ST;p.attributes=Attributes(99,99,99,99,70,99,99,99,99,10,99)
+  p.hidden.potential=99;p.hidden.professionalism=90;p.hidden.development=90
+  w.club().budget=2_000_000_000L
+  w.club().stadium.training=100;w.club().stadium.gym=100;w.club().stadium.medicine=100;w.club().dynamics.staffQuality=100
+  assertTrue(IntensiveTrainingSystem.potentialReason(w,p.id)?.contains("105")==true)
+  w.club().stadium.training=105;w.club().stadium.gym=105;w.club().stadium.medicine=105
+  assertNull(IntensiveTrainingSystem.potentialReason(w,p.id))
+  IntensiveTrainingSystem.startPotential(w,p.id,Focus.FINISHING)
+  assertEquals(12,w.intensiveTraining.first{it.playerId==p.id}.totalWeeks)
+ }
+
+ @Test fun bmwTechnologyRaceStartsOnlyWithBarcaThenBayern(){
+  val w=BmwDeveloperWorldFactory.create(261011L)
+  val tech0=BmwDeveloperSystems.technologyRanking(w)
+  assertEquals(2,tech0.size)
+  assertTrue(tech0.any{it.clubId==w.user.clubId})
+  val barca=w.clubs.values.first{it.name.contains("Barcelona",true)||it.shortName=="BAR"}
+  val bayern=w.clubs.values.first{it.name.contains("Bayern",true)||it.shortName=="FCB"}
+  assertNotNull(BmwDeveloperSystems.profile(w,barca.id))
+  assertNull(w.developer.technology[bayern.id])
+  bayern.budget=500_000_000L
+  repeat(26){BmwDeveloperSystems.weekly(w)}
+  assertNotNull(w.developer.technology[bayern.id])
+  assertTrue(w.developer.technology.getValue(bayern.id).overall<w.developer.technology.getValue(barca.id).overall)
+  assertTrue(w.developer.technology.values.all{it.clubId==w.user.clubId||it.clubId==barca.id||it.clubId==bayern.id})
+ }
+
+ @Test fun otherClubsMustPayAndWaitBeforeStartingAi(){
+  val w=BmwDeveloperWorldFactory.create(261012L)
+  val bayern=w.clubs.values.first{it.name.contains("Bayern",true)||it.shortName=="FCB"};bayern.budget=500_000_000L
+  val candidate=w.clubs.values.first{it.id!=w.user.clubId&&!it.name.contains("Barcelona",true)&&!it.name.contains("Bayern",true)&&it.tier>0}
+  candidate.reputation=99;candidate.budget=900_000_000L
+  candidate.stadium.training=100;candidate.stadium.medicine=100;candidate.stadium.youth=100;candidate.stadium.gym=100;candidate.stadium.pitchQuality=100
+  repeat(52){BmwDeveloperSystems.weekly(w)}
+  assertNull(w.developer.technology[candidate.id])
+  while(w.developer.weeksActive<78)BmwDeveloperSystems.weekly(w)
+  assertNotNull(w.developer.technology[candidate.id])
+  assertTrue(candidate.budget<=400_000_000L)
+ }
+
+ @Test fun bmwFacilitiesUseElite150Scale(){
+  val w=BmwDeveloperWorldFactory.create(261013L)
+  assertTrue(w.club().stadium.training>100)
+  assertTrue(w.club().stadium.medicine>100)
+  val before=w.club().stadium.training
+  val price=ConstructionEngine.price(w,Facility.TRAINING)
+  assertTrue(price>=75_000_000L)
+  ConstructionEngine.start(w,Facility.TRAINING)
+  val project=w.construction.first{it.facility==Facility.TRAINING}
+  assertTrue(project.totalWeeks>=12)
+  repeat(project.totalWeeks){ConstructionEngine.advance(w)}
+  assertTrue(w.club().stadium.training>before)
+  assertTrue(w.club().stadium.training<=FACILITY_LEVEL_MAX)
+ }
+
+ @Test fun singleNamePlayersHaveVisibleLineupName(){
+  val p=Player(99100,firstName="Gavi",lastName="")
+  assertEquals("Gavi",p.shortName)
+ }
 }
