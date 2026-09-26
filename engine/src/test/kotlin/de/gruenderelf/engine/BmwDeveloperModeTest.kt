@@ -50,4 +50,25 @@ class BmwDeveloperModeTest {
   assertTrue("4-5-1" in Formations.all)
   assertEquals(11,Formations.positions("4-4-1-1").size)
  }
+
+ @Test fun bmwEliteChanceConversionIsCompetitive(){
+  val w=BmwDeveloperWorldFactory.create(261001L)
+  val clubId=w.user.clubId
+  val base=w.fixtures.first{it.homeId==clubId||it.awayId==clubId}
+  var wins=0;var draws=0;var losses=0;var xg=0.0;var goals=0;var against=0
+  repeat(24){i->
+   w.squad(base.homeId).forEach{it.fitness=100.0;it.injuryWeeks=0;it.unavailableWeeks=0}
+   w.squad(base.awayId).forEach{it.fitness=100.0;it.injuryWeeks=0;it.unavailableWeeks=0}
+   val m=MatchEngine.simulateFullMatch(w,base.copy(id=900000+i,played=false))
+   val own=if(m.homeId==clubId)m.home else m.away
+   val opp=if(m.homeId==clubId)m.away else m.home
+   xg+=own.xg;goals+=own.goals;against+=opp.goals
+   when{own.goals>opp.goals->wins++;own.goals==opp.goals->draws++;else->losses++}
+  }
+  val ratio=goals/xg.coerceAtLeast(.01)
+  println("BMW_BALANCE wins=$wins draws=$draws losses=$losses goals=$goals against=$against xg=$xg conversionRatio=$ratio")
+  assertTrue(xg>30.0,"BMW did not create enough chances: xG=$xg")
+  assertTrue(ratio>.62,"BMW chance conversion is too weak relative to xG: $ratio")
+  assertTrue(wins>=12,"BMW elite squad underperforms too often: $wins wins / 24")
+ }
 }
