@@ -210,7 +210,7 @@ object BmwDeveloperSystems {
    ).filter{it.second<cap}
    val weakest=choices.minByOrNull{it.second}?:continue
    val cost=10_000_000L+weakest.second.toLong()*250_000L
-   if(c.budget<cost*2)return@for
+   if(c.budget<cost*2)continue
    c.budget-=cost
    when(weakest.first){
     "training"->c.stadium.training=(c.stadium.training+1).coerceAtMost(cap)
