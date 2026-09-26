@@ -178,15 +178,19 @@ object BmwDeveloperSystems {
 
  fun clubPowerRanking(w:World):List<ClubPowerRow>{
   ensureProfiles(w)
-  return w.clubs.values.filter{it.tier>0}.map{c->
-   val squad=w.squad(c.id).filter{!it.youth}.sortedByDescending{it.ca}.take(18)
+  // Performance critical: group players once. Calling w.squad(clubId) for every club scanned
+  // the complete global player database repeatedly and could freeze/ANR on large v0.5.23 worlds.
+  val byClub=w.players.values.asSequence().filter{!it.retired&&!it.youth}.groupBy{it.clubId}
+  val profiles=w.developer.technology
+  return w.clubs.values.asSequence().filter{it.tier>0}.map{c->
+   val squad=byClub[c.id].orEmpty().sortedByDescending{it.ca}.take(18)
    val squadScore=squad.map{it.ca}.average().takeIf{!it.isNaN()}?:30.0
    val form=if(c.form.isEmpty())65.0 else c.form.takeLast(8).map{if(it=="S")100.0 else if(it=="U")62.0 else 25.0}.average()
-   val tech=(profile(w,c.id)?.overall?:35.0).coerceAtMost(115.0)
+   val tech=(profiles[c.id]?.overall?:35.0).coerceAtMost(115.0)
    val s=c.stadium
    val infra=(s.training+s.medicine+s.youth+s.gym+s.pitchQuality)/5.0
    val finance=(45.0+(log10((c.budget.coerceAtLeast(0L)+1L).toDouble())-6.0)*11.0).coerceIn(25.0,100.0)
    ClubPowerRow(c.id,squadScore*.38+form*.19+tech*.19+infra*.14+finance*.10,squadScore,form,tech,infra,finance)
-  }.sortedByDescending{it.score}
+  }.sortedByDescending{it.score}.toList()
  }
 }
