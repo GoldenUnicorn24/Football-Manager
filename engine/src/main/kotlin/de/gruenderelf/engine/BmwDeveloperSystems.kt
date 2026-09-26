@@ -128,6 +128,13 @@ object BmwDeveloperSystems {
   return (1.0+(execution-70.0).coerceAtLeast(0.0)*.00225).coerceIn(1.0,1.10)
  }
 
+ fun goalkeeperShotMultiplier(w:World,clubId:Int):Double{
+  val p=profile(w,clubId)?:return 1.0
+  val score=p.goalkeeping*.62+p.analytics*.23+p.medicine*.15
+  // Technology supports positioning, shot preparation and recovery without replacing keeper skill.
+  return (1.0-(score-55.0).coerceAtLeast(0.0)*.00095).coerceIn(.935,1.0)
+ }
+
  fun enrollLongevity(w:World,playerId:Int){
   val p=w.players[playerId]?:error("Spieler nicht gefunden.")
   require(w.developer.enabled&&p.clubId==w.user.clubId&&!p.retired){"Spieler ist nicht verfügbar."}
