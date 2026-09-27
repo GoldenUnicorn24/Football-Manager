@@ -22,6 +22,11 @@ class BmwDeveloperModeTest {
   assertEquals(listOf("Manuel Neuer","Finn Lorenz","Tiago Valente","Lennart Krüger","Noah Reiter","Gavi","Joshua Kimmich","Jamal Musiala","Julián Álvarez","Michael Olise","Leon Stark"),w.club().tactics.xi.map{w.players.getValue(it).name})
   assertEquals("Jamal Musiala",w.players.getValue(w.club().tactics.cornerLeftTakerId).name)
   assertEquals("Michael Olise",w.players.getValue(w.club().tactics.cornerRightTakerId).name)
+  fun participates(type:CompetitionType)=w.fixtures.any{it.season==w.calendar.season&&it.competition==type&&(it.homeId==w.user.clubId||it.awayId==w.user.clubId)}||
+   (type==CompetitionType.ETERNAL_CROWN&&w.user.clubId in w.fantasyCupByes)
+  assertTrue(participates(CompetitionType.CHAMPIONS_LEAGUE),"BMW FC fehlt in der Champions League")
+  assertTrue(participates(CompetitionType.CLUB_WORLD_CUP),"BMW FC fehlt im Club World Cup")
+  assertTrue(participates(CompetitionType.ETERNAL_CROWN),"BMW FC fehlt in der Krone der Kontinente")
  }
 
  @Test fun bmwStartsTechnologyLeaderAndCompetitionCanDevelop(){
