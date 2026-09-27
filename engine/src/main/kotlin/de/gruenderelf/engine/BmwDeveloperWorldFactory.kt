@@ -10,6 +10,25 @@ object BmwDeveloperWorldFactory {
  private const val REPLACED_CLUB_KEY="bundesliga-598-1-fc-union-berlin"
  private fun million(v:Long)=v*1_000_000L
 
+ private fun reseedInternationalCompetitions(w:World){
+  val season=w.calendar.season
+  val international=setOf(
+   CompetitionType.CHAMPIONS_LEAGUE,CompetitionType.EUROPA_LEAGUE,
+   CompetitionType.CLUB_WORLD_CUP,CompetitionType.ETERNAL_CROWN
+  )
+  w.fixtures.removeAll{it.season==season&&it.competition in international}
+  w.matches.keys.filter{id->w.fixtures.none{it.id==id}}.toList().forEach{w.matches.remove(it)}
+  w.fantasyCupByes.clear()
+  w.fantasyCupEnabled=true
+  CompetitionEngine.scheduleSeason(w)
+  val clubId=w.user.clubId
+  fun entered(type:CompetitionType)=w.fixtures.any{it.season==season&&it.competition==type&&(it.homeId==clubId||it.awayId==clubId)}||
+   (type==CompetitionType.ETERNAL_CROWN&&clubId in w.fantasyCupByes)
+  require(entered(CompetitionType.CHAMPIONS_LEAGUE)){"BMW FC wurde nicht für die Champions League gesetzt."}
+  require(entered(CompetitionType.CLUB_WORLD_CUP)){"BMW FC wurde nicht für den Club World Cup gesetzt."}
+  require(entered(CompetitionType.ETERNAL_CROWN)){"BMW FC wurde nicht für die Krone der Kontinente gesetzt."}
+ }
+
  private val roster=listOf(
   BmwPlayerSeed("Manuel","Neuer",1986,"Deutschland",Position.TW,emptyList(),1,91,91,million(8),million(15)),
   BmwPlayerSeed("Timo","Falk",2004,"Deutschland",Position.TW,emptyList(),12,82,94,million(35),million(3)),
@@ -107,6 +126,7 @@ object BmwDeveloperWorldFactory {
    squadId("Gavi"),squadId("Joshua Kimmich"),squadId("Jamal Musiala"),squadId("Julián Álvarez"),squadId("Michael Olise"),squadId("Leon Stark")
   )
   WorldFactory.rebuildBench(w,club)
+  reseedInternationalCompetitions(w)
   w.news.clear()
   w.news("BMW FC Experience aktiviert","BMW Performance Arena, NEXUS, ORIGIN, PROJECT ZERO, Weltranglisten und Longevity-Forschung sind aktiv.","good")
   return w
