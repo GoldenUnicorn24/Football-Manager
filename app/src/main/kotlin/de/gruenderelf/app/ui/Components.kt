@@ -26,23 +26,124 @@ import de.gruenderelf.engine.*
 import java.text.NumberFormat
 import java.util.Locale
 
-val Ink=Color(0xFF07110D);val Panel=Color(0xFF12231B);val Grass=Color(0xFF7BDBA8);val Chalk=Color(0xFFF0F6F2);val Muted=Color(0xFF9CB1A4);val Clay=Color(0xFFE48C73);val Blue=Color(0xFF79AEEA);val Gold=Color(0xFFE0BE73)
+object UiBrand{var bmwMode:Boolean=false}
+val Ink get()=if(UiBrand.bmwMode)Color(0xFF050608) else Color(0xFF07110D)
+val Panel get()=if(UiBrand.bmwMode)Color(0xFF11151B) else Color(0xFF12231B)
+val Grass get()=if(UiBrand.bmwMode)Color(0xFF1C69D4) else Color(0xFF7BDBA8)
+val Chalk get()=if(UiBrand.bmwMode)Color(0xFFF8FAFC) else Color(0xFFF0F6F2)
+val Muted get()=if(UiBrand.bmwMode)Color(0xFFC7CED7) else Color(0xFF9CB1A4)
+val Clay get()=if(UiBrand.bmwMode)Color(0xFFE7222E) else Color(0xFFE48C73)
+val Blue get()=if(UiBrand.bmwMode)Color(0xFF0066B1) else Color(0xFF79AEEA)
+val Gold get()=if(UiBrand.bmwMode)Color(0xFF6DCFF6) else Color(0xFFE0BE73)
+val BmwMBlue=Color(0xFF2A7DE1)
+val BmwMDarkBlue=Color(0xFF004B87)
+val BmwMRed=Color(0xFFE7222E)
+val BmwGraphite=Color(0xFF171C23)
+val BmwSurface=Color(0xFF10141A)
+val BmwSurfaceRaised=Color(0xFF171D25)
+val BmwLine=Color(0xFF343C47)
 val Palette=listOf(0xFF287254,0xFFE7EEE5,0xFF17251E,0xFF365F89,0xFFA13E38,0xFF818C84,0xFFCC643E,0xFF2F8992)
-private val Display=FontFamily(Typeface.create("sans-serif-condensed",Typeface.BOLD))
-@Composable fun GruenderelfTheme(content: @Composable ()->Unit){MaterialTheme(colorScheme=darkColorScheme(primary=Grass,onPrimary=Ink,secondary=Color(0xFFB4C9BE),background=Ink,onBackground=Chalk,surface=Panel,onSurface=Chalk,surfaceVariant=Color(0xFF243A2E),onSurfaceVariant=Muted,error=Clay),typography=Typography(displaySmall=androidx.compose.ui.text.TextStyle(fontFamily=Display,fontSize=36.sp,lineHeight=38.sp),headlineLarge=androidx.compose.ui.text.TextStyle(fontFamily=Display,fontSize=32.sp,lineHeight=34.sp),headlineMedium=androidx.compose.ui.text.TextStyle(fontFamily=Display,fontSize=27.sp,lineHeight=30.sp),titleLarge=androidx.compose.ui.text.TextStyle(fontFamily=Display,fontSize=23.sp,lineHeight=26.sp),bodyLarge=androidx.compose.ui.text.TextStyle(fontSize=16.sp,lineHeight=23.sp),bodyMedium=androidx.compose.ui.text.TextStyle(fontSize=14.sp,lineHeight=20.sp)),content=content)}
+private val Display=FontFamily(Typeface.create("sans-serif",Typeface.BOLD))
+@Composable fun GruenderelfTheme(content: @Composable ()->Unit){
+ val scheme=if(UiBrand.bmwMode)darkColorScheme(
+  primary=BmwMBlue,onPrimary=Color.White,
+  primaryContainer=Color(0xFF0B2D52),onPrimaryContainer=Color(0xFFEAF4FF),
+  secondary=Color(0xFF9FCBFF),onSecondary=Color(0xFF07111C),
+  secondaryContainer=Color(0xFF142434),onSecondaryContainer=Color(0xFFE8F2FD),
+  background=Ink,onBackground=Chalk,
+  surface=BmwSurface,onSurface=Chalk,
+  surfaceVariant=BmwSurfaceRaised,onSurfaceVariant=Muted,
+  outline=BmwLine,outlineVariant=Color(0xFF252C35),
+  error=BmwMRed,onError=Color.White
+ ) else darkColorScheme(
+  primary=Grass,onPrimary=Ink,secondary=Color(0xFFB4C9BE),
+  background=Ink,onBackground=Chalk,surface=Panel,onSurface=Chalk,
+  surfaceVariant=Color(0xFF243A2E),onSurfaceVariant=Muted,error=Clay
+ )
+ MaterialTheme(
+  colorScheme=scheme,
+  typography=Typography(
+   displaySmall=androidx.compose.ui.text.TextStyle(fontFamily=Display,fontSize=36.sp,lineHeight=40.sp,fontWeight=FontWeight.Black),
+   headlineLarge=androidx.compose.ui.text.TextStyle(fontFamily=Display,fontSize=32.sp,lineHeight=37.sp,fontWeight=FontWeight.Black),
+   headlineMedium=androidx.compose.ui.text.TextStyle(fontFamily=Display,fontSize=27.sp,lineHeight=32.sp,fontWeight=FontWeight.Bold),
+   titleLarge=androidx.compose.ui.text.TextStyle(fontFamily=Display,fontSize=22.sp,lineHeight=27.sp,fontWeight=FontWeight.Bold),
+   titleMedium=androidx.compose.ui.text.TextStyle(fontSize=18.sp,lineHeight=23.sp,fontWeight=FontWeight.Bold),
+   bodyLarge=androidx.compose.ui.text.TextStyle(fontSize=16.sp,lineHeight=24.sp),
+   bodyMedium=androidx.compose.ui.text.TextStyle(fontSize=15.sp,lineHeight=22.sp),
+   bodySmall=androidx.compose.ui.text.TextStyle(fontSize=13.sp,lineHeight=19.sp),
+   labelLarge=androidx.compose.ui.text.TextStyle(fontSize=14.sp,lineHeight=18.sp,fontWeight=FontWeight.Bold),
+   labelMedium=androidx.compose.ui.text.TextStyle(fontSize=13.sp,lineHeight=17.sp,fontWeight=FontWeight.SemiBold),
+   labelSmall=androidx.compose.ui.text.TextStyle(fontSize=12.sp,lineHeight=16.sp,fontWeight=FontWeight.SemiBold)
+  ),
+  content=content
+ )
+}
 fun euros(value: Long)=NumberFormat.getCurrencyInstance(Locale.GERMANY).apply{maximumFractionDigits=0}.format(value)
 fun dec(value: Double)=String.format(Locale.GERMANY,"%.1f",value)
-@Composable fun Page(title: String,kicker: String="DEIN VEREIN. DEIN WEG.",content: @Composable ColumnScope.()->Unit){Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF172D21),Ink,Ink))),contentAlignment=Alignment.TopCenter){Column(Modifier.widthIn(max=640.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)){Text(kicker,color=Grass,style=MaterialTheme.typography.labelSmall,letterSpacing=2.sp);Text(title,style=MaterialTheme.typography.headlineLarge);content();Spacer(Modifier.height(20.dp))}}}
-@Composable fun Section(title: String?=null,content: @Composable ColumnScope.()->Unit){Surface(color=Panel,shape=RoundedCornerShape(22.dp),border=BorderStroke(1.dp,Color(0xFF29463A)),modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){if(title!=null)Text(title,style=MaterialTheme.typography.titleLarge);content()}}}
+@Composable fun Page(title: String,kicker: String="DEIN VEREIN. DEIN WEG.",content: @Composable ColumnScope.()->Unit){
+ val bmw=UiBrand.bmwMode
+ val top=if(bmw)Color(0xFF0A1725) else Color(0xFF172D21)
+ Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(top,Ink,Ink))),contentAlignment=Alignment.TopCenter){
+  if(bmw)Canvas(Modifier.matchParentSize()){
+   val thin=Color.White.copy(alpha=.025f)
+   var y=0f
+   while(y<size.height){drawLine(thin,Offset(0f,y),Offset(size.width,y),1f);y+=44.dp.toPx()}
+   drawRect(Brush.horizontalGradient(listOf(BmwMBlue.copy(alpha=.18f),Color.Transparent)),Offset.Zero,Size(size.width,size.height*.18f))
+  }
+  Column(Modifier.widthIn(max=720.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=if(bmw)18.dp else 20.dp,vertical=20.dp),verticalArrangement=Arrangement.spacedBy(if(bmw)14.dp else 16.dp)){
+   if(bmw){
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+     Column(Modifier.weight(1f)){
+      Text(kicker,color=Color(0xFF9BCBFF),style=MaterialTheme.typography.labelSmall,letterSpacing=1.6.sp)
+      Spacer(Modifier.height(5.dp))
+      Text(title,color=Chalk,style=MaterialTheme.typography.headlineLarge)
+     }
+     Row(horizontalArrangement=Arrangement.spacedBy(3.dp)){
+      Box(Modifier.width(5.dp).height(34.dp).background(Color(0xFF55B8FF)))
+      Box(Modifier.width(5.dp).height(34.dp).background(Color(0xFF1261A0)))
+      Box(Modifier.width(5.dp).height(34.dp).background(BmwMRed))
+     }
+    }
+    HorizontalDivider(color=Color.White.copy(alpha=.12f))
+   }else{
+    Text(kicker,color=Grass,style=MaterialTheme.typography.labelSmall,letterSpacing=2.sp)
+    Text(title,style=MaterialTheme.typography.headlineLarge)
+   }
+   content()
+   Spacer(Modifier.height(20.dp))
+  }
+ }
+}
+@Composable fun Section(title: String?=null,content: @Composable ColumnScope.()->Unit){
+ val bmw=UiBrand.bmwMode
+ Surface(color=if(bmw)BmwSurfaceRaised else Panel,shape=RoundedCornerShape(if(bmw)12.dp else 22.dp),border=BorderStroke(1.dp,if(bmw)BmwLine else Color(0xFF29463A)),shadowElevation=if(bmw)2.dp else 0.dp,modifier=Modifier.fillMaxWidth()){
+  Column(Modifier.padding(if(bmw)16.dp else 18.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+   if(title!=null){
+    if(bmw)Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(9.dp)){
+     Box(Modifier.width(3.dp).height(22.dp).background(BmwMBlue))
+     Text(title,color=Chalk,style=MaterialTheme.typography.titleLarge)
+    }else Text(title,style=MaterialTheme.typography.titleLarge)
+   }
+   content()
+  }
+ }
+}
 
 @Composable fun Pill(text: String,color: Color=Grass){Surface(color=color.copy(alpha=.14f),contentColor=color,shape=CircleShape,border=BorderStroke(1.dp,color.copy(alpha=.35f))){Text(text,Modifier.padding(horizontal=10.dp,vertical=5.dp),style=MaterialTheme.typography.labelMedium)}}
 @Composable fun SuitabilityBadge(player: Player,target: Position){val rating=player.ratingAt(target);val fit=player.fit(target);val color=when{player.position==target->Grass;fit>=.92->Blue;fit>=.84->Gold;else->Clay};Pill("${target.name} · $rating",color)}
 @Composable fun ClubHero(w: World){val c=w.club();val p=w.self();Surface(shape=RoundedCornerShape(26.dp),color=Color(0xFF102C20),border=BorderStroke(1.dp,Grass.copy(alpha=.22f)),modifier=Modifier.fillMaxWidth()){Box(Modifier.fillMaxWidth().height(190.dp)){Canvas(Modifier.fillMaxSize()){drawRect(Brush.verticalGradient(listOf(Color(0xFF244D39),Color(0xFF10261C))),size=size);val line=Chalk.copy(alpha=.16f);for(i in 0..6)drawLine(line,Offset(0f,size.height*(.55f+i*.06f)),Offset(size.width,size.height*(.48f+i*.07f)),1.dp.toPx());drawOval(Color(0xFF0B5A31),Offset(-size.width*.12f,size.height*.58f),Size(size.width*1.25f,size.height*.62f));drawArc(Chalk.copy(alpha=.35f),195f,150f,false,Offset(size.width*.2f,size.height*.62f),Size(size.width*.6f,size.height*.28f),style=Stroke(2.dp.toPx()));drawCircle(Chalk.copy(alpha=.5f),size.width*.045f,Offset(size.width*.78f,size.height*.72f))};Row(Modifier.fillMaxSize().padding(20.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(8.dp)){Pill(if(w.privateTopClubMode&&w.leagues.size==5)"REAL-MODUS" else if(w.user.difficulty==Difficulty.SANDBOX)"SANDBOX" else WorldFactory.leagueName(w,c.tier),if(w.privateTopClubMode&&w.leagues.size==5)Grass else if(w.user.difficulty==Difficulty.SANDBOX)Gold else Grass);Text(c.name,style=MaterialTheme.typography.headlineLarge);Text("${p.name} · ${p.position.label} · ${p.ca}",color=Chalk.copy(alpha=.82f));Text("${c.city} · ${c.stadium.name}",color=Muted,style=MaterialTheme.typography.bodySmall)};Crest(c.logo,c.primary,c.secondary,Modifier.size(90.dp))}}}}
-@Composable fun Action(text: String,enabled: Boolean=true,secondary: Boolean=false,onClick: ()->Unit){if(secondary)OutlinedButton(onClick,Modifier.fillMaxWidth().heightIn(min=48.dp),enabled=enabled,shape=RoundedCornerShape(14.dp)){Text(text)}else Button(onClick,Modifier.fillMaxWidth().heightIn(min=48.dp),enabled=enabled,shape=RoundedCornerShape(14.dp)){Text(text,fontWeight=FontWeight.Bold)}}
+@Composable fun Action(text: String,enabled: Boolean=true,secondary: Boolean=false,onClick: ()->Unit){
+ val shape=RoundedCornerShape(if(UiBrand.bmwMode)8.dp else 14.dp)
+ if(secondary)OutlinedButton(onClick,Modifier.fillMaxWidth().heightIn(min=52.dp),enabled=enabled,shape=shape,border=BorderStroke(1.dp,if(UiBrand.bmwMode)BmwLine else MaterialTheme.colorScheme.outline)){
+  Text(text,color=if(enabled)Chalk else Muted,fontWeight=FontWeight.SemiBold)
+ }else Button(onClick,Modifier.fillMaxWidth().heightIn(min=52.dp),enabled=enabled,shape=shape){
+  Text(text,fontWeight=FontWeight.Bold,color=if(enabled)Color.White else Muted)
+ }
+}
 @Composable fun <T> Pick(label: String,value: T,options: List<T>,name: (T)->String={it.toString()},onChange: (T)->Unit){var open by remember{mutableStateOf(false)};Column(verticalArrangement=Arrangement.spacedBy(3.dp)){Text(label,color=Muted,style=MaterialTheme.typography.labelMedium);Box{OutlinedButton({open=true},Modifier.fillMaxWidth().heightIn(min=48.dp),shape=RoundedCornerShape(8.dp)){Text(name(value),Modifier.weight(1f));Text("▾",Modifier.padding(start=8.dp))};DropdownMenu(open,{open=false},modifier=Modifier.heightIn(max=360.dp)){options.forEach{option->DropdownMenuItem(text={Text(name(option))},onClick={open=false;onChange(option)})}}}}}
 @Composable fun Field(label: String,value: String,onChange: (String)->Unit){OutlinedTextField(value,onChange,label={Text(label)},singleLine=true,modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(8.dp))}
-@Composable fun Meter(label: String,value: Int,maximum: Int=100){Column(verticalArrangement=Arrangement.spacedBy(6.dp)){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(label,color=Muted,style=MaterialTheme.typography.bodySmall);Text("$value",style=MaterialTheme.typography.labelMedium)};LinearProgressIndicator(progress={(value.toFloat()/maximum).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(5.dp),color=if(value<40)Clay else Grass,trackColor=Color(0xFF2D3F34))}}
-@Composable fun Metric(label: String,value: String,modifier: Modifier=Modifier){Column(modifier,verticalArrangement=Arrangement.spacedBy(4.dp)){Text(label,color=Muted,style=MaterialTheme.typography.labelMedium);Text(value,style=MaterialTheme.typography.titleLarge)}}
+@Composable fun Meter(label: String,value: Int,maximum: Int=100){Column(verticalArrangement=Arrangement.spacedBy(7.dp)){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(label,color=if(UiBrand.bmwMode)Color(0xFFD8DEE6) else Muted,style=MaterialTheme.typography.bodyMedium);Text("$value",color=Chalk,style=MaterialTheme.typography.labelLarge,fontWeight=FontWeight.Bold)};LinearProgressIndicator(progress={(value.toFloat()/maximum).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth().height(if(UiBrand.bmwMode)7.dp else 5.dp),color=if(value<40)Clay else if(UiBrand.bmwMode)BmwMBlue else Grass,trackColor=if(UiBrand.bmwMode)Color(0xFF29313B) else Color(0xFF2D3F34))}}
+@Composable fun Metric(label: String,value: String,modifier: Modifier=Modifier){Column(modifier,verticalArrangement=Arrangement.spacedBy(5.dp)){Text(label.uppercase(),color=if(UiBrand.bmwMode)Color(0xFF9EABB9) else Muted,style=MaterialTheme.typography.labelSmall,letterSpacing=if(UiBrand.bmwMode).7.sp else 0.sp);Text(value,color=Chalk,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)}}
 @Composable fun StepSlider(label: String,value: Int,enabled: Boolean=true,onChange: (Int)->Unit){var local by remember(value){mutableFloatStateOf(value.toFloat())};Column{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(label,Modifier.weight(1f));Text("${local.toInt()}",color=Grass)};Slider(local,{local=it},onValueChangeFinished={onChange(local.toInt())},valueRange=1f..5f,steps=3,enabled=enabled)}}
 @Composable fun Confirm(title: String,text: String,onDismiss: ()->Unit,onConfirm: ()->Unit){AlertDialog(onDismissRequest=onDismiss,title={Text(title)},text={Text(text)},confirmButton={TextButton(onConfirm){Text("Bestätigen")}},dismissButton={TextButton(onDismiss){Text("Abbrechen")}})}
 @Composable fun Crest(logo: Logo,primary: Long,secondary: Long,modifier: Modifier=Modifier.size(64.dp)){

@@ -110,7 +110,7 @@ object ScoutingTransferSystem {
   val cost=scoutCost(w,p,region);require(w.club().budget>=cost){"Budget für den Scoutingauftrag reicht nicht."};w.club().budget-=cost
   val weeks=when(region){ScoutRegion.DOMESTIC->2;ScoutRegion.DACH->2;ScoutRegion.EUROPE->3;ScoutRegion.SOUTH_AMERICA,ScoutRegion.WORLD->4}
   w.scoutAssignments[playerId]=ScoutAssignment(playerId,region,weeks,w.calendar.absoluteWeek,cost)
-  w.scoutReports.putIfAbsent(playerId,ScoutReport(playerId=playerId,progress=5,caMin=(p.ca-16).coerceAtLeast(1),caMax=(p.ca+16).coerceAtMost(99),potentialMin=(p.ca-4).coerceAtLeast(1),potentialMax=99,note="Scout beobachtet den Spieler."))
+  w.scoutReports.putIfAbsent(playerId,ScoutReport(playerId=playerId,progress=5,caMin=(p.ca-16).coerceAtLeast(1),caMax=(p.ca+16).coerceAtMost(PLAYER_RATING_MAX),potentialMin=(p.ca-4).coerceAtLeast(1),potentialMax=PLAYER_RATING_MAX,note="Scout beobachtet den Spieler."))
   if(playerId !in w.watchlist)w.watchlist.add(playerId)
  }
  fun report(w:World,p:Player):ScoutReport?=if(p.clubId==w.user.clubId)ScoutReport(p.id,100,p.ca,p.ca,p.hidden.potential,p.hidden.potential,true,true,w.calendar.absoluteWeek,"Vollständige interne Daten") else w.scoutReports[p.id]

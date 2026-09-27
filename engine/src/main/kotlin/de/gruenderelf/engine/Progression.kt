@@ -20,6 +20,10 @@ object TrainingEngine {
    pace+=20;finishing+=20;passing+=20;technique+=20;tackling+=20;strength+=20;stamina+=20;vision+=20;heading+=20;keeping+=20;setPieces+=20
    // Signatur-Boni über das reine +20 hinaus: enge Ballführung, Spielwitz, Abschluss und Standards.
    technique+=8;vision+=8;finishing+=6;passing+=5;pace+=4;setPieces+=6
+   pace=pace.coerceAtMost(PLAYER_RATING_MAX);finishing=finishing.coerceAtMost(PLAYER_RATING_MAX);passing=passing.coerceAtMost(PLAYER_RATING_MAX)
+   technique=technique.coerceAtMost(PLAYER_RATING_MAX);tackling=tackling.coerceAtMost(PLAYER_RATING_MAX);strength=strength.coerceAtMost(PLAYER_RATING_MAX)
+   stamina=stamina.coerceAtMost(PLAYER_RATING_MAX);vision=vision.coerceAtMost(PLAYER_RATING_MAX);heading=heading.coerceAtMost(PLAYER_RATING_MAX)
+   keeping=keeping.coerceAtMost(PLAYER_RATING_MAX);setPieces=setPieces.coerceAtMost(PLAYER_RATING_MAX)
   }
   p.hidden.consistency=(p.hidden.consistency+22).coerceAtMost(120);p.hidden.pressure=(p.hidden.pressure+25).coerceAtMost(120)
   p.hidden.professionalism=(p.hidden.professionalism+12).coerceAtMost(120);p.hidden.development=(p.hidden.development+15).coerceAtMost(120);p.hidden.potential=maxOf(p.hidden.potential,120)
@@ -37,25 +41,68 @@ object TrainingEngine {
  fun apply(w: World)=TrainingSystems.applyAll(w)
 }
 object ConstructionEngine {
- fun price(w: World,f: Facility)=(f.baseCost*(1+(10-w.club().tier)*.45)).toLong()
- fun weeks(w: World,f: Facility)=f.weeks+(10-w.club().tier)/3
+ private fun scalable(f:Facility)=f !in listOf(Facility.CAPACITY,Facility.ARTIFICIAL,Facility.FLOODLIGHTS)
  fun level(s: Stadium,f: Facility): Int=when(f){Facility.PITCH->s.pitchQuality;Facility.TRAINING->s.training;Facility.GYM->s.gym;Facility.MEDICINE->s.medicine;Facility.CABIN->s.cabin;Facility.STAND->s.stand;Facility.CLUBHOUSE->s.clubhouse;Facility.YOUTH->s.youth;Facility.CAPACITY->s.capacity;Facility.FLOODLIGHTS->if(s.floodlights)100 else 0;Facility.ARTIFICIAL->if(s.surface==Surface.ARTIFICIAL)100 else 0}
+ private fun eliteMinimumCost(f:Facility,level:Int):Long{
+  val base=when(f){Facility.TRAINING->75_000_000L;Facility.MEDICINE->90_000_000L;Facility.GYM->65_000_000L;Facility.YOUTH->80_000_000L;Facility.PITCH->45_000_000L;Facility.CLUBHOUSE->35_000_000L;Facility.CABIN->25_000_000L;Facility.STAND->55_000_000L;else->25_000_000L}
+  val stage=when{level>=140->10.0;level>=130->6.0;level>=120->3.5;level>=110->2.0;else->1.0}
+  return (base*stage).toLong()
+ }
+ fun price(w: World,f: Facility):Long{
+  val normal=(f.baseCost*(1+(10-w.club().tier)*.45)).toLong()
+  if(!scalable(f))return normal
+  val current=level(w.club().stadium,f)
+  return if(current<100)normal else maxOf(normal,eliteMinimumCost(f,current))
+ }
+ fun weeks(w: World,f: Facility):Int{
+  val normal=f.weeks+(10-w.club().tier)/3
+  if(!scalable(f))return normal
+  val current=level(w.club().stadium,f)
+  return when{current<100->normal;current<110->maxOf(normal,8);current<120->maxOf(normal,10);current<130->maxOf(normal,12);current<140->maxOf(normal,15);else->maxOf(normal,18)}
+ }
+ private fun delta(s:Stadium,f:Facility):Int{
+  if(f==Facility.CAPACITY)return 250
+  if(!scalable(f))return 0
+  return when(level(s,f)){in Int.MIN_VALUE..99->15;in 100..119->5;in 120..134->3;in 135..144->2;else->1}
+ }
  fun reason(w: World,f: Facility): String? {val c=w.club();val s=c.stadium;return when{
-  w.construction.count{it.clubId==c.id}>=(if(!w.privateTopClubMode&&c.tier>=7)1 else 2)->"Alle Baustellen sind belegt."
+  w.construction.count{it.clubId==c.id}>=(if(!w.privateTopClubMode&&c.tier>=7)1 else if(w.developer.enabled)3 else 2)->"Alle Baustellen sind belegt."
   w.construction.any{it.clubId==c.id&&it.facility==f}->"Dieser Ausbau läuft bereits."
   f==Facility.FLOODLIGHTS&&s.floodlights->"Flutlicht ist vorhanden."
   f==Facility.ARTIFICIAL&&s.surface!=Surface.HARD->"Kunstrasen ersetzt nur Hartplatz."
-  f !in listOf(Facility.CAPACITY,Facility.ARTIFICIAL,Facility.FLOODLIGHTS)&&level(s,f)>=100->"Maximal ausgebaut."
-  c.budget<price(w,f)->"Vereinskasse reicht nicht aus."
+  scalable(f)&&level(s,f)>=FACILITY_LEVEL_MAX->"Elite-Maximum 150 erreicht."
+  c.budget<price(w,f)->"Vereinskasse reicht für ${price(w,f)} € nicht aus."
   else->null
  }}
- fun start(w: World,f: Facility){require(w.live==null){"Baustart nach dem Spiel."};require(reason(w,f)==null){reason(w,f)?:"Ausbau nicht möglich."};val cost=price(w,f);val weeks=weeks(w,f);w.club().budget-=cost;w.construction.add(ConstructionProject(w.nextIds.construction++,w.user.clubId,f,weeks,weeks,cost,if(f==Facility.CAPACITY)250*(11-w.club().tier) else 15));w.news("Baustart: ${f.label}","$cost € investiert. Bauzeit: $weeks Wochen.")}
+ fun start(w: World,f: Facility){
+  require(w.live==null){"Baustart nach dem Spiel."};require(reason(w,f)==null){reason(w,f)?:"Ausbau nicht möglich."}
+  val cost=price(w,f);val duration=weeks(w,f);w.club().budget-=cost
+  val d=if(f==Facility.CAPACITY)250*(11-w.club().tier) else delta(w.club().stadium,f)
+  w.construction.add(ConstructionProject(w.nextIds.construction++,w.user.clubId,f,duration,duration,cost,d))
+  w.news("Baustart: ${f.label}","$cost € investiert. Bauzeit: $duration Wochen. ${if(scalable(f)&&level(w.club().stadium,f)>=100)"Eliteausbau über Stufe 100: kleine Schritte, exponentiell höhere Kosten." else ""}")
+ }
  fun advance(w: World){for(p in w.construction.toList()){
-  p.weeksLeft--;if(p.weeksLeft>0)continue;val c=w.clubs.getValue(p.clubId);val s=c.stadium;fun plus(v: Int)=(v+p.delta).coerceAtMost(100)
-  when(p.facility){Facility.FLOODLIGHTS->s.floodlights=true;Facility.ARTIFICIAL->{s.surface=Surface.ARTIFICIAL;s.pitchQuality=85};Facility.PITCH->s.pitchQuality=plus(s.pitchQuality);Facility.TRAINING->s.training=plus(s.training);Facility.GYM->s.gym=plus(s.gym);Facility.MEDICINE->s.medicine=plus(s.medicine);Facility.CABIN->s.cabin=plus(s.cabin);Facility.STAND->{s.stand=plus(s.stand);s.seats=(s.seats+100).coerceAtMost(s.capacity)};Facility.CAPACITY->s.capacity+=p.delta;Facility.CLUBHOUSE->{s.clubhouse=plus(s.clubhouse);c.members+=15;w.squad(c.id).forEach{it.morale=(it.morale+5).coerceAtMost(100)}};Facility.YOUTH->s.youth=plus(s.youth)}
-  w.construction.remove(p);if(p.clubId==w.user.clubId)w.news("${p.facility.label} fertig","Die Bauarbeiten sind abgeschlossen. Der Ausbau wirkt ab sofort.","good")
+  p.weeksLeft--;if(p.weeksLeft>0)continue
+  val c=w.clubs.getValue(p.clubId);val s=c.stadium
+  fun plus(v: Int)=(v+p.delta).coerceAtMost(FACILITY_LEVEL_MAX)
+  when(p.facility){
+   Facility.FLOODLIGHTS->s.floodlights=true
+   Facility.ARTIFICIAL->{s.surface=Surface.ARTIFICIAL;s.pitchQuality=maxOf(s.pitchQuality,85)}
+   Facility.PITCH->s.pitchQuality=plus(s.pitchQuality)
+   Facility.TRAINING->s.training=plus(s.training)
+   Facility.GYM->s.gym=plus(s.gym)
+   Facility.MEDICINE->s.medicine=plus(s.medicine)
+   Facility.CABIN->s.cabin=plus(s.cabin)
+   Facility.STAND->{s.stand=plus(s.stand);s.seats=(s.seats+maxOf(100,p.delta*100)).coerceAtMost(s.capacity)}
+   Facility.CAPACITY->s.capacity+=p.delta
+   Facility.CLUBHOUSE->{s.clubhouse=plus(s.clubhouse);c.members+=15;w.squad(c.id).forEach{it.morale=(it.morale+5).coerceAtMost(100)}}
+   Facility.YOUTH->s.youth=plus(s.youth)
+  }
+  w.construction.remove(p)
+  if(p.clubId==w.user.clubId)w.news("${p.facility.label} fertig","Die Bauarbeiten sind abgeschlossen. Ausbaustand: ${if(scalable(p.facility))level(s,p.facility) else "aktiv"}.","good")
  }}
 }
+
 object EventsEngine {
  fun apply(w: World)=w.random{rng->
   val c=w.club();if(!rng.chance(if(!w.privateTopClubMode&&c.tier>=7).65 else .22))return@random
@@ -96,7 +143,7 @@ object SeasonEngine {
   for(f in w.fixtures.filter{it.competition==CompetitionType.LEAGUE&&it.matchday==w.calendar.matchday&&!it.played})MatchEngine.record(w,MatchEngine.simulateFullMatch(w,f))
   // Ist der Nutzer in einem Zusatzwettbewerb nicht vertreten, werden diese Partien mit derselben MatchEngine im Hintergrund gespielt.
   simulateScheduledCompetitionBackground(w,w.calendar.matchday)
-  TrainingEngine.apply(w);ConstructionEngine.advance(w)
+  TrainingEngine.apply(w);ConstructionEngine.advance(w);BmwDeveloperSystems.weekly(w)
   for(c in w.clubs.values){
    c.wageBill=w.squad(c.id).sumOf{it.wage};EconomySystem.weekly(w,c)
    for(p in w.squad(c.id)){
@@ -180,10 +227,10 @@ object SeasonEngine {
    for(p in w.players.values.toList()){
     if(p.retired)continue
     if(p.stats.appearances>0)p.career.add(PlayerSeason(w.calendar.season,w.clubs[p.clubId]?.name?:"Vereinslos",p.stats.copy()))
-    p.stats=Stats();val age=w.calendar.season+1-p.birthYear
-    if(age>=35){p.attributes.pace=(p.attributes.pace-1).coerceAtLeast(1);p.attributes.stamina=(p.attributes.stamina-1).coerceAtLeast(1)}
-    if(p.id!=w.user.playerId&&age>=36&&rng.chance(.15+(age-36)*.12)){p.retired=true;p.clubId=0;continue}
-    if(age<=23&&rng.chance(.7))p.attributes.improve(rng.pick(Focus.entries),p.hidden.potential)
+    p.stats=Stats();val age=BmwDeveloperSystems.effectiveAge(w,p,w.calendar.season+1)
+    if(age>=35){val keep=w.developer.longevity[p.id]?.primeRetention?:0.0;if(!w.developer.enabled||rng.chance((1.0-keep).coerceIn(.08,1.0))){p.attributes.pace=(p.attributes.pace-1).coerceAtLeast(1);p.attributes.stamina=(p.attributes.stamina-1).coerceAtLeast(1)}}
+    if(p.id!=w.user.playerId&&age>=36&&rng.chance((.15+(age-36)*.12)*(1.0-(w.developer.longevity[p.id]?.primeRetention?:0.0)*.72))){p.retired=true;p.clubId=0;continue}
+    if(age<=23&&rng.chance(.7))p.attributes.improve(rng.pick(Focus.entries),minOf(p.hidden.potential,REGULAR_DEVELOPMENT_CAP))
     if(p.youth&&age>=23)p.youth=false else if(p.youth)p.youthSquad=if(age<=18)YouthSquad.U19 else YouthSquad.U23
     p.fitness=95.0;p.sharpness=55;p.injuryWeeks=(p.injuryWeeks-4).coerceAtLeast(0);p.unavailableWeeks=0;p.unavailableReason=null;if(p.injuryWeeks==0)p.injury=""
     w.clubs[p.clubId]?.let{club->p.wage=if(club.tier==0)p.wage.coerceAtLeast(1500) else if(w.privateTopClubMode)p.wage.coerceAtLeast(120) else if(club.tier>=7)p.wage.coerceAtMost(15) else (11-club.tier)*rng.int(150,350)}
@@ -210,5 +257,5 @@ object ClubActions {
  }
  fun release(w: World,id: Int){require(w.live==null){"Freistellung erst nach dem Spiel."};val p=w.players.getValue(id);require(id!=w.user.playerId&&p.clubId==w.user.clubId){"Der Spielertrainer bleibt im Verein."};require(p.youth||w.squad().count{!it.youth}>16){"Mindestens 16 Spieler im Kader behalten."};val c=w.club();val wasStarter=id in c.tactics.xi;p.clubId=0;p.youth=false;p.wage=0;p.wantsMove=true;w.training.extra.removeAll{it.playerId==id};c.tactics.bench.remove(id);WorldFactory.reconcileMatchdaySelection(w);w.news("${p.name} verabschiedet","Der Spieler ist freigestellt.")}
  fun talk(w: World,id: Int,kind: Int){val p=w.players.getValue(id);require(p.clubId==w.user.clubId);require(p.lastTalkWeek!=w.calendar.absoluteWeek){"Diese Woche habt ihr bereits gesprochen."};p.lastTalkWeek=w.calendar.absoluteWeek;val delta=when(kind){0->if(p.hidden.ambition>55)5 else -3;1->{p.sharpness=(p.sharpness+3).coerceAtMost(100);4};else->if(p.wantsMove)2 else 3};p.morale=(p.morale+delta).coerceIn(5,100);w.relationships[id]=((w.relationships[id]?:50)+delta).coerceIn(0,100);w.news("Gespräch mit ${p.lastName}","${if(kind==0)"Du forderst mehr Einsatz im Training." else if(kind==1)"Du ermutigst ihn, seine nächste Chance zu nutzen." else "Ihr sprecht offen über seine Rolle."} Moral ${if(delta>=0)"+" else ""}$delta.")}
- fun scouting(w: World,p: Player): String {if(p.clubId==w.user.clubId)return p.ca.toString();return when(w.user.difficulty){Difficulty.CASUAL->p.ca.toString();Difficulty.NORMAL->"${(p.ca-3).coerceAtLeast(1)}–${(p.ca+3).coerceAtMost(99)}";Difficulty.REALISTIC->"${(p.ca-7).coerceAtLeast(1)}–${(p.ca+7).coerceAtMost(99)}";Difficulty.HARDCORE->"${p.ca/15*15+1}–${((p.ca/15+1)*15).coerceAtMost(99)}";Difficulty.SANDBOX->p.ca.toString()}}
+ fun scouting(w: World,p: Player): String {if(p.clubId==w.user.clubId)return p.ca.toString();return when(w.user.difficulty){Difficulty.CASUAL->p.ca.toString();Difficulty.NORMAL->"${(p.ca-3).coerceAtLeast(1)}–${(p.ca+3).coerceAtMost(PLAYER_RATING_MAX)}";Difficulty.REALISTIC->"${(p.ca-7).coerceAtLeast(1)}–${(p.ca+7).coerceAtMost(PLAYER_RATING_MAX)}";Difficulty.HARDCORE->"${p.ca/15*15+1}–${((p.ca/15+1)*15).coerceAtMost(PLAYER_RATING_MAX)}";Difficulty.SANDBOX->p.ca.toString()}}
 }

@@ -5,11 +5,13 @@ object Formations {
   "4-4-2" to listOf(Position.TW,Position.LV,Position.IV,Position.IV,Position.RV,Position.LA,Position.ZM,Position.ZM,Position.RA,Position.ST,Position.ST),
   "4-3-3" to listOf(Position.TW,Position.LV,Position.IV,Position.IV,Position.RV,Position.DM,Position.ZM,Position.ZM,Position.LA,Position.ST,Position.RA),
   "4-2-3-1" to listOf(Position.TW,Position.LV,Position.IV,Position.IV,Position.RV,Position.DM,Position.DM,Position.LA,Position.OM,Position.RA,Position.ST),
+  "4-4-1-1" to listOf(Position.TW,Position.LV,Position.IV,Position.IV,Position.RV,Position.LA,Position.ZM,Position.ZM,Position.RA,Position.OM,Position.ST),
+  "4-5-1" to listOf(Position.TW,Position.LV,Position.IV,Position.IV,Position.RV,Position.LA,Position.ZM,Position.DM,Position.ZM,Position.RA,Position.ST),
   "5-3-2" to listOf(Position.TW,Position.LV,Position.IV,Position.IV,Position.IV,Position.RV,Position.ZM,Position.DM,Position.ZM,Position.ST,Position.ST),
   "3-5-2" to listOf(Position.TW,Position.IV,Position.IV,Position.IV,Position.LA,Position.ZM,Position.DM,Position.ZM,Position.RA,Position.ST,Position.ST))
  fun positions(formation: String)=all[formation]?:all.getValue("4-4-2")
  fun coordinates(formation: String): List<Pair<Float,Float>> {
-  val rows=when(formation){"4-3-3"->listOf(1,4,3,3);"4-2-3-1"->listOf(1,4,2,3,1);"5-3-2"->listOf(1,5,3,2);"3-5-2"->listOf(1,3,5,2);else->listOf(1,4,4,2)}
+  val rows=when(formation){"4-3-3"->listOf(1,4,3,3);"4-2-3-1"->listOf(1,4,2,3,1);"4-4-1-1"->listOf(1,4,4,1,1);"4-5-1"->listOf(1,4,5,1);"5-3-2"->listOf(1,5,3,2);"3-5-2"->listOf(1,3,5,2);else->listOf(1,4,4,2)}
   return rows.flatMapIndexed{r,n->(1..n).map{i->i.toFloat()/(n+1) to (.9f-r*.78f/(rows.size-1))}}
  }
 }
