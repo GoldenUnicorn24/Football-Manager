@@ -407,6 +407,14 @@ object MatchSpatialModel {
             2, 3 -> 2
             else -> 3
         }
+        val freshTurnover =
+            m.liveEventSerial - m.lastPossessionChangeEventSerial in 0..2 &&
+            m.possessionChangeReason in setOf(
+                PossessionChangeReason.TACKLE,
+                PossessionChangeReason.INTERCEPTION,
+                PossessionChangeReason.CLEARANCE,
+            )
+        if (freshTurnover && ballProgress > .34f) count = min(3, count + 1)
         if (ballProgress < .20f) count = 1
         else if (ballProgress < .30f) count = min(count, 2)
 
@@ -495,6 +503,8 @@ object MatchSpatialModel {
             val support = if (isHome) homeSupport else awaySupport
             val runners = if (isHome) homeRunners else awayRunners
             val pressing = if (isHome) homePress else awayPress
+            val supportOrder = support.sortedBy { idx -> formationBase(m, isHome, idx).first }
+            val runnerOrder = runners.sortedBy { idx -> formationBase(m, isHome, idx).first }
 
             list.forEachIndexed { index, id ->
                 if (id == 0 || id in m.sentOff || id in m.injured) return@forEachIndexed
@@ -513,16 +523,50 @@ object MatchSpatialModel {
                     if (owns) {
                         val side = if (formationBase(m, isHome, index).first < .5f) -1f else 1f
                         if (index in support && PlayerInstruction.HOLD_POSITION !in ins) {
-                            lat += (bx - lat) * .34f + side * .018f
-                            progress += (ballProgress - progress) * .30f
+                            val supportRank = supportOrder.indexOf(index).coerceAtLeast(0)
+                            // Different support players occupy different vertices of
+                            // the passing triangle instead of collapsing onto one point.
+                            when (supportRank % 3) {
+                                0 -> {
+                                    lat += (bx - lat) * .38f + side * .020f
+                                    progress += (ballProgress - progress) * .28f - .018f
+                                }
+                                1 -> {
+                                    lat += (bx - lat) * .25f - side * .032f
+                                    progress += (ballProgress - progress) * .24f + .010f
+                                }
+                                else -> {
+                                    lat += (bx - lat) * .18f + side * .050f
+                                    progress += (ballProgress - progress) * .20f - .030f
+                                }
+                            }
                         }
                         if (index in runners && PlayerInstruction.HOLD_POSITION !in ins) {
-                            progress += when (m.livePhase) {
-                                LivePhase.COUNTER -> .105f
-                                LivePhase.DANGEROUS_ATTACK -> .080f
-                                LivePhase.ATTACK -> .055f
-                                else -> .035f
+                            val runnerRank = runnerOrder.indexOf(index).coerceAtLeast(0)
+                            val runDistance = when (m.livePhase) {
+                                LivePhase.COUNTER -> .115f
+                                LivePhase.DANGEROUS_ATTACK -> .085f
+                                LivePhase.ATTACK -> .060f
+                                else -> .038f
                             }
+                            progress += runDistance * when (runnerRank % 3) {
+                                0 -> 1.00f
+                                1 -> .82f
+                                else -> .68f
+                            }
+
+                            // Each runner attacks a different channel. Wide players
+                            // stay wide, central players split the centre-backs.
+                            val channelShift = when (pos) {
+                                Position.LA -> -.040f
+                                Position.RA -> .040f
+                                Position.ST -> if (runnerRank % 2 == 0) -.022f else .022f
+                                Position.OM -> if (bx < .5f) .026f else -.026f
+                                Position.LV -> -.052f
+                                Position.RV -> .052f
+                                else -> 0f
+                            }
+                            lat += channelShift
                         }
 
                         when (r) {
@@ -565,7 +609,13 @@ object MatchSpatialModel {
                                     Position.ZM -> if (PlayerInstruction.TIGHT_MARKING in ins) .18f else .10f
                                     else -> .08f
                                 }
-                                lat += (mark.first - lat) * markFactor
+                                val laneFactor = when (pos) {
+                                    Position.IV -> .72f
+                                    Position.LV, Position.RV -> 1.05f
+                                    Position.DM -> .90f
+                                    else -> .82f
+                                }
+                                lat += (mark.first - lat) * markFactor * laneFactor
                                 val rawMarkedProgress = progress + (mark.second - progress) * (markFactor * .55f)
                                 val maxLineBreak = when (pos) {
                                     Position.IV -> .018f
