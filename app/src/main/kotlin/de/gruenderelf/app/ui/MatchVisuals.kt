@@ -143,6 +143,32 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
         label = "top-down-player-motion",
     )
 
+    // Taktische Zustände blenden weich ineinander. So springt die komplette
+    // Mannschaft bei Ballverlust oder Wechsel von "Angriff" zu "Gefährlicher
+    // Angriff" nicht mehr schlagartig auf eine neue Linie.
+    val phaseTarget = when (m.livePhase) {
+        LivePhase.POSSESSION, LivePhase.THROW_IN -> .12f
+        LivePhase.ATTACK, LivePhase.FREE_KICK -> .56f
+        LivePhase.DANGEROUS_ATTACK, LivePhase.DANGEROUS_FREE_KICK -> .94f
+        LivePhase.COUNTER -> .78f
+        LivePhase.CORNER -> 1f
+        else -> .36f
+    }
+    val phaseBlend by animateFloatAsState(
+        targetValue = phaseTarget,
+        animationSpec = tween((frameDurationMs * .38f).toInt().coerceIn(300, 850), easing = FastOutSlowInEasing),
+        label = "tactical-phase-blend",
+    )
+    val homePossessionBlend by animateFloatAsState(
+        targetValue = if (activeClubId == home.id) 1f else 0f,
+        animationSpec = tween(520, easing = FastOutSlowInEasing),
+        label = "possession-shape-blend",
+    )
+    // In geraden Spielperioden wird die Darstellung um 180° gedreht. Dadurch
+    // wechseln die Mannschaften zur zweiten Halbzeit/zweiten Verlängerung
+    // tatsächlich die Seiten; die Engine-Koordinaten bleiben dabei unangetastet.
+    val endsSwitched = m.period in setOf(2, 4)
+
     val actorName = actor?.name ?: activeClub.shortName
     val actorNumber = actor?.number?.toString() ?: ""
     val textMeasurer = rememberTextMeasurer()
@@ -189,9 +215,11 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     val liveBallY = ballY.value
 
                     fun screenPoint(lateral: Float, longitudinal: Float): Offset {
+                        val viewLateral = if (endsSwitched) 1f - lateral else lateral
+                        val viewLongitudinal = if (endsSwitched) 1f - longitudinal else longitudinal
                         return Offset(
-                            fieldLeft + longitudinal.coerceIn(.015f, .985f) * fieldW,
-                            fieldTop + lateral.coerceIn(.015f, .985f) * fieldH,
+                            fieldLeft + viewLongitudinal.coerceIn(.015f, .985f) * fieldW,
+                            fieldTop + viewLateral.coerceIn(.015f, .985f) * fieldH,
                         )
                     }
 
@@ -251,8 +279,15 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     fun teamSlots(isHome: Boolean) = Formations.positions(teamFormation(isHome))
                     fun teamCoords(isHome: Boolean) = if (isHome) homeCoords else awayCoords
                     fun teamHasBall(isHome: Boolean) = activeClubId == if (isHome) home.id else away.id
+                    fun teamPossessionWeight(isHome: Boolean) = if (isHome) homePossessionBlend else 1f - homePossessionBlend
+                    // Mannschaftszentrierte Koordinaten: 0 = eigene linke Seite/eigenes Tor,
+                    // 1 = eigene rechte Seite/gegnerisches Tor. Bei der Auswärtsmannschaft
+                    // werden daher BEIDE Achsen gespiegelt.
+                    fun teamBallLateral(isHome: Boolean) = if (isHome) liveBallX else 1f - liveBallX
                     fun canonicalBallProgress(isHome: Boolean) = if (isHome) liveBallY else 1f - liveBallY
-                    fun screenLongitudinal(isHome: Boolean, progress: Float) = if (isHome) progress else 1f - progress
+                    fun fieldLateral(isHome: Boolean, teamLateral: Float) = if (isHome) teamLateral else 1f - teamLateral
+                    fun fieldLongitudinal(isHome: Boolean, progress: Float) = if (isHome) progress else 1f - progress
+                    fun mix(a: Float, b: Float, t: Float) = a + (b - a) * t.coerceIn(0f, 1f)
 
                     fun effectiveLine(isHome: Boolean): Int {
                         val c = teamClub(isHome)
@@ -298,8 +333,9 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
 
                     fun formationBase(isHome: Boolean, index: Int): Pair<Float, Float> {
                         val base = teamCoords(isHome).getOrNull(index) ?: (.5f to .5f)
-                        // Formations.coordinates: GK liegt bei ~.90, Stürmer bei ~.12.
-                        // Für unsere taktische Achse drehen wir das zu 0 = eigenes Tor.
+                        // Formations.coordinates wird in ein einheitliches Team-Koordinatensystem
+                        // gedreht. Dadurch steht z.B. der LV der auswärts nach links angreifenden
+                        // Mannschaft auch wirklich auf DEREN linker Seite und nicht gespiegelt falsch.
                         return base.first to (1f - base.second)
                     }
 
@@ -312,69 +348,61 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                         val ballProgress = canonicalBallProgress(isHome)
                         val line = effectiveLine(isHome)
                         val mentality = effectiveMentality(isHome)
-                        val lineBias = (line - 3) * .022f
-                        val mentalityBias = (mentality - 3) * .012f
+                        val lineBias = (line - 3) * .026f
+                        val mentalityBias = (mentality - 3) * .014f
+                        val possessionWeight = teamPossessionWeight(isHome)
 
-                        return if (hasBall) {
-                            val teamLength = when (m.livePhase) {
-                                LivePhase.DANGEROUS_ATTACK -> .34f
-                                LivePhase.ATTACK -> .41f
-                                LivePhase.COUNTER -> .54f
-                                LivePhase.CORNER -> .29f
-                                LivePhase.DANGEROUS_FREE_KICK -> .32f
-                                LivePhase.FREE_KICK -> .40f
-                                else -> .47f
-                            }
-                            var back = ballProgress - teamLength + lineBias + mentalityBias
-
-                            // Entscheidender Unterschied zur alten Version:
-                            // Bei etabliertem Angriff rückt die Restverteidigung wirklich bis
-                            // an/über die Mittellinie nach und bleibt nicht am eigenen 16er.
-                            if (m.livePhase == LivePhase.DANGEROUS_ATTACK && ballProgress >= .68f) {
-                                back = maxOf(back, ballProgress - .38f)
-                                back = maxOf(back, .40f + (ballProgress - .68f) * .38f)
-                            } else if (m.livePhase == LivePhase.ATTACK && ballProgress >= .60f) {
-                                back = maxOf(back, ballProgress - .45f)
-                            }
-                            if (if (isHome) m.homeAllOutAttack else m.awayAllOutAttack) back += .045f
-                            if (if (isHome) m.homeConserveEnergy else m.awayConserveEnergy) back -= .045f
-                            back.coerceIn(.16f, .64f)
-                        } else {
-                            // Ohne Ball folgt die Kette der Ballhöhe. Je näher der Gegner dem
-                            // eigenen Tor kommt, desto tiefer und kompakter wird der Block.
-                            var back = .095f + ballProgress * .53f + lineBias + mentalityBias * .35f
-                            if (m.livePhase == LivePhase.DANGEROUS_ATTACK && ballProgress <= .30f) {
-                                back = minOf(back, .18f + ballProgress * .10f)
-                            }
-                            if (m.livePhase == LivePhase.COUNTER && ballProgress <= .42f) back -= .025f
-                            back.coerceIn(.085f, .61f)
+                        // Ballbesitz: die Restverteidigung rückt als Einheit nach. Bei Ball am
+                        // gegnerischen Strafraum steht die Kette typischerweise um die Mittellinie
+                        // statt am eigenen Sechzehner.
+                        var attackBack =
+                            .115f + ballProgress * (.49f + phaseBlend * .035f) +
+                                lineBias + mentalityBias + phaseBlend * .015f
+                        if (m.livePhase == LivePhase.COUNTER) attackBack -= .055f
+                        if (m.livePhase == LivePhase.CORNER) attackBack = maxOf(attackBack, .52f)
+                        if (m.livePhase == LivePhase.DANGEROUS_ATTACK && ballProgress > .72f) {
+                            attackBack = maxOf(attackBack, .47f + (ballProgress - .72f) * .37f)
                         }
+                        if (if (isHome) m.homeAllOutAttack else m.awayAllOutAttack) attackBack += .055f
+                        if (if (isHome) m.homeConserveEnergy else m.awayConserveEnergy) attackBack -= .055f
+                        attackBack = attackBack.coerceIn(.12f, .67f)
+
+                        // Gegen den Ball: je näher der Gegner kommt, desto tiefer der Block.
+                        // Hohe Linie/Pressing hält die Kette höher, ohne dass sie blind zum Ball rennt.
+                        var defendBack =
+                            .105f + ballProgress * .43f + lineBias +
+                                (effectivePressing(isHome) - 3) * .010f - phaseBlend * .018f
+                        if (m.livePhase == LivePhase.DANGEROUS_ATTACK && ballProgress < .31f) {
+                            defendBack = minOf(defendBack, .155f + ballProgress * .10f)
+                        }
+                        if (m.livePhase == LivePhase.COUNTER && ballProgress < .48f) defendBack -= .030f
+                        defendBack = defendBack.coerceIn(.075f, .58f)
+
+                        // 520-ms-Besitzblendung sorgt dafür, dass nach Ballverlust nicht die ganze
+                        // Mannschaft in einem Frame vom Angriffs- in den Defensivblock springt.
+                        return mix(defendBack, attackBack, possessionWeight)
                     }
 
                     fun teamFrontLine(isHome: Boolean, hasBall: Boolean, backLine: Float): Float {
                         val ballProgress = canonicalBallProgress(isHome)
-                        return if (hasBall) {
-                            val ahead = when (m.livePhase) {
-                                LivePhase.COUNTER -> .11f
-                                LivePhase.DANGEROUS_ATTACK -> .055f
-                                LivePhase.ATTACK -> .065f
-                                LivePhase.CORNER -> .035f
-                                else -> .08f
-                            }
-                            maxOf(backLine + .25f, ballProgress + ahead).coerceIn(.42f, .975f)
-                        } else {
-                            val length = when (m.livePhase) {
-                                LivePhase.DANGEROUS_ATTACK -> .285f
-                                LivePhase.ATTACK -> .335f
-                                LivePhase.COUNTER -> .40f
-                                else -> .36f
-                            }
-                            (backLine + length).coerceAtMost(.79f)
-                        }
+                        val possessionWeight = teamPossessionWeight(isHome)
+                        val attackAhead = mix(.075f, .040f, phaseBlend)
+                        val attackMinLength = mix(.35f, .28f, phaseBlend)
+                        var attackFront = maxOf(backLine + attackMinLength, ballProgress + attackAhead)
+                        if (m.livePhase == LivePhase.COUNTER) attackFront = maxOf(attackFront, ballProgress + .115f)
+                        attackFront = attackFront.coerceIn(.40f, .975f)
+
+                        val defensiveLength =
+                            mix(.39f, .285f, phaseBlend) +
+                                (effectivePressing(isHome) - 3) * .012f
+                        val defendFront = (backLine + defensiveLength).coerceIn(.34f, .82f)
+                        return mix(defendFront, attackFront, possessionWeight)
                     }
 
                     fun skeletonPosition(isHome: Boolean, index: Int, id: Int): Pair<Float, Float> {
                         val hasBall = teamHasBall(isHome)
+                        val possessionWeight = teamPossessionWeight(isHome)
+                        val teamBallLat = teamBallLateral(isHome)
                         val (baseLat, _) = formationBase(isHome, index)
                         val position = slotPosition(isHome, index, id)
                         val width = effectiveWidth(isHome)
@@ -388,7 +416,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                             var keeperProgress = .048f + backLine * .38f
                             if (playerRole(isHome, id) == PlayerRole.BUILD_UP_KEEPER) keeperProgress += .025f
                             keeperProgress = minOf(keeperProgress, backLine - .12f).coerceIn(.045f, .28f)
-                            val keeperLat = .5f + (liveBallX - .5f) * .22f
+                            val keeperLat = .5f + (teamBallLat - .5f) * .22f
                             return keeperLat.coerceIn(.36f, .64f) to keeperProgress
                         }
 
@@ -396,9 +424,11 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                         var progress = backLine + (frontLine - backLine) * norm
 
                         // Mannschaftsbreite plus ballseitiges Verschieben.
-                        val widthScale = if (hasBall) .77f + width * .072f else .61f + width * .054f
-                        val ballShift = if (hasBall) .16f else .29f
-                        val center = .5f + (liveBallX - .5f) * ballShift
+                        val attackWidthScale = .77f + width * .072f
+                        val defendWidthScale = .61f + width * .054f
+                        val widthScale = mix(defendWidthScale, attackWidthScale, possessionWeight)
+                        val ballShift = mix(.29f, .16f, possessionWeight)
+                        val center = .5f + (teamBallLat - .5f) * ballShift
                         var lateral = center + (baseLat - .5f) * widthScale
 
                         // Defensive Rollen-/Positionsgrundordnung.
@@ -415,7 +445,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
 
                         // Ballferne Seite rückt ein, ballnahe Seite bleibt etwas breiter.
                         if (!hasBall) {
-                            val sameSide = (baseLat < .5f) == (liveBallX < .5f)
+                            val sameSide = (baseLat < .5f) == (teamBallLat < .5f)
                             if (!sameSide) lateral += (.5f - lateral) * .18f
                         }
 
@@ -446,7 +476,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                             .sortedBy { idx ->
                                 val id = xi[idx]
                                 val p = skeletonPosition(isHome, idx, id)
-                                val dx = p.first - liveBallX
+                                val dx = p.first - teamBallLateral(isHome)
                                 val dy = p.second - ballProgress
                                 val pos = slotPosition(isHome, idx, id)
                                 val positionalBonus = when (pos) {
@@ -516,7 +546,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                             .sortedBy { idx ->
                                 val id = xi[idx]
                                 val p = skeletonPosition(isHome, idx, id)
-                                val dx = p.first - liveBallX
+                                val dx = p.first - teamBallLateral(isHome)
                                 val dy = p.second - ballProgress
                                 val pos = slotPosition(isHome, idx, id)
                                 val role = playerRole(isHome, id)
@@ -543,6 +573,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     fun logicalPlayerPosition(isHome: Boolean, index: Int, id: Int): Pair<Float, Float> {
                         val hasBall = teamHasBall(isHome)
                         val ballProgress = canonicalBallProgress(isHome)
+                        val teamBallLat = teamBallLateral(isHome)
                         val position = slotPosition(isHome, index, id)
                         val role = playerRole(isHome, id)
                         val instructions = playerInstructions(isHome, id)
@@ -555,7 +586,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                         var progress = skeleton.second
 
                         if (id == m.livePlayerId) {
-                            lateral = liveBallX
+                            lateral = teamBallLat
                             progress = ballProgress
                         } else if (!keeper) {
                             if (hasBall) {
@@ -563,7 +594,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
 
                                 if (index in support && PlayerInstruction.HOLD_POSITION !in instructions) {
                                     // Dreiecke um den Ball statt elf Punkte auf parallelen Linien.
-                                    lateral += (liveBallX - lateral) * .34f + side * .018f
+                                    lateral += (teamBallLat - lateral) * .34f + side * .018f
                                     progress += (ballProgress - progress) * .30f
                                 }
 
@@ -590,7 +621,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                                     PlayerRole.DEEP_PLAYMAKER -> progress -= .025f
                                     PlayerRole.BOX_TO_BOX -> progress += .030f
                                     PlayerRole.PLAYMAKER -> {
-                                        lateral += (liveBallX - lateral) * .12f
+                                        lateral += (teamBallLat - lateral) * .12f
                                         progress += (ballProgress - progress) * .10f
                                     }
                                     PlayerRole.INSIDE_FORWARD -> {
@@ -626,10 +657,10 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                                 if (index in pressers) {
                                     val pressing = effectivePressing(isHome)
                                     val pressure = (.38f + pressing * .065f).coerceIn(.44f, .70f)
-                                    lateral += (liveBallX - lateral) * pressure
+                                    lateral += (teamBallLat - lateral) * pressure
                                     progress += (ballProgress - progress) * pressure
                                 } else if (PlayerInstruction.TIGHT_MARKING in instructions) {
-                                    lateral += (liveBallX - lateral) * .08f
+                                    lateral += (teamBallLat - lateral) * .08f
                                     progress += (ballProgress - progress) * .07f
                                 }
 
@@ -657,8 +688,9 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
 
                         // Verhindert unrealistische Überlappung des Torwarts/der Torlinie.
                         progress = if (keeper) progress.coerceIn(.04f, .30f) else progress.coerceIn(.07f, .975f)
-                        val screenLong = screenLongitudinal(isHome, progress)
-                        return lateral.coerceIn(.035f, .965f) to screenLong.coerceIn(.018f, .982f)
+                        val physicalLateral = fieldLateral(isHome, lateral)
+                        val physicalLong = fieldLongitudinal(isHome, progress)
+                        return physicalLateral.coerceIn(.035f, .965f) to physicalLong.coerceIn(.018f, .982f)
                     }
 
                     data class DotPlayer(
@@ -722,7 +754,8 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     val activeDot = dots.firstOrNull { it.active }
                     val engineBall = screenPoint(liveBallX, liveBallY)
                     val ballPoint = if (activeDot != null) {
-                        val direction = if (activeDot.isHome) 1f else -1f
+                        val attacksRight = if (!endsSwitched) activeDot.isHome else !activeDot.isHome
+                        val direction = if (attacksRight) 1f else -1f
                         Offset(activeDot.point.x + 12.dp.toPx() * direction, activeDot.point.y + 7.dp.toPx())
                     } else engineBall
                     drawCircle(Color.Black.copy(alpha = .42f), 4.6.dp.toPx(), Offset(ballPoint.x + 1.dp.toPx(), ballPoint.y + 1.3.dp.toPx()))
