@@ -333,7 +333,8 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     val activeDot = dots.firstOrNull { it.active }
                     val engineBall = screenPoint(liveBallX, liveBallY)
                     val ballPoint = if (activeDot != null) {
-                        val direction = if (activeDot.isHome) 1f else -1f
+                        // HOME attacks left (toward engine y=0), AWAY attacks right (toward y=1).
+                        val direction = if (activeDot.isHome) -1f else 1f
                         Offset(activeDot.point.x + 12.dp.toPx() * direction, activeDot.point.y + 7.dp.toPx())
                     } else engineBall
                     drawCircle(Color.Black.copy(alpha = .42f), 4.6.dp.toPx(), Offset(ballPoint.x + 1.dp.toPx(), ballPoint.y + 1.3.dp.toPx()))
