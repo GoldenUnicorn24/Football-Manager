@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 private fun LiveMatch.effectiveLiveClubId() = liveClubId.takeIf { it == homeId || it == awayId } ?: chainOwnerClubId.takeIf { it == homeId || it == awayId } ?: if (homeInPossession) homeId else awayId
 
@@ -125,7 +126,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
     val event = m.liveEventSerial
 
     LaunchedEffect(event, m.livePhase, frameDurationMs, targetX, targetY) {
-        val animationMs = (frameDurationMs * .92).toInt().coerceIn(260, 3400)
+        val animationMs = (frameDurationMs * .78).toInt().coerceIn(220, 2500)
         coroutineScope {
             launch { ballX.animateTo(targetX, tween(animationMs, easing = FastOutSlowInEasing)) }
             launch { ballY.animateTo(targetY, tween(animationMs, easing = FastOutSlowInEasing)) }
@@ -187,18 +188,27 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
         targetY,
         frameDurationMs,
     ) {
-        val playerAnimationMs = (frameDurationMs * .94).toInt().coerceIn(300, 3500)
+        val baseAnimationMs = (frameDurationMs * .74).toInt().coerceIn(260, 2400)
         coroutineScope {
             spatialFrame.players.forEach { p ->
                 val lat = playerLatAnimations.getValue(p.id)
                 val long = playerLongAnimations.getValue(p.id)
                 val scale = playerScaleAnimations.getValue(p.id)
-                launch { lat.animateTo(p.lateral, tween(playerAnimationMs, easing = FastOutSlowInEasing)) }
-                launch { long.animateTo(p.longitudinal, tween(playerAnimationMs, easing = FastOutSlowInEasing)) }
+                val dx = p.lateral - lat.value
+                val dy = p.longitudinal - long.value
+                val distance = sqrt(dx * dx + dy * dy)
+                // Kleine Korrekturen enden früh, große Verschiebungen bekommen etwas
+                // mehr Zeit. Dadurch gleitet die Mannschaft als Block statt zwischen
+                // Engine-Ticks zu springen.
+                val movementMs = (baseAnimationMs * (.72f + distance.coerceAtMost(.28f) * 1.35f))
+                    .toInt()
+                    .coerceIn(220, 2800)
+                launch { lat.animateTo(p.lateral, tween(movementMs, easing = LinearOutSlowInEasing)) }
+                launch { long.animateTo(p.longitudinal, tween(movementMs, easing = LinearOutSlowInEasing)) }
                 launch {
                     scale.animateTo(
                         if (p.active) 2.35f else 1f,
-                        tween((playerAnimationMs / 4).coerceIn(140, 360), easing = FastOutSlowInEasing),
+                        tween(190, easing = FastOutSlowInEasing),
                     )
                 }
             }
@@ -233,10 +243,16 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     val fieldH = fieldBottom - fieldTop
                     val liveBallX = ballX.value
                     val liveBallY = ballY.value
+                    // Realistische Seitenwechsel: Die Engine behält ihre kanonischen
+                    // Koordinaten (HOME -> y=0, AWAY -> y=1). Für die Darstellung
+                    // drehen wir in Halbzeit 2 und 4 nur die Längsachse.
+                    val switchEnds = m.period == 2 || m.period == 4
+                    fun displayLongitudinal(longitudinal: Float): Float =
+                        if (switchEnds) 1f - longitudinal else longitudinal
 
                     fun screenPoint(lateral: Float, longitudinal: Float): Offset {
                         return Offset(
-                            fieldLeft + longitudinal.coerceIn(.015f, .985f) * fieldW,
+                            fieldLeft + displayLongitudinal(longitudinal.coerceIn(.015f, .985f)) * fieldW,
                             fieldTop + lateral.coerceIn(.015f, .985f) * fieldH,
                         )
                     }
@@ -344,9 +360,12 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     val activeDot = dots.firstOrNull { it.active }
                     val engineBall = screenPoint(liveBallX, liveBallY)
                     val ballPoint = if (activeDot != null) {
-                        // HOME attacks left (toward engine y=0), AWAY attacks right (toward y=1).
-                        val direction = if (activeDot.isHome) -1f else 1f
-                        Offset(activeDot.point.x + 12.dp.toPx() * direction, activeDot.point.y + 7.dp.toPx())
+                        // Engine: HOME attacks toward y=0, AWAY toward y=1.
+                        // On screen the direction flips after the interval because
+                        // teams change ends, while ball/player coordinates stay consistent.
+                        val canonicalDirection = if (activeDot.isHome) -1f else 1f
+                        val screenDirection = if (switchEnds) -canonicalDirection else canonicalDirection
+                        Offset(activeDot.point.x + 12.dp.toPx() * screenDirection, activeDot.point.y + 7.dp.toPx())
                     } else engineBall
                     drawCircle(Color.Black.copy(alpha = .42f), 4.6.dp.toPx(), Offset(ballPoint.x + 1.dp.toPx(), ballPoint.y + 1.3.dp.toPx()))
                     drawCircle(Color.White, 4.2.dp.toPx(), ballPoint)
@@ -380,8 +399,12 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                 }
             }
 
+            val endsSwitched = m.period == 2 || m.period == 4
             Text(
-                "← ${home.shortName} greift links an · ${away.shortName} greift rechts an → · Formation, Linien & Pressing bewegen sich mit dem Ball",
+                if (!endsSwitched)
+                    "← ${home.shortName} greift an · ${away.shortName} greift an → · Seiten & Ballrichtung stimmen mit der Match-Engine"
+                else
+                    "← ${away.shortName} greift an · ${home.shortName} greift an → · Seitenwechsel nach der Pause",
                 color = Muted,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
