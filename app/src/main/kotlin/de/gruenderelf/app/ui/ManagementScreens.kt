@@ -295,10 +295,10 @@ private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}
   Section("Match-Ansicht"){
    Text("Wähle die Darstellung für Live-Spiele.",color=Muted,style=MaterialTheme.typography.bodySmall)
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
-    Column(Modifier.weight(1f)){Text("Taktische Draufsicht 2.0",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Alle 22 Spieler · echte Blockverschiebung · Restverteidigung rückt mit · Ballbesitzer groß." else "Klassische Gründerelf-Matchansicht ist aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+    Column(Modifier.weight(1f)){Text("Taktische Draufsicht 3.0",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Alle 22 Spieler · korrekte Angriffsrichtung · flüssige Blockverschiebung · realistische Linien." else "Klassische Gründerelf-Matchansicht ist aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)}
     Switch(checked=tacticalMatchView,onCheckedChange={vm.setTacticalMatchView(it)})
    }
-   Text("AUS = bisherige Matchansicht unverändert. AN = taktische Draufsicht mit phasenabhängigen Abständen, Pressing, Laufwegen und nachrückender Abwehr. Bei Schüssen springt die bekannte Toransicht automatisch hinein.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   Text("AUS = bisherige Matchansicht unverändert. AN = neue räumliche Matchlogik mit korrekter Heim-/Auswärtsrichtung, flüssigem Nachrücken, Restverteidigung, Pressing, Laufwegen und Abseitslinie. Bei Schüssen springt die bekannte Toransicht automatisch hinein.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
   Section("Match-Sounds"){
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
