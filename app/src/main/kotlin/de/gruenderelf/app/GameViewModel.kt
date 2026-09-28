@@ -25,7 +25,8 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  val slots=repo.saves.stateIn(viewModelScope,SharingStarted.Eagerly,emptyList())
  val lastSlot=repo.lastSlot.stateIn(viewModelScope,SharingStarted.Eagerly,1)
  val matchSpeed=repo.matchSpeed.stateIn(viewModelScope,SharingStarted.Eagerly,MatchSpeed.NORMAL)
- val soundsEnabled=repo.soundsEnabled.stateIn(viewModelScope,SharingStarted.Eagerly,true)\n val tacticalMatchView=repo.tacticalMatchView.stateIn(viewModelScope,SharingStarted.Eagerly,false)
+ val soundsEnabled=repo.soundsEnabled.stateIn(viewModelScope,SharingStarted.Eagerly,true)
+ val tacticalMatchView=repo.tacticalMatchView.stateIn(viewModelScope,SharingStarted.Eagerly,false)
  val changelogSeenVersion=repo.changelogSeenVersion.stateIn(viewModelScope,SharingStarted.Eagerly,CHANGELOG_LOADING)
  val developerPasswordConfigured=repo.developerPasswordConfigured.stateIn(viewModelScope,SharingStarted.Eagerly,false)
  private fun memoryPressure(){
@@ -67,7 +68,8 @@ class GameViewModel(application: Application): AndroidViewModel(application){
   try{block()}catch(e:CancellationException){throw e}catch(e:Exception){mutable.update{it.copy(error=e.message?:fallback)}}
  }}
  fun setMatchSpeed(v: MatchSpeed)=preferenceWrite("Das Spieltempo konnte nicht gespeichert werden."){repo.setMatchSpeed(v)}
- fun setSoundsEnabled(enabled: Boolean)=preferenceWrite("Die Sound-Einstellung konnte nicht gespeichert werden."){repo.setSoundsEnabled(enabled)}\n fun setTacticalMatchView(enabled:Boolean)=preferenceWrite("Die Match-Ansicht konnte nicht gespeichert werden."){repo.setTacticalMatchView(enabled)}
+ fun setSoundsEnabled(enabled: Boolean)=preferenceWrite("Die Sound-Einstellung konnte nicht gespeichert werden."){repo.setSoundsEnabled(enabled)}
+ fun setTacticalMatchView(enabled:Boolean)=preferenceWrite("Die Match-Ansicht konnte nicht gespeichert werden."){repo.setTacticalMatchView(enabled)}
  fun markChangelogSeen(version:String=CHANGELOG_VERSION)=preferenceWrite("Der Changelog-Status konnte nicht gespeichert werden."){repo.markChangelogSeen(version)}
  fun openDeveloperMode(password:String,configure:Boolean=false)=work{
   require(repo.verifyDeveloperPassword(password)){"Developer-Code falsch."}
