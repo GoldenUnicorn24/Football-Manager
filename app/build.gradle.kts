@@ -15,7 +15,7 @@ android {
  buildToolsVersion="36.0.0"
  defaultConfig {
   applicationId="de.gruenderelf.app"; minSdk=26; targetSdk=36
-  versionCode=67; versionName="0.5.23-bmw13-realistic-flow"
+  versionCode=68; versionName="0.5.23-bmw14-individual-motion"
   testInstrumentationRunner="androidx.test.runner.AndroidJUnitRunner"
  }
  signingConfigs {
