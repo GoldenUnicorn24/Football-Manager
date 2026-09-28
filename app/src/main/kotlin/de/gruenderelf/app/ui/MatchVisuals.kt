@@ -257,9 +257,9 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     fun effectiveLine(isHome: Boolean): Int {
                         val c = teamClub(isHome)
                         return when {
-                            if (isHome) m.homeConserveEnergy else m.awayConserveEnergy -> 1
-                            if (isHome) m.homeAllOutAttack else m.awayAllOutAttack -> 5
-                            if (isHome) m.homeControlGame else m.awayControlGame -> 2
+                            (if (isHome) m.homeConserveEnergy else m.awayConserveEnergy) -> 1
+                            (if (isHome) m.homeAllOutAttack else m.awayAllOutAttack) -> 5
+                            (if (isHome) m.homeControlGame else m.awayControlGame) -> 2
                             else -> c.tactics.line
                         }.coerceIn(1, 5)
                     }
@@ -267,9 +267,9 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     fun effectivePressing(isHome: Boolean): Int {
                         val c = teamClub(isHome)
                         return when {
-                            if (isHome) m.homeConserveEnergy else m.awayConserveEnergy -> 1
-                            if (isHome) m.homeAllOutAttack else m.awayAllOutAttack -> 5
-                            if (isHome) m.homeControlGame else m.awayControlGame -> 2
+                            (if (isHome) m.homeConserveEnergy else m.awayConserveEnergy) -> 1
+                            (if (isHome) m.homeAllOutAttack else m.awayAllOutAttack) -> 5
+                            (if (isHome) m.homeControlGame else m.awayControlGame) -> 2
                             else -> c.tactics.pressing
                         }.coerceIn(1, 5)
                     }
