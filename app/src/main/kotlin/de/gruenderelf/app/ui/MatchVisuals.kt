@@ -163,9 +163,11 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
     val spatialFrame = MatchSpatialModel.frame(w, m, targetX, targetY)
     val playerLatAnimations = remember(m.fixtureId) { mutableMapOf<Int, Animatable<Float, AnimationVector1D>>() }
     val playerLongAnimations = remember(m.fixtureId) { mutableMapOf<Int, Animatable<Float, AnimationVector1D>>() }
+    val playerScaleAnimations = remember(m.fixtureId) { mutableMapOf<Int, Animatable<Float, AnimationVector1D>>() }
     spatialFrame.players.forEach { p ->
         playerLatAnimations.getOrPut(p.id) { Animatable(p.lateral) }
         playerLongAnimations.getOrPut(p.id) { Animatable(p.longitudinal) }
+        playerScaleAnimations.getOrPut(p.id) { Animatable(if (p.active) 2.35f else 1f) }
     }
 
     LaunchedEffect(
@@ -190,8 +192,15 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
             spatialFrame.players.forEach { p ->
                 val lat = playerLatAnimations.getValue(p.id)
                 val long = playerLongAnimations.getValue(p.id)
+                val scale = playerScaleAnimations.getValue(p.id)
                 launch { lat.animateTo(p.lateral, tween(playerAnimationMs, easing = FastOutSlowInEasing)) }
                 launch { long.animateTo(p.longitudinal, tween(playerAnimationMs, easing = FastOutSlowInEasing)) }
+                launch {
+                    scale.animateTo(
+                        if (p.active) 2.35f else 1f,
+                        tween((playerAnimationMs / 4).coerceIn(140, 360), easing = FastOutSlowInEasing),
+                    )
+                }
             }
         }
     }
@@ -280,6 +289,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                         val id: Int,
                         val point: Offset,
                         val active: Boolean,
+                        val scale: Float,
                     )
 
                     val dots = spatialFrame.players.map { p ->
@@ -291,6 +301,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                             id = p.id,
                             point = screenPoint(lateral, longitudinal),
                             active = p.active,
+                            scale = playerScaleAnimations[p.id]?.value ?: if (p.active) 2.35f else 1f,
                         )
                     }
 
@@ -300,8 +311,8 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                         val secondary = Color(team.secondary)
                         val isKeeper = v.index == 0
                         val baseRadius = if (isKeeper) 6.6.dp.toPx() else 6.0.dp.toPx()
-                        val pulse = .96f + .04f * sin(motion * 1.7f + v.id)
-                        val radius = if (v.active) 14.2.dp.toPx() * pulse else baseRadius
+                        val pulse = if (v.active) .97f + .03f * sin(motion * 1.7f + v.id) else 1f
+                        val radius = baseRadius * v.scale * pulse
 
                         drawCircle(Color.Black.copy(alpha = .30f), radius * 1.08f, Offset(v.point.x + 1.8.dp.toPx(), v.point.y + 2.4.dp.toPx()))
                         if (v.active) {
