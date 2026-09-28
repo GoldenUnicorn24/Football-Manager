@@ -82,7 +82,17 @@ fun LiveMatchAnimation(
     frameDurationMs: Long,
     dynamicOverview: Boolean = false,
 ) {
-    if (dynamicOverview) DynamicMatchOverview(w, m, frameDurationMs)
+    val goalCameraPhase = m.livePhase in setOf(
+        LivePhase.SHOT_OFF_TARGET,
+        LivePhase.SHOT_ON_TARGET,
+        LivePhase.WOODWORK,
+        LivePhase.GOAL,
+        LivePhase.SHOOTOUT,
+    )
+    // In der neuen Draufsicht springt die Darstellung bei einem Abschluss bewusst
+    // wieder in die bekannte Tor-/Schusskamera. Alle übrigen Phasen bleiben in der
+    // taktischen Gesamtfeldansicht.
+    if (dynamicOverview && !goalCameraPhase) TopDownMatchOverview(w, m, frameDurationMs)
     else ClassicLiveMatchAnimation(w, m, frameDurationMs)
 }
 
@@ -97,7 +107,7 @@ fun LiveMatchAnimation(
  * neben der Engine aufzubauen.
  */
 @Composable
-private fun DynamicMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) {
+private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) {
     val home = w.clubs.getValue(m.homeId)
     val away = w.clubs.getValue(m.awayId)
     val activeClubId = m.effectiveLiveClubId()
@@ -106,314 +116,321 @@ private fun DynamicMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
     val homeCoords = remember(m.homeFormation) { Formations.coordinates(m.homeFormation) }
     val awayCoords = remember(m.awayFormation) { Formations.coordinates(m.awayFormation) }
 
-    val ballX = remember(m.fixtureId) { Animatable(m.ballX.coerceIn(.04f, .96f)) }
-    val ballY = remember(m.fixtureId) { Animatable(m.ballY.coerceIn(.04f, .96f)) }
-    val targetX = m.ballX.coerceIn(.04f, .96f)
-    val targetY = m.ballY.coerceIn(.04f, .96f)
+    val ballX = remember(m.fixtureId) { Animatable(m.ballX.coerceIn(.025f, .975f)) }
+    val ballY = remember(m.fixtureId) { Animatable(m.ballY.coerceIn(.025f, .975f)) }
+    val targetX = m.ballX.coerceIn(.025f, .975f)
+    val targetY = m.ballY.coerceIn(.025f, .975f)
     val event = m.liveEventSerial
 
     LaunchedEffect(event, m.livePhase, frameDurationMs, targetX, targetY) {
-        val animationMs = (frameDurationMs * .90).toInt().coerceIn(240, 3200)
+        val animationMs = (frameDurationMs * .92).toInt().coerceIn(260, 3400)
         coroutineScope {
             launch { ballX.animateTo(targetX, tween(animationMs, easing = FastOutSlowInEasing)) }
             launch { ballY.animateTo(targetY, tween(animationMs, easing = FastOutSlowInEasing)) }
         }
     }
 
-    val movement by rememberInfiniteTransition(label = "players-moving").animateFloat(
+    val motion by rememberInfiniteTransition(label = "top-down-motion").animateFloat(
         initialValue = 0f,
         targetValue = (PI * 2.0).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
+            animation = tween(1750, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
-        label = "player-stride",
+        label = "top-down-player-motion",
     )
 
     val actorName = actor?.name ?: activeClub.shortName
+    val actorNumber = actor?.number?.toString() ?: ""
     val textMeasurer = rememberTextMeasurer()
-    val actorLayout = remember(actorName) {
+    val nameLayout = remember(actorName) {
         textMeasurer.measure(
             AnnotatedString(actorName),
             style = TextStyle(color = Chalk, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold),
         )
     }
+    val numberLayout = remember(actorNumber) {
+        textMeasurer.measure(
+            AnnotatedString(actorNumber),
+            style = TextStyle(color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black),
+        )
+    }
 
     Surface(
-        color = Color(0xFF071812),
+        color = Color(0xFF07130B),
         shape = RoundedCornerShape(18.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TeamHeader(home.shortName, Color(home.primary))
-                Text("${MatchEngine.clockLabel(m)}. Minute", color = Muted, style = MaterialTheme.typography.labelMedium)
+                Text("${MatchEngine.clockLabel(m)}. Minute", color = Chalk, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 TeamHeader(away.shortName, Color(away.primary))
             }
 
-            Box(Modifier.fillMaxWidth().aspectRatio(1.5f)) {
-                LivePitchImage(Modifier.matchParentSize())
-
+            Box(Modifier.fillMaxWidth().aspectRatio(1.72f)) {
                 Canvas(Modifier.matchParentSize()) {
                     val ww = size.width
                     val hh = size.height
+                    val fieldLeft = ww * .035f
+                    val fieldRight = ww * .965f
+                    val fieldTop = hh * .055f
+                    val fieldBottom = hh * .945f
+                    val fieldW = fieldRight - fieldLeft
+                    val fieldH = fieldBottom - fieldTop
                     val liveBallX = ballX.value
                     val liveBallY = ballY.value
-                    val homePrimary = Color(home.primary)
-                    val homeSecondary = Color(home.secondary)
-                    val awayPrimary = Color(away.primary)
-                    val awaySecondary = Color(away.secondary)
 
-                    fun point(lateral: Float, longitudinal: Float) =
-                        Offset(
-                            ww * engineProjectedX(lateral.coerceIn(.025f, .975f), longitudinal.coerceIn(.025f, .975f)),
-                            hh * engineProjectedY(lateral.coerceIn(.025f, .975f), longitudinal.coerceIn(.025f, .975f)),
+                    fun screenPoint(lateral: Float, longitudinal: Float): Offset {
+                        return Offset(
+                            fieldLeft + longitudinal.coerceIn(.015f, .985f) * fieldW,
+                            fieldTop + lateral.coerceIn(.015f, .985f) * fieldH,
                         )
+                    }
 
-                    fun playerPosition(isHome: Boolean, index: Int, id: Int): Offset {
+                    drawRoundRect(
+                        Color(0xFF4E971C),
+                        Offset(0f, 0f),
+                        Size(ww, hh),
+                        CornerRadius(15.dp.toPx()),
+                    )
+                    val stripeCount = 12
+                    repeat(stripeCount) { i ->
+                        val x = fieldLeft + fieldW * i / stripeCount
+                        drawRect(
+                            if (i % 2 == 0) Color(0xFF5EA822).copy(alpha = .72f) else Color(0xFF428A18).copy(alpha = .68f),
+                            Offset(x, fieldTop),
+                            Size(fieldW / stripeCount + 1f, fieldH),
+                        )
+                    }
+                    val line = Color.White.copy(alpha = .78f)
+                    val lw = 1.15.dp.toPx()
+                    drawRect(line, Offset(fieldLeft, fieldTop), Size(fieldW, fieldH), style = Stroke(lw))
+                    drawLine(line, Offset(fieldLeft + fieldW * .5f, fieldTop), Offset(fieldLeft + fieldW * .5f, fieldBottom), lw)
+                    val center = Offset(fieldLeft + fieldW * .5f, fieldTop + fieldH * .5f)
+                    drawCircle(line, fieldH * .115f, center, style = Stroke(lw))
+                    drawCircle(line, 1.7.dp.toPx(), center)
+
+                    val penaltyW = fieldW * .145f
+                    val penaltyH = fieldH * .48f
+                    val sixW = fieldW * .058f
+                    val sixH = fieldH * .22f
+                    val penTop = fieldTop + (fieldH - penaltyH) / 2f
+                    val sixTop = fieldTop + (fieldH - sixH) / 2f
+                    drawRect(line, Offset(fieldLeft, penTop), Size(penaltyW, penaltyH), style = Stroke(lw))
+                    drawRect(line, Offset(fieldRight - penaltyW, penTop), Size(penaltyW, penaltyH), style = Stroke(lw))
+                    drawRect(line, Offset(fieldLeft, sixTop), Size(sixW, sixH), style = Stroke(lw))
+                    drawRect(line, Offset(fieldRight - sixW, sixTop), Size(sixW, sixH), style = Stroke(lw))
+                    drawCircle(line, 1.55.dp.toPx(), Offset(fieldLeft + fieldW * .105f, fieldTop + fieldH * .5f))
+                    drawCircle(line, 1.55.dp.toPx(), Offset(fieldRight - fieldW * .105f, fieldTop + fieldH * .5f))
+
+                    val goalDepth = 7.dp.toPx()
+                    val goalH = fieldH * .145f
+                    val goalY = fieldTop + (fieldH - goalH) / 2f
+                    drawRect(Color.White.copy(alpha = .58f), Offset(fieldLeft - goalDepth, goalY), Size(goalDepth, goalH), style = Stroke(1.0.dp.toPx()))
+                    drawRect(Color.White.copy(alpha = .58f), Offset(fieldRight, goalY), Size(goalDepth, goalH), style = Stroke(1.0.dp.toPx()))
+
+                    fun basePair(isHome: Boolean, index: Int): Pair<Float, Float> {
                         val coords = if (isHome) homeCoords else awayCoords
                         val base = coords.getOrNull(index) ?: (.5f to .5f)
-                        val baseX = base.first
-                        val baseY = if (isHome) 1f - base.second else base.second
+                        val lateral = base.first
+                        val longitudinal = if (isHome) 1f - base.second else base.second
+                        return lateral to longitudinal
+                    }
+
+                    fun pressingIndexes(isHome: Boolean): Set<Int> {
+                        val defending = if (isHome) activeClubId != home.id else activeClubId != away.id
+                        if (!defending) return emptySet()
+                        val xi = if (isHome) m.homeXi else m.awayXi
+                        return xi.indices
+                            .filter { it > 0 && xi[it] != 0 }
+                            .sortedBy { idx ->
+                                val p = basePair(isHome, idx)
+                                val dx = p.first - liveBallX
+                                val dy = p.second - liveBallY
+                                dx * dx + dy * dy
+                            }
+                            .take(2)
+                            .toSet()
+                    }
+
+                    fun supportIndexes(isHome: Boolean): Set<Int> {
+                        val attacking = if (isHome) activeClubId == home.id else activeClubId == away.id
+                        if (!attacking) return emptySet()
+                        val xi = if (isHome) m.homeXi else m.awayXi
+                        return xi.indices
+                            .filter { it > 0 && xi[it] != 0 && xi[it] != m.livePlayerId }
+                            .sortedBy { idx ->
+                                val p = basePair(isHome, idx)
+                                val dx = p.first - liveBallX
+                                val dy = p.second - liveBallY
+                                dx * dx + dy * dy
+                            }
+                            .take(2)
+                            .toSet()
+                    }
+
+                    val homePressers = pressingIndexes(true)
+                    val awayPressers = pressingIndexes(false)
+                    val homeSupport = supportIndexes(true)
+                    val awaySupport = supportIndexes(false)
+
+                    fun logicalPlayerPosition(isHome: Boolean, index: Int, id: Int): Pair<Float, Float> {
+                        val (baseLat, baseLong) = basePair(isHome, index)
                         val hasBall = if (isHome) activeClubId == home.id else activeClubId == away.id
                         val keeper = index == 0
                         val attackDir = if (isHome) 1f else -1f
-
-                        var x = baseX
-                        var y = baseY
-
-                        if (keeper) {
-                            // Keeper bleibt im eigenen Drittel, schiebt aber seitlich mit.
-                            x += (liveBallX - x) * .22f
-                            y += (liveBallY - y) * .035f
-                        } else if (hasBall) {
-                            // Ballbesitz: Formation wird breiter und schiebt geschlossen nach.
-                            x += (liveBallX - x) * .16f
-                            y += (liveBallY - y) * .22f
-                            val runner = ((id * 37 + index * 13) % 7) / 6f
-                            y += attackDir * (.012f + runner * .026f)
-                            x += sin(movement + id * .71f) * (.005f + runner * .004f)
-                        } else {
-                            // Gegen den Ball: kompakter Block. Spieler nahe am Ball pressen stärker.
-                            val dx = liveBallX - x
-                            val dy = liveBallY - y
-                            val distance2 = dx * dx + dy * dy
-                            val press = when {
-                                distance2 < .035f -> .48f
-                                distance2 < .090f -> .32f
-                                distance2 < .180f -> .22f
-                                else -> .12f
-                            }
-                            x += dx * press
-                            y += dy * (press * .72f)
-                            // Hinter dem Ball kompakter werden statt starr auf Formation zu stehen.
-                            y -= attackDir * .018f
-                        }
+                        val pressers = if (isHome) homePressers else awayPressers
+                        val support = if (isHome) homeSupport else awaySupport
+                        var lateral = baseLat
+                        var longitudinal = baseLong
 
                         if (id == m.livePlayerId) {
-                            // Ballbesitzer sitzt direkt am Engine-Ball, aber mit kleinem Laufversatz.
-                            x = liveBallX + sin(movement * 1.15f + id) * .0045f
-                            y = liveBallY + cos(movement * 1.15f + id) * .0035f
-                        } else if (!keeper) {
-                            // Dauerhafte kleine Laufbewegung – verhindert die starre Brettspiel-Optik.
-                            x += sin(movement + id * .83f) * .0065f
-                            y += cos(movement * 1.08f + id * .47f) * .0045f
+                            lateral = liveBallX
+                            longitudinal = liveBallY
+                        } else if (keeper) {
+                            lateral += (liveBallX - lateral) * .24f
+                            longitudinal += (liveBallY - longitudinal) * .035f
+                        } else if (hasBall) {
+                            lateral += (liveBallX - lateral) * .14f
+                            longitudinal += (liveBallY - longitudinal) * .24f
+                            val widthFromCenter = baseLat - .5f
+                            lateral += widthFromCenter * .055f
+
+                            if (index in support) {
+                                val side = if ((id + index) % 2 == 0) 1f else -1f
+                                lateral += (liveBallX - lateral) * .28f + side * .022f
+                                longitudinal += (liveBallY - longitudinal) * .28f - attackDir * .025f
+                            } else {
+                                val attackDepth = if (isHome) baseLong else 1f - baseLong
+                                val runStrength = ((attackDepth - .42f) * .10f).coerceIn(0f, .045f)
+                                longitudinal += attackDir * runStrength * (.55f + .45f * ((sin(motion + id * .31f) + 1f) / 2f))
+                            }
+                        } else {
+                            lateral = .5f + (lateral - .5f) * .80f
+                            lateral += (liveBallX - lateral) * .15f
+                            longitudinal += (liveBallY - longitudinal) * .22f
+
+                            if (index in pressers) {
+                                val pressure = if (index == pressers.minOrNull()) .58f else .45f
+                                lateral += (liveBallX - lateral) * pressure
+                                longitudinal += (liveBallY - longitudinal) * pressure
+                            } else {
+                                longitudinal -= attackDir * .018f
+                            }
                         }
 
-                        return point(x, y)
-                    }
-
-                    fun drawHuman(
-                        position: Offset,
-                        shirt: Color,
-                        trim: Color,
-                        active: Boolean,
-                        playerId: Int,
-                    ) {
-                        val depth = (position.y / hh).coerceIn(0f, 1f)
-                        val perspective = .78f + depth * .28f
-                        val activeBoost = if (active) 1.28f else 1f
-                        val scale = perspective * activeBoost
-                        val torsoW = 7.8.dp.toPx() * scale
-                        val torsoH = 10.5.dp.toPx() * scale
-                        val headR = 3.15.dp.toPx() * scale
-                        val legLen = 7.0.dp.toPx() * scale
-                        val armLen = 6.0.dp.toPx() * scale
-                        val stride = sin(movement * 1.65f + playerId * .74f)
-                        val bob = kotlin.math.abs(sin(movement * 1.65f + playerId * .74f)) * 1.15.dp.toPx() * scale
-                        val hipY = position.y - bob
-                        val shoulderY = hipY - torsoH * .63f
-                        val head = Offset(position.x, shoulderY - headR * 1.45f)
-
-                        drawOval(
-                            Color.Black.copy(alpha = .34f),
-                            Offset(position.x - torsoW * .78f, position.y + 4.2.dp.toPx() * scale),
-                            Size(torsoW * 1.56f, 4.8.dp.toPx() * scale),
-                        )
-
-                        if (active) {
-                            drawCircle(shirt.copy(alpha = .18f), 17.dp.toPx() * scale, Offset(position.x, hipY - torsoH * .44f))
-                            drawCircle(
-                                Chalk.copy(alpha = .72f),
-                                13.8.dp.toPx() * scale,
-                                Offset(position.x, hipY - torsoH * .44f),
-                                style = Stroke(1.3.dp.toPx()),
-                            )
+                        val phaseBoost = if (m.livePhase in setOf(LivePhase.ATTACK, LivePhase.DANGEROUS_ATTACK, LivePhase.COUNTER)) 1.35f else 1f
+                        if (!keeper && id != m.livePlayerId) {
+                            lateral += sin(motion + id * .79f) * .0045f * phaseBoost
+                            longitudinal += sin(motion * 1.12f + id * .43f) * .0040f * phaseBoost
                         }
 
-                        // Beine – im Gegentakt, damit die Figuren sichtbar laufen statt stehen.
-                        drawLine(
-                            trim,
-                            Offset(position.x - torsoW * .20f, hipY + torsoH * .30f),
-                            Offset(position.x - torsoW * (.20f + .16f * stride), hipY + torsoH * .30f + legLen),
-                            2.15.dp.toPx() * scale,
-                        )
-                        drawLine(
-                            trim,
-                            Offset(position.x + torsoW * .20f, hipY + torsoH * .30f),
-                            Offset(position.x + torsoW * (.20f + .16f * stride), hipY + torsoH * .30f + legLen),
-                            2.15.dp.toPx() * scale,
-                        )
-
-                        // Arme schwingen gegen die Beine.
-                        drawLine(
-                            shirt,
-                            Offset(position.x - torsoW * .43f, shoulderY + torsoH * .24f),
-                            Offset(position.x - torsoW * .43f - armLen * .42f * stride, shoulderY + torsoH * .24f + armLen),
-                            2.05.dp.toPx() * scale,
-                        )
-                        drawLine(
-                            shirt,
-                            Offset(position.x + torsoW * .43f, shoulderY + torsoH * .24f),
-                            Offset(position.x + torsoW * .43f + armLen * .42f * stride, shoulderY + torsoH * .24f + armLen),
-                            2.05.dp.toPx() * scale,
-                        )
-
-                        drawRoundRect(
-                            shirt,
-                            Offset(position.x - torsoW / 2f, shoulderY),
-                            Size(torsoW, torsoH),
-                            CornerRadius(2.7.dp.toPx() * scale),
-                        )
-                        drawRoundRect(
-                            trim.copy(alpha = .90f),
-                            Offset(position.x - torsoW / 2f, shoulderY + torsoH * .56f),
-                            Size(torsoW, torsoH * .18f),
-                            CornerRadius(1.4.dp.toPx() * scale),
-                        )
-                        drawLine(
-                            Chalk.copy(alpha = .50f),
-                            Offset(position.x, shoulderY + torsoH * .08f),
-                            Offset(position.x, shoulderY + torsoH * .48f),
-                            .75.dp.toPx() * scale,
-                        )
-                        drawCircle(Color(0xFFE6C7AA), headR, head)
-                        drawCircle(
-                            Color.White.copy(alpha = .55f),
-                            headR,
-                            head,
-                            style = Stroke(.65.dp.toPx()),
-                        )
+                        return lateral.coerceIn(.025f, .975f) to longitudinal.coerceIn(.018f, .982f)
                     }
 
-                    data class VisualPlayer(
+                    data class DotPlayer(
                         val isHome: Boolean,
                         val index: Int,
                         val id: Int,
-                        val position: Offset,
+                        val point: Offset,
                         val active: Boolean,
                     )
 
-                    val visuals = mutableListOf<VisualPlayer>()
+                    val dots = mutableListOf<DotPlayer>()
                     m.homeXi.forEachIndexed { index, id ->
-                        if (id != 0) visuals += VisualPlayer(true, index, id, playerPosition(true, index, id), id == m.livePlayerId)
+                        if (id != 0) {
+                            val p = logicalPlayerPosition(true, index, id)
+                            dots += DotPlayer(true, index, id, screenPoint(p.first, p.second), id == m.livePlayerId)
+                        }
                     }
                     m.awayXi.forEachIndexed { index, id ->
-                        if (id != 0) visuals += VisualPlayer(false, index, id, playerPosition(false, index, id), id == m.livePlayerId)
+                        if (id != 0) {
+                            val p = logicalPlayerPosition(false, index, id)
+                            dots += DotPlayer(false, index, id, screenPoint(p.first, p.second), id == m.livePlayerId)
+                        }
                     }
 
-                    // Nach Tiefe sortieren: weiter oben zuerst, Spieler unten überdecken natürlich.
-                    visuals.filter { !it.active }.sortedBy { it.position.y }.forEach { vp ->
-                        drawHuman(
-                            vp.position,
-                            if (vp.isHome) homePrimary else awayPrimary,
-                            if (vp.isHome) homeSecondary else awaySecondary,
-                            false,
-                            vp.id,
+                    fun drawDot(v: DotPlayer) {
+                        val team = if (v.isHome) home else away
+                        val primary = Color(team.primary)
+                        val secondary = Color(team.secondary)
+                        val isKeeper = v.index == 0
+                        val baseRadius = if (isKeeper) 6.6.dp.toPx() else 6.0.dp.toPx()
+                        val pulse = .96f + .04f * sin(motion * 1.7f + v.id)
+                        val radius = if (v.active) 14.2.dp.toPx() * pulse else baseRadius
+
+                        drawCircle(Color.Black.copy(alpha = .30f), radius * 1.08f, Offset(v.point.x + 1.8.dp.toPx(), v.point.y + 2.4.dp.toPx()))
+                        if (v.active) {
+                            drawCircle(primary.copy(alpha = .18f), radius * 1.52f, v.point)
+                            drawCircle(Color.White.copy(alpha = .82f), radius * 1.20f, v.point, style = Stroke(1.2.dp.toPx()))
+                        }
+                        drawCircle(primary, radius, v.point)
+                        drawCircle(
+                            if (isKeeper) Color.White.copy(alpha = .78f) else secondary.copy(alpha = .95f),
+                            radius,
+                            v.point,
+                            style = Stroke(if (v.active) 2.0.dp.toPx() else 1.45.dp.toPx()),
                         )
-                    }
-                    visuals.filter { it.active }.forEach { vp ->
-                        drawHuman(
-                            vp.position,
-                            if (vp.isHome) homePrimary else awayPrimary,
-                            if (vp.isHome) homeSecondary else awaySecondary,
-                            true,
-                            vp.id,
-                        )
+
+                        if (v.active && actorNumber.isNotBlank()) {
+                            drawText(
+                                numberLayout,
+                                topLeft = Offset(
+                                    v.point.x - numberLayout.size.width / 2f,
+                                    v.point.y - numberLayout.size.height / 2f,
+                                ),
+                            )
+                        }
                     }
 
-                    val ballPoint = point(liveBallX, liveBallY)
-                    val ball = Offset(ballPoint.x + 5.0.dp.toPx(), ballPoint.y + 7.0.dp.toPx())
-                    drawOval(
-                        Color.Black.copy(alpha = .38f),
-                        Offset(ball.x - 6.0.dp.toPx(), ball.y + 3.5.dp.toPx()),
-                        Size(12.dp.toPx(), 3.8.dp.toPx()),
-                    )
-                    drawCircle(Color.White, 5.2.dp.toPx(), ball)
-                    drawCircle(Color(0xFF1D1D1D), 5.2.dp.toPx(), ball, style = Stroke(1.0.dp.toPx()))
-                    drawCircle(Color(0xFF252525), 1.55.dp.toPx(), Offset(ball.x - .8.dp.toPx(), ball.y - .8.dp.toPx()))
+                    dots.filter { !it.active }.forEach(::drawDot)
+                    dots.filter { it.active }.forEach(::drawDot)
 
-                    val activeVisual = visuals.firstOrNull { it.active }
-                    if (activeVisual != null) {
+                    val activeDot = dots.firstOrNull { it.active }
+                    val engineBall = screenPoint(liveBallX, liveBallY)
+                    val ballPoint = if (activeDot != null) {
+                        val direction = if (activeDot.isHome) 1f else -1f
+                        Offset(activeDot.point.x + 12.dp.toPx() * direction, activeDot.point.y + 7.dp.toPx())
+                    } else engineBall
+                    drawCircle(Color.Black.copy(alpha = .42f), 4.6.dp.toPx(), Offset(ballPoint.x + 1.dp.toPx(), ballPoint.y + 1.3.dp.toPx()))
+                    drawCircle(Color.White, 4.2.dp.toPx(), ballPoint)
+                    drawCircle(Color(0xFF202020), 4.2.dp.toPx(), ballPoint, style = Stroke(.9.dp.toPx()))
+                    drawCircle(Color(0xFF202020), 1.25.dp.toPx(), Offset(ballPoint.x - .5.dp.toPx(), ballPoint.y - .5.dp.toPx()))
+
+                    activeDot?.let { v ->
                         val padX = 6.dp.toPx()
-                        val padY = 2.dp.toPx()
-                        val labelW = actorLayout.size.width + padX * 2
-                        val labelH = actorLayout.size.height + padY * 2
-                        val left = (activeVisual.position.x - labelW / 2f)
-                            .coerceIn(4.dp.toPx(), (ww - labelW - 4.dp.toPx()).coerceAtLeast(4.dp.toPx()))
-                        val top = (activeVisual.position.y - 49.dp.toPx())
-                            .coerceIn(4.dp.toPx(), (hh - labelH - 4.dp.toPx()).coerceAtLeast(4.dp.toPx()))
-                        drawRoundRect(
-                            Color.Black.copy(alpha = .74f),
-                            Offset(left, top),
-                            Size(labelW, labelH),
-                            CornerRadius(6.dp.toPx()),
-                        )
-                        drawText(actorLayout, topLeft = Offset(left + padX, top + padY))
+                        val padY = 2.5.dp.toPx()
+                        val labelW = nameLayout.size.width + padX * 2
+                        val labelH = nameLayout.size.height + padY * 2
+                        val preferRight = v.point.x < fieldLeft + fieldW * .67f
+                        val rawLeft = if (preferRight) v.point.x + 18.dp.toPx() else v.point.x - labelW - 18.dp.toPx()
+                        val left = rawLeft.coerceIn(4.dp.toPx(), (ww - labelW - 4.dp.toPx()).coerceAtLeast(4.dp.toPx()))
+                        val top = (v.point.y + 5.dp.toPx()).coerceIn(4.dp.toPx(), (hh - labelH - 4.dp.toPx()).coerceAtLeast(4.dp.toPx()))
+                        drawRoundRect(Color.Black.copy(alpha = .76f), Offset(left, top), Size(labelW, labelH), CornerRadius(5.dp.toPx()))
+                        drawText(nameLayout, topLeft = Offset(left + padX, top + padY))
                     }
                 }
 
-                Column(
+                Row(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 7.dp)
-                        .background(Color.Black.copy(alpha = .66f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 9.dp, vertical = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                        .align(Alignment.TopCenter)
+                        .padding(top = 7.dp)
+                        .background(Color.Black.copy(alpha = .48f), RoundedCornerShape(99.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        phaseText(m),
-                        color = if (m.livePhase == LivePhase.GOAL) Grass else Chalk,
-                        fontWeight = FontWeight.ExtraBold,
-                        style = MaterialTheme.typography.labelMedium,
-                        textAlign = TextAlign.Center,
-                    )
-                    Text(
-                        "${activeClub.shortName} · $actorName",
-                        color = Muted,
-                        style = MaterialTheme.typography.labelSmall,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                    )
+                    Text(phaseText(m), color = Chalk, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.labelSmall)
                 }
             }
 
             Text(
-                "Gesamtfeld · dynamische Formation · laufende Spieler · Ballbesitzer im Fokus",
+                "Draufsicht · alle 22 Spieler · Ballbesitzer groß · Mitspieler verschieben & laufen · Gegner pressen/komprimieren",
                 color = Muted,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
