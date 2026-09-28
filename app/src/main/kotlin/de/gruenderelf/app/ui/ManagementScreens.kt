@@ -288,7 +288,15 @@ private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}
 
 @Composable fun SettingsScreen(vm: GameViewModel){
  val soundsEnabled by vm.soundsEnabled.collectAsState()
+ val tacticalMatchView by vm.tacticalMatchView.collectAsState()
  Page("Einstellungen","AUDIO & SPIELERLEBNIS"){
+  Section("Match-Ansicht"){
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+    Column(Modifier.weight(1f)){Text("Taktische 3D-Übersicht",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Alle Spieler sichtbar · Ballbesitzer hervorgehoben." else "Klassische Match-Ansicht ist aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+    Switch(checked=tacticalMatchView,onCheckedChange={vm.setTacticalMatchView(it)})
+   }
+   Text("AN: neue Übersicht mit allen 22 Spielern, dynamischer Formation und größerem Spieler am Ball. AUS: die bisherige Match-Ansicht bleibt vollständig erhalten. Die Auswahl gilt appweit und wird gespeichert.",color=Muted,style=MaterialTheme.typography.bodySmall)
+  }
   Section("Match-Sounds"){
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
     Column(Modifier.weight(1f)){Text("Stadion- und Spielsounds",style=MaterialTheme.typography.titleMedium);Text(if(soundsEnabled)"Alle Match-Sounds sind aktiv." else "Alle Match-Sounds sind stummgeschaltet.",color=Muted,style=MaterialTheme.typography.bodySmall)}
