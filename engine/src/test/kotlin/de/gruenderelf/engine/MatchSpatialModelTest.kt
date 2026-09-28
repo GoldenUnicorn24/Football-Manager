@@ -158,4 +158,16 @@ class MatchSpatialModelTest {
         assertEquals(.9, MatchSpatialModel.absoluteY(false, .9f).toDouble(), .0001)
     }
 
+    @Test
+    fun screenDirectionsSwitchEndsButNeverSwapTeamIdentity() {
+        assertEquals(-1, MatchSpatialModel.screenAttackDirection(true, 1))
+        assertEquals(1, MatchSpatialModel.screenAttackDirection(false, 1))
+        assertEquals(1, MatchSpatialModel.screenAttackDirection(true, 2))
+        assertEquals(-1, MatchSpatialModel.screenAttackDirection(false, 2))
+
+        assertEquals(.12, MatchSpatialModel.displayLongitudinal(1, .12f).toDouble(), .0001)
+        assertEquals(.88, MatchSpatialModel.displayLongitudinal(2, .12f).toDouble(), .0001)
+        assertEquals(.12, MatchSpatialModel.displayLongitudinal(4, .88f).toDouble(), .0001)
+    }
+
 }
