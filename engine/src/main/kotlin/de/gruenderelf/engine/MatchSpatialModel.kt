@@ -37,6 +37,22 @@ object MatchSpatialModel {
     fun absoluteY(isHome: Boolean, progressFromOwnGoal: Float): Float =
         (if (isHome) 1f - progressFromOwnGoal else progressFromOwnGoal).coerceIn(0f, 1f)
 
+    /** Presentation-only side switch. Engine coordinates never change. */
+    fun sidesSwitched(period: Int): Boolean = period == 2 || period == 4
+
+    fun displayLongitudinal(period: Int, absoluteY: Float): Float =
+        (if (sidesSwitched(period)) 1f - absoluteY else absoluteY).coerceIn(0f, 1f)
+
+    /**
+     * Direction on the rendered horizontal pitch: -1 = left, +1 = right.
+     * HOME attacks engine y=0; AWAY attacks y=1. After the interval the
+     * presentation rotates the ends so the teams visibly change sides.
+     */
+    fun screenAttackDirection(isHome: Boolean, period: Int): Int {
+        val canonical = if (isHome) -1 else 1
+        return if (sidesSwitched(period)) -canonical else canonical
+    }
+
     private fun ownerClubId(m: LiveMatch): Int =
         m.liveClubId.takeIf { it == m.homeId || it == m.awayId }
             ?: m.chainOwnerClubId.takeIf { it == m.homeId || it == m.awayId }
