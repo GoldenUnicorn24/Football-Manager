@@ -15,13 +15,18 @@ class MatchSpatialModelTest {
     private fun setOwner(m: LiveMatch, home: Boolean, phase: LivePhase, ballX: Float, ballY: Float) {
         val clubId = if (home) m.homeId else m.awayId
         val lineup = if (home) m.homeXi else m.awayXi
+        val formation = if (home) m.homeFormation else m.awayFormation
+        val slots = Formations.positions(formation)
         m.homeInPossession = home
         m.chainOwnerClubId = clubId
         m.liveClubId = clubId
         m.livePhase = phase
         m.ballX = ballX
         m.ballY = ballY
-        m.livePlayerId = lineup.firstOrNull { it != 0 && it != lineup.firstOrNull() } ?: lineup.first { it != 0 }
+        val attackingSlot = lineup.indices.lastOrNull { idx ->
+            lineup[idx] != 0 && slots.getOrNull(idx) in setOf(Position.ST, Position.LA, Position.RA, Position.OM)
+        }
+        m.livePlayerId = attackingSlot?.let { lineup[it] } ?: lineup.last { it != 0 }
     }
 
     @Test
