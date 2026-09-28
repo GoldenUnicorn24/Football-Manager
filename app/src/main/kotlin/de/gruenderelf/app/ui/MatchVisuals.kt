@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.gruenderelf.app.R
+import de.gruenderelf.engine.Formations
 import de.gruenderelf.engine.LiveMatch
 import de.gruenderelf.engine.MatchEngine
 import de.gruenderelf.engine.LivePhase
@@ -75,7 +76,247 @@ private fun LivePitchImage(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun LiveMatchAnimation(w: World, m: LiveMatch, frameDurationMs: Long) {
+fun LiveMatchAnimation(
+    w: World,
+    m: LiveMatch,
+    frameDurationMs: Long,
+    tacticalOverview: Boolean = true,
+) {
+    if (tacticalOverview) {
+        TacticalLiveMatchAnimation(w, m, frameDurationMs)
+    } else {
+        ClassicLiveMatchAnimation(w, m, frameDurationMs)
+    }
+}
+
+/**
+ * Neue taktische Live-Ansicht: Das komplette Feld bleibt sichtbar, beide
+ * Formationen werden gleichzeitig dargestellt und der aktuelle Ballbesitzer
+ * wird bewusst größer gerendert. Die Spielerpositionen werden aus der realen
+ * Start-/Liveformation plus dem aktuellen Engine-Ballzustand abgeleitet.
+ *
+ * Wichtig: Die Ansicht simuliert nichts selbst. Ballbesitz, Ballposition,
+ * aktiver Spieler und Phase kommen ausschließlich aus LiveMatch.
+ */
+@Composable
+private fun TacticalLiveMatchAnimation(w: World, m: LiveMatch, frameDurationMs: Long) {
+    val home = w.clubs.getValue(m.homeId)
+    val away = w.clubs.getValue(m.awayId)
+    val activeClubId = m.effectiveLiveClubId()
+    val activeClub = if (activeClubId == home.id) home else away
+    val activePlayer = w.players[m.livePlayerId]
+    val homeCoords = remember(m.homeFormation) { Formations.coordinates(m.homeFormation) }
+    val awayCoords = remember(m.awayFormation) { Formations.coordinates(m.awayFormation) }
+
+    val ballX = remember(m.fixtureId) { Animatable(m.ballX.coerceIn(.04f, .96f)) }
+    val ballY = remember(m.fixtureId) { Animatable(m.ballY.coerceIn(.04f, .96f)) }
+    val targetX = m.ballX.coerceIn(.04f, .96f)
+    val targetY = m.ballY.coerceIn(.04f, .96f)
+    val event = m.liveEventSerial
+
+    LaunchedEffect(event, m.livePhase, frameDurationMs, targetX, targetY) {
+        val animationMs = (frameDurationMs * .86).toInt().coerceIn(240, 3200)
+        coroutineScope {
+            launch { ballX.animateTo(targetX, tween(animationMs)) }
+            launch { ballY.animateTo(targetY, tween(animationMs)) }
+        }
+    }
+
+    val actorLabel = activePlayer?.name ?: activeClub.shortName
+    val textMeasurer = rememberTextMeasurer()
+    val actorLayout = remember(actorLabel) {
+        textMeasurer.measure(
+            AnnotatedString(actorLabel),
+            style = TextStyle(color = Chalk, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold),
+        )
+    }
+
+    Surface(color = Color(0xFF071812), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TeamHeader(home.shortName, Color(home.primary))
+                Text("${MatchEngine.clockLabel(m)}. Minute", color = Muted, style = MaterialTheme.typography.labelMedium)
+                TeamHeader(away.shortName, Color(away.primary))
+            }
+
+            Box(Modifier.fillMaxWidth().aspectRatio(1.5f)) {
+                LivePitchImage(Modifier.matchParentSize())
+                Canvas(Modifier.matchParentSize()) {
+                    val ww = size.width
+                    val hh = size.height
+                    val homeColor = Color(home.primary)
+                    val awayColor = Color(away.primary)
+                    val liveBallX = ballX.value
+                    val liveBallY = ballY.value
+
+                    fun p(lateral: Float, longitudinal: Float) =
+                        Offset(ww * engineProjectedX(lateral, longitudinal), hh * engineProjectedY(lateral, longitudinal))
+
+                    fun tacticalPoint(isHome: Boolean, index: Int, id: Int): Offset {
+                        val coords = if (isHome) homeCoords else awayCoords
+                        val base = coords.getOrNull(index) ?: (.5f to .5f)
+                        var lateral = base.first
+                        var longitudinal = if (isHome) 1f - base.second else base.second
+                        val ownsBall = if (isHome) activeClubId == home.id else activeClubId == away.id
+                        val keeper = index == 0
+                        val pullSide = if (keeper) .035f else if (ownsBall) .24f else .16f
+                        val pullLength = if (keeper) .025f else if (ownsBall) .22f else .14f
+
+                        lateral += (liveBallX - lateral) * pullSide
+                        longitudinal += (liveBallY - longitudinal) * pullLength
+
+                        if (!keeper && ownsBall && m.livePhase in setOf(LivePhase.ATTACK, LivePhase.DANGEROUS_ATTACK, LivePhase.COUNTER)) {
+                            longitudinal += (liveBallY - longitudinal) * .08f
+                        }
+                        if (id == m.livePlayerId) {
+                            lateral = liveBallX
+                            longitudinal = liveBallY
+                        }
+                        return p(lateral.coerceIn(.045f, .955f), longitudinal.coerceIn(.035f, .965f))
+                    }
+
+                    fun drawPlayer(point: Offset, kit: Color, active: Boolean) {
+                        val perspective = (.80f + (point.y / hh).coerceIn(0f, 1f) * .22f)
+                        val scale = if (active) 1.58f else perspective
+                        val r = 6.3.dp.toPx() * scale
+                        val outline = (if (active) 1.7f else 1.05f).dp.toPx()
+
+                        drawOval(
+                            Color.Black.copy(alpha = .34f),
+                            topLeft = Offset(point.x - r * 1.05f, point.y + r * .55f),
+                            size = Size(r * 2.1f, r * .58f),
+                        )
+                        if (active) {
+                            drawCircle(kit.copy(alpha = .20f), r * 2.2f, Offset(point.x, point.y - r * .20f))
+                            drawCircle(Color.White.copy(alpha = .38f), r * 1.78f, Offset(point.x, point.y - r * .20f), style = Stroke(1.4.dp.toPx()))
+                        }
+                        drawRoundRect(
+                            color = kit,
+                            topLeft = Offset(point.x - r * .72f, point.y - r * .88f),
+                            size = Size(r * 1.44f, r * 1.65f),
+                            cornerRadius = CornerRadius(r * .40f),
+                        )
+                        drawRoundRect(
+                            color = Color.White.copy(alpha = .82f),
+                            topLeft = Offset(point.x - r * .72f, point.y - r * .88f),
+                            size = Size(r * 1.44f, r * 1.65f),
+                            cornerRadius = CornerRadius(r * .40f),
+                            style = Stroke(outline),
+                        )
+                        drawCircle(
+                            color = Color(0xFFE8D4BD),
+                            radius = r * .43f,
+                            center = Offset(point.x, point.y - r * 1.16f),
+                        )
+                        drawCircle(
+                            color = Color.White.copy(alpha = .72f),
+                            radius = r * .43f,
+                            center = Offset(point.x, point.y - r * 1.16f),
+                            style = Stroke((.75f).dp.toPx()),
+                        )
+                    }
+
+                    var activePoint: Offset? = null
+                    fun drawTeam(isHome: Boolean, activePass: Boolean) {
+                        val xi = if (isHome) m.homeXi else m.awayXi
+                        val kit = if (isHome) homeColor else awayColor
+                        xi.forEachIndexed { index, id ->
+                            if (id == 0) return@forEachIndexed
+                            val isActive = id == m.livePlayerId
+                            if (isActive != activePass) return@forEachIndexed
+                            val point = tacticalPoint(isHome, index, id)
+                            if (isActive) activePoint = point
+                            drawPlayer(point, kit, isActive)
+                        }
+                    }
+
+                    // Erst normale Spieler, dann Ballbesitzer: so bleibt der Fokus immer sichtbar.
+                    drawTeam(isHome = true, activePass = false)
+                    drawTeam(isHome = false, activePass = false)
+                    drawTeam(isHome = true, activePass = true)
+                    drawTeam(isHome = false, activePass = true)
+
+                    val ballPoint = p(liveBallX, liveBallY)
+                    val ball = Offset(ballPoint.x + 4.2.dp.toPx(), ballPoint.y + 5.0.dp.toPx())
+                    drawOval(
+                        Color.Black.copy(alpha = .36f),
+                        Offset(ball.x - 6.5.dp.toPx(), ball.y + 4.5.dp.toPx()),
+                        Size(13.dp.toPx(), 4.2.dp.toPx()),
+                    )
+                    drawCircle(Color.White, 5.8.dp.toPx(), ball)
+                    drawCircle(Color(0xFF1B1B1B), 5.8.dp.toPx(), ball, style = Stroke(1.05.dp.toPx()))
+                    drawCircle(Color(0xFF252525), 1.7.dp.toPx(), Offset(ball.x - .8.dp.toPx(), ball.y - .8.dp.toPx()))
+
+                    activePoint?.let { point ->
+                        val padX = 6.dp.toPx()
+                        val padY = 2.dp.toPx()
+                        val labelW = actorLayout.size.width + padX * 2f
+                        val labelH = actorLayout.size.height + padY * 2f
+                        val left = (point.x - labelW / 2f).coerceIn(4.dp.toPx(), (ww - labelW - 4.dp.toPx()).coerceAtLeast(4.dp.toPx()))
+                        val top = (point.y - 48.dp.toPx()).coerceIn(4.dp.toPx(), (hh - labelH - 4.dp.toPx()).coerceAtLeast(4.dp.toPx()))
+                        drawRoundRect(
+                            Color.Black.copy(alpha = .72f),
+                            Offset(left, top),
+                            Size(labelW, labelH),
+                            CornerRadius(6.dp.toPx()),
+                        )
+                        drawText(actorLayout, topLeft = Offset(left + padX, top + padY))
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 7.dp)
+                        .background(Color.Black.copy(alpha = .62f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 9.dp, vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        phaseText(m),
+                        color = if (m.livePhase == LivePhase.GOAL) Grass else Chalk,
+                        fontWeight = FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.labelMedium,
+                        textAlign = TextAlign.Center,
+                    )
+                    if (m.liveDetail.isNotBlank() && m.liveDetail != phaseText(m)) {
+                        Text(
+                            m.liveDetail,
+                            color = Muted,
+                            style = MaterialTheme.typography.labelSmall,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+
+            Text(
+                "Gesamtfeld · 22 Spieler · Ballbesitzer im Fokus",
+                color = Muted,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
+            MatchEngine.stoppageTimeOverlay(m)?.let { added ->
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text(
+                        added,
+                        color = Chalk.copy(alpha = .88f),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.background(Color.Black.copy(alpha = .42f), RoundedCornerShape(99.dp)).padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClassicLiveMatchAnimation(w: World, m: LiveMatch, frameDurationMs: Long) {
     val home = w.clubs.getValue(m.homeId)
     val away = w.clubs.getValue(m.awayId)
     val activeId = m.effectiveLiveClubId()
