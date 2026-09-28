@@ -34,6 +34,7 @@ import de.gruenderelf.engine.Formations
 import de.gruenderelf.engine.LiveMatch
 import de.gruenderelf.engine.MatchEngine
 import de.gruenderelf.engine.MatchSpatialModel
+import de.gruenderelf.engine.MatchSpatialMotion
 import de.gruenderelf.engine.Position
 import de.gruenderelf.engine.PlayerRole
 import de.gruenderelf.engine.PlayerInstruction
@@ -42,6 +43,7 @@ import de.gruenderelf.engine.ShotContext
 import de.gruenderelf.engine.ShotModel
 import de.gruenderelf.engine.World
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
@@ -137,7 +139,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
         initialValue = 0f,
         targetValue = (PI * 2.0).toFloat(),
         animationSpec = infiniteRepeatable(
-            animation = tween(1750, easing = LinearEasing),
+            animation = tween(4200, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "top-down-player-motion",
@@ -188,7 +190,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
         targetY,
         frameDurationMs,
     ) {
-        val baseAnimationMs = (frameDurationMs * .74).toInt().coerceIn(260, 2400)
+        val baseAnimationMs = (frameDurationMs * .70).toInt().coerceIn(240, 2250)
         coroutineScope {
             spatialFrame.players.forEach { p ->
                 val lat = playerLatAnimations.getValue(p.id)
@@ -197,18 +199,47 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                 val dx = p.lateral - lat.value
                 val dy = p.longitudinal - long.value
                 val distance = sqrt(dx * dx + dy * dy)
-                // Kleine Korrekturen enden früh, große Verschiebungen bekommen etwas
-                // mehr Zeit. Dadurch gleitet die Mannschaft als Block statt zwischen
-                // Engine-Ticks zu springen.
-                val movementMs = (baseAnimationMs * (.72f + distance.coerceAtMost(.28f) * 1.35f))
+                val pace = w.players[p.id]?.attributes?.pace ?: 50
+                val paceFactor = (1.13f - pace.coerceIn(20, 120) / 420f).coerceIn(.82f, 1.08f)
+                val actionFactor = when (p.motion) {
+                    MatchSpatialMotion.BALL -> .74f
+                    MatchSpatialMotion.RUN -> .76f
+                    MatchSpatialMotion.PRESS -> .80f
+                    MatchSpatialMotion.SUPPORT -> .88f
+                    MatchSpatialMotion.MARK -> .94f
+                    MatchSpatialMotion.SHIFT -> 1.00f
+                    MatchSpatialMotion.HOLD -> 1.08f
+                }
+                val movementMs = (baseAnimationMs *
+                    (.68f + distance.coerceAtMost(.32f) * 1.45f) *
+                    paceFactor * actionFactor)
                     .toInt()
-                    .coerceIn(220, 2800)
-                launch { lat.animateTo(p.lateral, tween(movementMs, easing = LinearOutSlowInEasing)) }
-                launch { long.animateTo(p.longitudinal, tween(movementMs, easing = LinearOutSlowInEasing)) }
+                    .coerceIn(180, 2650)
+                val reactionDelay = when (p.motion) {
+                    MatchSpatialMotion.BALL -> 0L
+                    MatchSpatialMotion.RUN -> (12 + (p.id * 17 % 55)).toLong()
+                    MatchSpatialMotion.PRESS -> (18 + (p.id * 23 % 70)).toLong()
+                    MatchSpatialMotion.SUPPORT -> (28 + (p.id * 19 % 90)).toLong()
+                    MatchSpatialMotion.MARK -> (42 + (p.id * 29 % 105)).toLong()
+                    MatchSpatialMotion.SHIFT -> (58 + (p.id * 31 % 125)).toLong()
+                    MatchSpatialMotion.HOLD -> (75 + (p.id * 37 % 145)).toLong()
+                }
+
+                // Jeder Spieler reagiert mit eigener Geschwindigkeit und minimal
+                // anderer Reaktionszeit. Dadurch bewegen sich nicht mehr alle
+                // Punkte synchron wie an einer unsichtbaren Schnur.
+                launch {
+                    if (reactionDelay > 0) delay(reactionDelay)
+                    lat.animateTo(p.lateral, tween(movementMs, easing = LinearOutSlowInEasing))
+                }
+                launch {
+                    if (reactionDelay > 0) delay(reactionDelay)
+                    long.animateTo(p.longitudinal, tween(movementMs, easing = LinearOutSlowInEasing))
+                }
                 launch {
                     scale.animateTo(
                         if (p.active) 2.35f else 1f,
-                        tween(190, easing = FastOutSlowInEasing),
+                        tween(170, easing = FastOutSlowInEasing),
                     )
                 }
             }
@@ -304,11 +335,25 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                         val point: Offset,
                         val active: Boolean,
                         val scale: Float,
+                        val motionClass: MatchSpatialMotion,
                     )
 
                     val dots = spatialFrame.players.map { p ->
-                        val lateral = playerLatAnimations[p.id]?.value ?: p.lateral
-                        val longitudinal = playerLongAnimations[p.id]?.value ?: p.longitudinal
+                        var lateral = playerLatAnimations[p.id]?.value ?: p.lateral
+                        var longitudinal = playerLongAnimations[p.id]?.value ?: p.longitudinal
+
+                        // Eigene subtile Laufbewegung pro Spieler. Frequenz, Phase
+                        // und Amplitude hängen von ID und taktischer Aufgabe ab;
+                        // der Ballbesitzer bleibt exakt auf seiner Ballroute.
+                        if (!p.active) {
+                            val freq = .78f + (p.id % 7) * .055f
+                            val phase = p.id * 1.618f
+                            val lateralAmp = .0008f + p.intensity * .0032f
+                            val longAmp = .0006f + p.intensity * .0038f
+                            lateral += sin(motion * freq + phase) * lateralAmp
+                            longitudinal += cos(motion * (freq + .13f) + phase * .71f) * longAmp
+                        }
+
                         DotPlayer(
                             isHome = p.isHome,
                             index = p.slotIndex,
@@ -316,6 +361,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                             point = screenPoint(lateral, longitudinal),
                             active = p.active,
                             scale = playerScaleAnimations[p.id]?.value ?: if (p.active) 2.35f else 1f,
+                            motionClass = p.motion,
                         )
                     }
 
@@ -392,16 +438,22 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(phaseText(m), color = Chalk, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.labelSmall)
+                    val directionArrow = if (MatchSpatialModel.screenAttackDirection(activeClubId == home.id, m.period) > 0) "→" else "←"
+                    Text(
+                        "${activeClub.shortName} $directionArrow · ${phaseText(m)}",
+                        color = Chalk,
+                        fontWeight = FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
                 }
             }
 
             val endsSwitched = MatchSpatialModel.sidesSwitched(m.period)
             Text(
                 if (!endsSwitched)
-                    "← ${home.shortName} greift an · ${away.shortName} greift an → · 1. Halbzeit / feste Engine-Richtung"
+                    "← ${away.shortName} greift an · ${home.shortName} greift an → · 1. Halbzeit"
                 else
-                    "← ${away.shortName} greift an · ${home.shortName} greift an → · Seitenwechsel nach der Pause",
+                    "← ${home.shortName} greift an · ${away.shortName} greift an → · Seitenwechsel nach der Pause",
                 color = Muted,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
