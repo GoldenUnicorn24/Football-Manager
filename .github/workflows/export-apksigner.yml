@@ -1,0 +1,26 @@
+name: Export Android APK Signer
+
+on:
+  push:
+    branches: [ "feature/bmw9-dynamic-match-view" ]
+  workflow_dispatch:
+
+jobs:
+  tool:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: android-actions/setup-android@v4
+      - name: Install build tools
+        run: sdkmanager "build-tools;36.0.0"
+      - name: Collect apksigner
+        shell: bash
+        run: |
+          mkdir -p signer-tool
+          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" signer-tool/apksigner.jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apksigner-36
+          path: signer-tool/apksigner.jar
+          if-no-files-found: error
+          retention-days: 14
