@@ -295,10 +295,10 @@ private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}
   Section("Match-Ansicht"){
    Text("Wähle die Darstellung für Live-Spiele.",color=Muted,style=MaterialTheme.typography.bodySmall)
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
-    Column(Modifier.weight(1f)){Text("Taktische Draufsicht 5.0",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Jeder Spieler bewegt sich einzeln · Heimteam zunächst nach rechts · Rollen, Pressing, Deckung & Restverteidigung." else "Klassische Gründerelf-Matchansicht ist aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+    Column(Modifier.weight(1f)){Text("Taktische Draufsicht 6.0",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Jeder Spieler mit eigener Route, Reaktionszeit und Aufgabe · Heimteam zunächst nach rechts · Seitenwechsel zur Pause." else "Klassische Gründerelf-Matchansicht ist aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)}
     Switch(checked=tacticalMatchView,onCheckedChange={vm.setTacticalMatchView(it)})
    }
-   Text("AUS = bisherige Matchansicht unverändert. AN = Draufsicht mit individuellen Reaktionszeiten und Geschwindigkeiten. Läufer, Unterstützer, Presser und Manndecker bewegen sich unabhängig; die Grundordnung bleibt trotzdem erhalten. Bei Schüssen springt die bekannte Toransicht automatisch hinein.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   Text("AUS = bisherige Matchansicht unverändert. AN = Spieler reagieren einzeln: Tiefenläufe nutzen verschiedene Kanäle, Unterstützer bilden unterschiedliche Passdreiecke, Presser starten nacheinander und Verteidiger verfolgen eigene Gegenspieler. Tempo und Laufroute hängen auch vom Spieler ab. Bei Schüssen springt die bekannte Toransicht automatisch hinein.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
   Section("Match-Sounds"){
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
