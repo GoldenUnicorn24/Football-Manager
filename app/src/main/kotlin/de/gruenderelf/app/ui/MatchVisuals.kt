@@ -777,6 +777,32 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     }
                 }
 
+                val leftSideTeam = if (endsSwitched) away else home
+                val rightSideTeam = if (endsSwitched) home else away
+
+                Text(
+                    "${leftSideTeam.shortName}  →",
+                    color = Chalk,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 10.dp, bottom = 8.dp)
+                        .background(Color.Black.copy(alpha = .50f), RoundedCornerShape(99.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+                Text(
+                    "←  ${rightSideTeam.shortName}",
+                    color = Chalk,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 10.dp, bottom = 8.dp)
+                        .background(Color.Black.copy(alpha = .50f), RoundedCornerShape(99.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
