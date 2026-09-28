@@ -159,15 +159,36 @@ class MatchSpatialModelTest {
     }
 
     @Test
-    fun screenDirectionsSwitchEndsButNeverSwapTeamIdentity() {
-        assertEquals(-1, MatchSpatialModel.screenAttackDirection(true, 1))
-        assertEquals(1, MatchSpatialModel.screenAttackDirection(false, 1))
-        assertEquals(1, MatchSpatialModel.screenAttackDirection(true, 2))
-        assertEquals(-1, MatchSpatialModel.screenAttackDirection(false, 2))
+    fun screenDirectionsUseHomeRightInFirstHalfAndSwitchAfterBreak() {
+        assertEquals(1, MatchSpatialModel.screenAttackDirection(true, 1))
+        assertEquals(-1, MatchSpatialModel.screenAttackDirection(false, 1))
+        assertEquals(-1, MatchSpatialModel.screenAttackDirection(true, 2))
+        assertEquals(1, MatchSpatialModel.screenAttackDirection(false, 2))
 
-        assertEquals(.12, MatchSpatialModel.displayLongitudinal(1, .12f).toDouble(), .0001)
-        assertEquals(.88, MatchSpatialModel.displayLongitudinal(2, .12f).toDouble(), .0001)
-        assertEquals(.12, MatchSpatialModel.displayLongitudinal(4, .88f).toDouble(), .0001)
+        assertEquals(.88, MatchSpatialModel.displayLongitudinal(1, .12f).toDouble(), .0001)
+        assertEquals(.12, MatchSpatialModel.displayLongitudinal(2, .12f).toDouble(), .0001)
+        assertEquals(.88, MatchSpatialModel.displayLongitudinal(4, .88f).toDouble(), .0001)
+    }
+
+    @Test
+    fun playersReceiveIndividualMovementTasksInsteadOfOneSynchronizedBlock() {
+        val (w, m) = running()
+        setOwner(m, home = true, phase = LivePhase.DANGEROUS_ATTACK, ballX = .30f, ballY = .13f)
+
+        val frame = MatchSpatialModel.frame(w, m)
+        val home = frame.players.filter { it.isHome }
+        val away = frame.players.filter { !it.isHome }
+
+        assertTrue(home.any { it.motion == MatchSpatialMotion.BALL })
+        assertTrue(home.any { it.motion == MatchSpatialMotion.RUN })
+        assertTrue(home.any { it.motion == MatchSpatialMotion.SUPPORT })
+        assertTrue(away.any { it.motion == MatchSpatialMotion.PRESS })
+        assertTrue(away.any { it.motion == MatchSpatialMotion.MARK })
+
+        // The pitch must contain several independent target positions, not a
+        // single translated formation line.
+        assertTrue(home.map { it.longitudinal }.distinct().size >= 4)
+        assertTrue(away.map { it.longitudinal }.distinct().size >= 4)
     }
 
 }
