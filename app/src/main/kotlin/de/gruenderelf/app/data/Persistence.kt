@@ -60,20 +60,20 @@ private val Context.settings by preferencesDataStore(name="einstellungen")
 class GameRepository(context: Context,private val db: SaveDatabase=SaveDatabase.open(context)){
  private val saveMutex=Mutex()
  private val settings=context.applicationContext.settings
- private val lastKey=intPreferencesKey("letzter_slot");private val fastKey=booleanPreferencesKey("schnelles_spiel");private val speedKey=stringPreferencesKey("spieltempo_v044");private val soundKey=booleanPreferencesKey("match_sounds_v0464");private val changelogKey=stringPreferencesKey("changelog_seen_version")
+ private val lastKey=intPreferencesKey("letzter_slot");private val fastKey=booleanPreferencesKey("schnelles_spiel");private val speedKey=stringPreferencesKey("spieltempo_v044");private val soundKey=booleanPreferencesKey("match_sounds_v0464");private val matchViewKey=booleanPreferencesKey("tactical_match_view_v2");private val changelogKey=stringPreferencesKey("changelog_seen_version")
  private val developerHashKey=stringPreferencesKey("developer_password_hash_v1");private val developerSaltKey=stringPreferencesKey("developer_password_salt_v1")
  private val fixedDeveloperCode="Republik"
  val saves=db.saves().summaries()
  val lastSlot=settings.data.catch{emit(emptyPreferences())}.map{it[lastKey]?:1}
  val matchSpeed=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[speedKey]?.let{runCatching{MatchSpeed.valueOf(it)}.getOrNull()}?:if(prefs[fastKey]==true)MatchSpeed.FAST else MatchSpeed.NORMAL}
- val soundsEnabled=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[soundKey]?:true}
+ val soundsEnabled=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[soundKey]?:true}\n val tacticalMatchView=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[matchViewKey]?:false}
  val changelogSeenVersion=settings.data.catch{emit(emptyPreferences())}.map{prefs->prefs[changelogKey]?:""}
  val developerPasswordConfigured: Flow<Boolean> = flowOf(true)
  suspend fun setDeveloperPassword(value:String){require(value==fixedDeveloperCode){"Developer-Code falsch."}}
  suspend fun verifyDeveloperPassword(value:String):Boolean=value==fixedDeveloperCode
  suspend fun developerSaveExists()=db.saves().header(BMW_DEVELOPER_SAVE_SLOT)!=null
  suspend fun setMatchSpeed(value: MatchSpeed){settings.edit{it[speedKey]=value.name;it[fastKey]=value==MatchSpeed.FAST}}
- suspend fun setSoundsEnabled(enabled: Boolean){settings.edit{it[soundKey]=enabled}}
+ suspend fun setSoundsEnabled(enabled: Boolean){settings.edit{it[soundKey]=enabled}}\n suspend fun setTacticalMatchView(enabled:Boolean){settings.edit{it[matchViewKey]=enabled}}
  suspend fun markChangelogSeen(version:String){settings.edit{it[changelogKey]=version}}
  private fun backupSlot(slot:Int)=slot+100
  private suspend fun decodeOrNull(row:Savegame?):World? {
