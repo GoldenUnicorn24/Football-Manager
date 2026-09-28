@@ -117,36 +117,65 @@ object MatchSpatialModel {
     private fun attackingBackLine(w: World, m: LiveMatch, isHome: Boolean, ballProgress: Float): Float {
         val line = effectiveLine(w, m, isHome)
         val mentality = effectiveMentality(m, isHome)
-        var back = ballProgress - phaseTeamLength(m.livePhase) +
-            (line - 3) * .022f + (mentality - 3) * .014f
+        val lineBias = (line - 3) * .018f
+        val mentalityBias = (mentality - 3) * .012f
 
-        // Established attacks: the rest defence must actually cross toward halfway.
+        // The back line follows the attack as a unit. Counters are intentionally
+        // stretched; settled attacks and dangerous attacks push the rest-defence
+        // much higher. This is the key rule that prevents the defence from
+        // staying beside its own box while the attack is at the other end.
+        var back = when (m.livePhase) {
+            LivePhase.COUNTER -> .16f + ballProgress * .24f
+            LivePhase.ATTACK -> .20f + ballProgress * .38f
+            LivePhase.DANGEROUS_ATTACK -> .31f + ballProgress * .31f
+            LivePhase.CORNER -> .52f
+            LivePhase.DANGEROUS_FREE_KICK -> .47f
+            LivePhase.FREE_KICK -> .26f + ballProgress * .30f
+            else -> .15f + ballProgress * .32f
+        } + lineBias + mentalityBias
+
         when (m.livePhase) {
-            LivePhase.DANGEROUS_ATTACK -> if (ballProgress >= .68f) {
-                back = max(back, .48f + (ballProgress - .68f) * .40f)
+            LivePhase.DANGEROUS_ATTACK -> {
+                if (ballProgress >= .62f) back = max(back, .44f + (ballProgress - .62f) * .36f)
+                if (ballProgress >= .78f) back = max(back, .52f)
             }
-            LivePhase.ATTACK -> if (ballProgress >= .56f) {
-                back = max(back, .36f + (ballProgress - .56f) * .34f)
+            LivePhase.ATTACK -> if (ballProgress >= .58f) {
+                back = max(back, .34f + (ballProgress - .58f) * .33f)
             }
-            LivePhase.CORNER -> back = max(back, .48f)
-            LivePhase.DANGEROUS_FREE_KICK -> back = max(back, .44f)
+            LivePhase.CORNER -> back = max(back, .52f)
+            LivePhase.DANGEROUS_FREE_KICK -> back = max(back, .47f)
             else -> Unit
         }
-        if (if (isHome) m.homeAllOutAttack else m.awayAllOutAttack) back += .045f
-        if (if (isHome) m.homeConserveEnergy else m.awayConserveEnergy) back -= .045f
-        return back.coerceIn(.14f, .67f)
+
+        if (if (isHome) m.homeAllOutAttack else m.awayAllOutAttack) back += .050f
+        if (if (isHome) m.homeConserveEnergy else m.awayConserveEnergy) back -= .050f
+        return back.coerceIn(.13f, .66f)
     }
 
     private fun defendingBackLine(w: World, m: LiveMatch, isHome: Boolean, ballProgress: Float): Float {
         val line = effectiveLine(w, m, isHome)
-        val mentality = effectiveMentality(m, isHome)
-        var back = .085f + ballProgress * .53f + (line - 3) * .022f + (mentality - 3) * .005f
+        val pressing = effectivePressing(w, m, isHome)
+        val lineBias = (line - 3) * .018f
 
-        // Opponent is at/around our box: keep a believable penalty-area line.
-        if (ballProgress <= .22f && m.livePhase in setOf(LivePhase.DANGEROUS_ATTACK, LivePhase.COUNTER)) {
-            back = min(back, .145f + ballProgress * .12f)
+        // ballProgress is measured from THIS team's own goal. Small values are
+        // therefore dangerous for the defending side.
+        var back = when {
+            ballProgress < .18f -> .115f + ballProgress * .14f
+            ballProgress < .34f -> .14f + (ballProgress - .18f) * .55f
+            ballProgress < .55f -> .23f + (ballProgress - .34f) * .72f
+            else -> .38f + (ballProgress - .55f) * .42f
+        } + lineBias
+
+        // High pressing only moves the line up when the ball is safely away from
+        // goal. Near the own box, defenders preserve the line instead of all
+        // charging the ball carrier.
+        if (ballProgress > .55f) back += (pressing - 3).coerceAtLeast(0) * .012f
+        if (m.livePhase == LivePhase.DANGEROUS_ATTACK && ballProgress <= .25f) {
+            back = min(back, .155f + ballProgress * .10f)
         }
-        return back.coerceIn(.075f, .60f)
+        if (m.livePhase == LivePhase.COUNTER && ballProgress <= .38f) back -= .018f
+
+        return back.coerceIn(.085f, .60f)
     }
 
     private fun backLine(w: World, m: LiveMatch, isHome: Boolean, ballProgress: Float): Float =
@@ -162,19 +191,27 @@ object MatchSpatialModel {
     ): Float {
         return if (hasBall(m, isHome)) {
             val ahead = when (m.livePhase) {
-                LivePhase.COUNTER -> .11f
-                LivePhase.DANGEROUS_ATTACK -> .050f
-                LivePhase.ATTACK -> .060f
-                LivePhase.CORNER -> .025f
+                LivePhase.COUNTER -> .12f
+                LivePhase.DANGEROUS_ATTACK -> .045f
+                LivePhase.ATTACK -> .065f
+                LivePhase.CORNER -> .020f
+                LivePhase.DANGEROUS_FREE_KICK -> .035f
                 else -> .075f
             }
-            max(back + .24f, ballProgress + ahead).coerceIn(.40f, .975f)
+            val minimumLength = when (m.livePhase) {
+                LivePhase.COUNTER -> .40f
+                LivePhase.DANGEROUS_ATTACK -> .30f
+                LivePhase.ATTACK -> .34f
+                LivePhase.CORNER -> .34f
+                else -> .36f
+            }
+            max(back + minimumLength, ballProgress + ahead).coerceIn(.43f, .975f)
         } else {
-            val length = when (m.livePhase) {
-                LivePhase.DANGEROUS_ATTACK -> .275f
-                LivePhase.ATTACK -> .325f
-                LivePhase.COUNTER -> .385f
-                else -> .355f
+            val length = when {
+                m.livePhase == LivePhase.DANGEROUS_ATTACK && ballProgress < .30f -> .30f
+                m.livePhase == LivePhase.COUNTER -> .38f
+                m.livePhase == LivePhase.ATTACK -> .34f
+                else -> .36f
             }
             (back + length).coerceAtMost(.82f)
         }
@@ -197,47 +234,80 @@ object MatchSpatialModel {
         val back = backLine(w, m, isHome, ballProgress)
         val front = frontLine(w, m, isHome, ballProgress, back)
         val keeper = pos == Position.TW || index == 0
+        val r = role(w, m, isHome, id)
+        val ins = instructions(w, m, isHome, id)
 
         if (keeper) {
             var progress = .045f + back * .36f
-            if (role(w, m, isHome, id) == PlayerRole.BUILD_UP_KEEPER) progress += .028f
-            progress = min(progress, back - .115f).coerceIn(.04f, .28f)
-            val lat = (.5f + (ballX - .5f) * .23f).coerceIn(.35f, .65f)
+            if (r == PlayerRole.BUILD_UP_KEEPER) progress += .030f
+            progress = min(progress, back - .115f).coerceIn(.04f, .29f)
+            val lat = (.5f + (ballX - .5f) * .22f).coerceIn(.35f, .65f)
             return lat to progress
         }
 
         val norm = depthNorm(m, isHome, index)
         var progress = back + (front - back) * norm
 
-        val widthScale = if (owns) .76f + width * .075f else .59f + width * .057f
-        val center = .5f + (ballX - .5f) * if (owns) .16f else .30f
+        // In possession keep more width; without the ball compress around the
+        // centre and shift as a block to the ball side.
+        val widthScale = if (owns) .80f + width * .065f else .58f + width * .050f
+        val shiftToBall = if (owns) .12f else .25f
+        val center = .5f + (ballX - .5f) * shiftToBall
         var lateral = center + (baseLat - .5f) * widthScale
 
-        when (pos) {
-            Position.IV -> if (owns) progress -= .006f
-            Position.LV, Position.RV -> if (owns) progress += .030f
-            Position.DM -> progress -= if (owns) .025f else .012f
-            Position.OM -> if (owns) progress += .020f
-            Position.LA, Position.RA -> if (owns) progress += .028f
-            Position.ST -> if (owns) progress += .020f
-            else -> Unit
-        }
+        val leftSide = baseLat < .5f
+        val ballLeft = ballX < .5f
+        val sameSide = leftSide == ballLeft
 
-        // Far side compresses when defending.
-        if (!owns) {
-            val sameSide = (baseLat < .5f) == (ballX < .5f)
-            if (!sameSide) lateral += (.5f - lateral) * .20f
-        }
-
-        // Explicit rest-defence spacing in the final third.
-        if (owns && m.livePhase == LivePhase.DANGEROUS_ATTACK && ballProgress > .70f) {
+        if (owns) {
+            // Rest defence and line spacing in possession.
             when (pos) {
-                Position.IV -> progress = max(progress, back)
-                Position.LV, Position.RV -> progress = max(progress, back + .060f)
-                Position.DM -> progress = max(progress, back + .115f)
-                Position.ZM -> progress = max(progress, back + .17f)
-                else -> Unit
+                Position.IV -> progress = back
+                Position.DM -> progress = max(progress, back + (front - back) * .29f)
+                Position.ZM -> progress = max(progress, back + (front - back) * .47f)
+                Position.OM -> progress = max(progress, back + (front - back) * .68f)
+                Position.ST -> progress = max(progress, back + (front - back) * .88f)
+                Position.LA, Position.RA -> progress = max(progress, back + (front - back) * .73f)
+                Position.LV, Position.RV -> {
+                    val overlap = r == PlayerRole.OVERLAPPING_FULLBACK || PlayerInstruction.OVERLAP in ins
+                    if (sameSide && overlap) {
+                        progress = max(progress, back + (front - back) * .62f)
+                        lateral += if (leftSide) -.035f else .035f
+                    } else {
+                        // Far-side/fullback rest-defence: narrow and only a little
+                        // ahead of the centre-backs instead of sitting on the own box.
+                        progress = max(back + .045f, min(progress, back + (front - back) * .34f))
+                        if (!sameSide) lateral += (.5f - lateral) * .22f
+                    }
+                }
+                Position.TW -> Unit
             }
+
+            if (m.livePhase == LivePhase.DANGEROUS_ATTACK && ballProgress >= .68f) {
+                // Hard minimums for an established final-third attack.
+                when (pos) {
+                    Position.IV -> progress = max(progress, .46f)
+                    Position.LV, Position.RV -> progress = max(progress, .49f)
+                    Position.DM -> progress = max(progress, .55f)
+                    Position.ZM -> progress = max(progress, .61f)
+                    Position.OM, Position.LA, Position.RA -> progress = max(progress, .70f)
+                    Position.ST -> progress = max(progress, .76f)
+                    Position.TW -> Unit
+                }
+            }
+        } else {
+            // Defensive block: preserve rows instead of pulling the whole line to
+            // the ball. The far side narrows more strongly.
+            when (pos) {
+                Position.IV -> progress = back
+                Position.LV, Position.RV -> progress = back + .012f
+                Position.DM -> progress = back + (front - back) * .28f
+                Position.ZM -> progress = back + (front - back) * .48f
+                Position.OM, Position.LA, Position.RA -> progress = back + (front - back) * .68f
+                Position.ST -> progress = back + (front - back) * .91f
+                Position.TW -> Unit
+            }
+            if (!sameSide) lateral += (.5f - lateral) * .24f
         }
 
         return lateral.coerceIn(.045f, .955f) to progress.coerceIn(.065f, .975f)
@@ -297,7 +367,8 @@ object MatchSpatialModel {
             2, 3 -> 2
             else -> 3
         }
-        if (ballProgress < .23f) count = min(count, 2)
+        if (ballProgress < .20f) count = 1
+        else if (ballProgress < .30f) count = min(count, 2)
 
         return list.indices.filter { idx ->
             val id = list[idx]
@@ -312,11 +383,21 @@ object MatchSpatialModel {
             val r = role(w, m, isHome, id)
             val ins = instructions(w, m, isHome, id)
             var score = dx * dx + dy * dy
-            if (pos == Position.IV) score += if (ballProgress < .24f) .015f else .075f
-            if (pos == Position.DM) score -= .025f
-            if (r == PlayerRole.PRESSING_FORWARD) score -= .045f
-            if (PlayerInstruction.PRESS_MORE in ins) score -= .055f
-            if (PlayerInstruction.PRESS_LESS in ins) score += .12f
+
+            // Midfield/forwards should normally initiate pressure. Centre-backs
+            // only step out when the ball is genuinely in their zone.
+            score += when (pos) {
+                Position.IV -> if (ballProgress < .16f) .030f else .180f
+                Position.LV, Position.RV -> .065f
+                Position.DM -> -.055f
+                Position.ZM -> -.035f
+                Position.OM, Position.LA, Position.RA -> -.020f
+                Position.ST -> -.010f
+                Position.TW -> .30f
+            }
+            if (r == PlayerRole.PRESSING_FORWARD) score -= .055f
+            if (PlayerInstruction.PRESS_MORE in ins) score -= .060f
+            if (PlayerInstruction.PRESS_LESS in ins) score += .140f
             score
         }.take(count).toSet()
     }
