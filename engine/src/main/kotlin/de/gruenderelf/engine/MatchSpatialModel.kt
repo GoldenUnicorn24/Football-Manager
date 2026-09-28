@@ -319,9 +319,20 @@ object MatchSpatialModel {
         val ballProgress = progressFromOwnGoal(isHome, ballY)
         return list.indices.filter { idx ->
             val id = list[idx]
-            id != 0 && id != m.livePlayerId && id !in m.sentOff && id !in m.injured &&
-                slotPosition(w, m, isHome, idx, id) != Position.TW &&
-                PlayerInstruction.HOLD_POSITION !in instructions(w, m, isHome, id)
+            if (id == 0 || id == m.livePlayerId || id in m.sentOff || id in m.injured) false
+            else {
+                val pos = slotPosition(w, m, isHome, idx, id)
+                val r = role(w, m, isHome, id)
+                val ins = instructions(w, m, isHome, id)
+                val allowedByRole = when (pos) {
+                    Position.TW -> false
+                    Position.IV -> m.livePhase == LivePhase.POSSESSION && r == PlayerRole.BALL_PLAYING_CB
+                    Position.LV, Position.RV -> r in setOf(PlayerRole.OVERLAPPING_FULLBACK, PlayerRole.INVERTED_FULLBACK) ||
+                        PlayerInstruction.OVERLAP in ins
+                    else -> true
+                }
+                allowedByRole && PlayerInstruction.HOLD_POSITION !in ins
+            }
         }.sortedBy { idx ->
             val id = list[idx]
             val p = skeleton(w, m, isHome, idx, id, ballX, ballY)
@@ -342,9 +353,16 @@ object MatchSpatialModel {
         }
         return list.indices.filter { idx ->
             val id = list[idx]
-            id != 0 && id != m.livePlayerId && id !in m.sentOff && id !in m.injured &&
-                slotPosition(w, m, isHome, idx, id) in setOf(Position.ST, Position.LA, Position.RA, Position.OM, Position.LV, Position.RV) &&
-                PlayerInstruction.HOLD_POSITION !in instructions(w, m, isHome, id)
+            if (id == 0 || id == m.livePlayerId || id in m.sentOff || id in m.injured) false
+            else {
+                val pos = slotPosition(w, m, isHome, idx, id)
+                val r = role(w, m, isHome, id)
+                val ins = instructions(w, m, isHome, id)
+                val forwardRunner = pos in setOf(Position.ST, Position.LA, Position.RA, Position.OM)
+                val fullbackRunner = pos in setOf(Position.LV, Position.RV) &&
+                    (r == PlayerRole.OVERLAPPING_FULLBACK || PlayerInstruction.OVERLAP in ins)
+                (forwardRunner || fullbackRunner) && PlayerInstruction.HOLD_POSITION !in ins
+            }
         }.sortedByDescending { idx ->
             val id = list[idx]
             val p = w.players[id]
@@ -387,7 +405,11 @@ object MatchSpatialModel {
             // Midfield/forwards should normally initiate pressure. Centre-backs
             // only step out when the ball is genuinely in their zone.
             score += when (pos) {
-                Position.IV -> if (ballProgress < .16f) .030f else .180f
+                Position.IV -> when {
+                    r == PlayerRole.STOPPER && ballProgress < .42f -> .035f
+                    ballProgress < .16f -> .055f
+                    else -> .190f
+                }
                 Position.LV, Position.RV -> .065f
                 Position.DM -> -.055f
                 Position.ZM -> -.035f
