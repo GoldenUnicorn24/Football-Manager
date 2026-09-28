@@ -206,7 +206,9 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
    }
   };return
  }
- val soundsEnabled by vm.soundsEnabled.collectAsState()\n val tacticalMatchView by vm.tacticalMatchView.collectAsState()\n MatchAudioEffects(w,m,soundsEnabled)
+ val soundsEnabled by vm.soundsEnabled.collectAsState()
+ val tacticalMatchView by vm.tacticalMatchView.collectAsState()
+ MatchAudioEffects(w,m,soundsEnabled)
  val h=w.clubs.getValue(m.homeId);val a=w.clubs.getValue(m.awayId);val ownHome=m.homeId==w.user.clubId;val ownClub=w.club();var livePreset by rememberSaveable(m.fixtureId){mutableStateOf("Individuell")}
  val ownXiRaw=if(ownHome)m.homeXi else m.awayXi;val xi=ownXiRaw.filter{it!=0};val bench=if(ownHome)m.homeBench else m.awayBench;val ownSubs=if(ownHome)m.homeSubs else m.awaySubs;val ownFormation=if(ownHome)m.homeFormation else m.awayFormation;val conserve=if(ownHome)m.homeConserveEnergy else m.awayConserveEnergy;val allOut=if(ownHome)m.homeAllOutAttack else m.awayAllOutAttack;val controlGame=if(ownHome)m.homeControlGame else m.awayControlGame
  Page(if(m.finished)"Abpfiff" else if(m.halfTime)m.breakType.label else if(m.incidentPause)"Spiel unterbrochen" else "Am Seitenrand","${m.weather.uppercase()} · ${m.attendance} ZUSCHAUER"){
@@ -235,7 +237,8 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
    Section{PrimaryTabRow(selectedTabIndex=liveTab,containerColor=Color.Transparent,contentColor=Grass){Tab(selected=liveTab==0,onClick={liveTab=0},text={Text("Live")});Tab(selected=liveTab==1,onClick={liveTab=1},text={Text("Taktik")});Tab(selected=liveTab==2,onClick={liveTab=2},text={Text("Statistik")});Tab(selected=liveTab==3,onClick={liveTab=3},text={Text("Analyse")})}}
    if(liveTab==0)Section("Live-Animation"){
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Text("Spielfeld-Grafik anzeigen");Switch(showLiveGraphic,{showLiveGraphic=it})}
-    if(showLiveGraphic)LiveMatchAnimation(w,m,MatchEngine.liveFrameDurationMs(m.livePhase,speed),tacticalMatchView) else Text("Die Spielfeld-Grafik ist ausgeblendet. Das Match läuft normal weiter.",color=Muted)\n    Text(if(tacticalMatchView)"Dynamische Übersicht aktiv: Formation, Pressing und Laufwege bewegen sich um den echten Engine-Zustand; der Ballbesitzer bleibt hervorgehoben." else "Klassische Matchansicht aktiv. Die neue Übersicht kannst du in den Einstellungen einschalten.",color=Muted,style=MaterialTheme.typography.bodySmall)
+    if(showLiveGraphic)LiveMatchAnimation(w,m,MatchEngine.liveFrameDurationMs(m.livePhase,speed),tacticalMatchView) else Text("Die Spielfeld-Grafik ist ausgeblendet. Das Match läuft normal weiter.",color=Muted)
+    Text(if(tacticalMatchView)"Dynamische Übersicht aktiv: Formation, Pressing und Laufwege bewegen sich um den echten Engine-Zustand; der Ballbesitzer bleibt hervorgehoben." else "Klassische Matchansicht aktiv. Die neue Übersicht kannst du in den Einstellungen einschalten.",color=Muted,style=MaterialTheme.typography.bodySmall)
    }else if(liveTab==1) Section("Taktik-Zentrale"){Text("Formation, Sofortanweisungen und Wechsel stehen weiter unten in diesem Tab. Während du Live ansiehst, werden diese schweren UI-Berechnungen nicht permanent neu aufgebaut.",color=Muted)} else if(liveTab==2) LiveStatistics(w,m,h,a) else MatchAnalysisView(w,m)
   }else{
    LiveStatistics(w,m,h,a,"Endstand & Statistik")
