@@ -14,6 +14,8 @@ import kotlin.math.min
  * This object is deliberately the single conversion point so the UI cannot
  * accidentally mirror one team or make both teams attack the same goal.
  */
+enum class MatchSpatialMotion { HOLD, SHIFT, SUPPORT, RUN, PRESS, MARK, BALL }
+
 data class MatchSpatialPlayer(
     val id: Int,
     val isHome: Boolean,
@@ -22,6 +24,8 @@ data class MatchSpatialPlayer(
     val lateral: Float,
     val longitudinal: Float,
     val active: Boolean,
+    val motion: MatchSpatialMotion = MatchSpatialMotion.HOLD,
+    val intensity: Float = .25f,
 )
 
 data class MatchSpatialFrame(
@@ -40,17 +44,19 @@ object MatchSpatialModel {
     /** Presentation-only side switch. Engine coordinates never change. */
     fun sidesSwitched(period: Int): Boolean = period == 2 || period == 4
 
-    fun displayLongitudinal(period: Int, absoluteY: Float): Float =
-        (if (sidesSwitched(period)) 1f - absoluteY else absoluteY).coerceIn(0f, 1f)
-
     /**
-     * Direction on the rendered horizontal pitch: -1 = left, +1 = right.
-     * HOME attacks engine y=0; AWAY attacks y=1. After the interval the
-     * presentation rotates the ends so the teams visibly change sides.
+     * The tactical camera is intentionally oriented so HOME attacks to the
+     * RIGHT in the first half, matching the visual convention used by the
+     * reference view. Engine coordinates remain untouched: HOME still attacks
+     * toward y=0 internally and AWAY toward y=1.
      */
+    fun displayLongitudinal(period: Int, absoluteY: Float): Float =
+        (if (sidesSwitched(period)) absoluteY else 1f - absoluteY).coerceIn(0f, 1f)
+
+    /** Direction on the rendered horizontal pitch: -1 = left, +1 = right. */
     fun screenAttackDirection(isHome: Boolean, period: Int): Int {
-        val canonical = if (isHome) -1 else 1
-        return if (sidesSwitched(period)) -canonical else canonical
+        val engineDirection = if (isHome) -1 else 1
+        return if (sidesSwitched(period)) engineDirection else -engineDirection
     }
 
     private fun ownerClubId(m: LiveMatch): Int =
@@ -440,6 +446,37 @@ object MatchSpatialModel {
         }.take(count).toSet()
     }
 
+    private fun nearestMarkTarget(
+        w: World,
+        m: LiveMatch,
+        isHome: Boolean,
+        ownLat: Float,
+        ownProgress: Float,
+        ballX: Float,
+        ballY: Float,
+    ): Pair<Float, Float>? {
+        val opponents = xi(m, !isHome)
+        var best: Pair<Float, Float>? = null
+        var bestScore = Float.MAX_VALUE
+        opponents.forEachIndexed { idx, oppId ->
+            if (oppId == 0 || oppId in m.sentOff || oppId in m.injured) return@forEachIndexed
+            val oppPos = slotPosition(w, m, !isHome, idx, oppId)
+            if (oppPos == Position.TW) return@forEachIndexed
+            val sk = skeleton(w, m, !isHome, idx, oppId, ballX, ballY)
+            val absoluteOppY = absoluteY(!isHome, sk.second)
+            val oppProgressFromOwnGoal = progressFromOwnGoal(isHome, absoluteOppY)
+            val dx = sk.first - ownLat
+            val dy = oppProgressFromOwnGoal - ownProgress
+            var score = dx * dx + dy * dy
+            if (oppPos in setOf(Position.ST, Position.LA, Position.RA, Position.OM)) score -= .025f
+            if (score < bestScore) {
+                bestScore = score
+                best = sk.first to oppProgressFromOwnGoal
+            }
+        }
+        return best
+    }
+
     fun frame(w: World, m: LiveMatch, ballX: Float = m.ballX, ballY: Float = m.ballY): MatchSpatialFrame {
         val bx = ballX.coerceIn(.025f, .975f)
         val by = ballY.coerceIn(.025f, .975f)
@@ -516,9 +553,30 @@ object MatchSpatialModel {
                             val pressure = (.38f + effectivePressing(w, m, isHome) * .065f).coerceIn(.44f, .70f)
                             lat += (bx - lat) * pressure
                             progress += (ballProgress - progress) * pressure
-                        } else if (PlayerInstruction.TIGHT_MARKING in ins) {
-                            lat += (bx - lat) * .08f
-                            progress += (ballProgress - progress) * .07f
+                        } else {
+                            // Non-pressing defenders/midfielders track an individual
+                            // nearby opponent/passing lane while preserving the team line.
+                            val mark = nearestMarkTarget(w, m, isHome, lat, progress, bx, by)
+                            if (mark != null && pos in setOf(Position.IV, Position.LV, Position.RV, Position.DM, Position.ZM)) {
+                                val markFactor = when (pos) {
+                                    Position.IV -> if (PlayerInstruction.TIGHT_MARKING in ins) .22f else .12f
+                                    Position.LV, Position.RV -> if (PlayerInstruction.TIGHT_MARKING in ins) .19f else .10f
+                                    Position.DM -> if (PlayerInstruction.TIGHT_MARKING in ins) .25f else .15f
+                                    Position.ZM -> if (PlayerInstruction.TIGHT_MARKING in ins) .18f else .10f
+                                    else -> .08f
+                                }
+                                lat += (mark.first - lat) * markFactor
+                                val rawMarkedProgress = progress + (mark.second - progress) * (markFactor * .55f)
+                                val maxLineBreak = when (pos) {
+                                    Position.IV -> .018f
+                                    Position.LV, Position.RV -> .025f
+                                    else -> .045f
+                                }
+                                progress = rawMarkedProgress.coerceIn(base.second - maxLineBreak, base.second + maxLineBreak)
+                            } else if (PlayerInstruction.TIGHT_MARKING in ins) {
+                                lat += (bx - lat) * .08f
+                                progress += (ballProgress - progress) * .07f
+                            }
                         }
                         if (r == PlayerRole.ANCHOR) progress -= .025f
                         if (r == PlayerRole.PRESSING_FORWARD && effectivePressing(w, m, isHome) >= 3) progress += .025f
@@ -531,6 +589,26 @@ object MatchSpatialModel {
                 }
 
                 progress = if (keeper) progress.coerceIn(.04f, .30f) else progress.coerceIn(.07f, .975f)
+                val isActive = id == m.livePlayerId && owns
+                val motion = when {
+                    isActive -> MatchSpatialMotion.BALL
+                    keeper -> MatchSpatialMotion.SHIFT
+                    owns && index in runners -> MatchSpatialMotion.RUN
+                    owns && index in support -> MatchSpatialMotion.SUPPORT
+                    !owns && index in pressing -> MatchSpatialMotion.PRESS
+                    !owns && pos in setOf(Position.IV, Position.LV, Position.RV, Position.DM, Position.ZM) -> MatchSpatialMotion.MARK
+                    PlayerInstruction.HOLD_POSITION in ins -> MatchSpatialMotion.HOLD
+                    else -> MatchSpatialMotion.SHIFT
+                }
+                val intensity = when (motion) {
+                    MatchSpatialMotion.BALL -> 1.00f
+                    MatchSpatialMotion.RUN -> .92f
+                    MatchSpatialMotion.PRESS -> .88f
+                    MatchSpatialMotion.SUPPORT -> .72f
+                    MatchSpatialMotion.MARK -> .55f
+                    MatchSpatialMotion.SHIFT -> .40f
+                    MatchSpatialMotion.HOLD -> .18f
+                }
                 out += MatchSpatialPlayer(
                     id = id,
                     isHome = isHome,
@@ -538,7 +616,9 @@ object MatchSpatialModel {
                     position = pos,
                     lateral = lat.coerceIn(.035f, .965f),
                     longitudinal = absoluteY(isHome, progress),
-                    active = id == m.livePlayerId && owns,
+                    active = isActive,
+                    motion = motion,
+                    intensity = intensity,
                 )
             }
         }
