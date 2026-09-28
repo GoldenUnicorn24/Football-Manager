@@ -1,12 +1,12 @@
-name: BMW14 Individual Motion Build
+name: BMW15 Player Autonomy Build
 
 on:
   push:
-    branches: [ "feature/bmw11-realistic-topdown" ]
+    branches: [ "feature/bmw15-player-autonomy" ]
   workflow_dispatch:
 
 concurrency:
-  group: bmw14-individual-motion-${{ github.ref }}
+  group: bmw15-player-autonomy-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
         run: ./gradlew --no-daemon :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: Gruenderelf-v0.5.23-bmw14-individual-motion
+          name: Gruenderelf-v0.5.23-bmw15-player-autonomy
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
