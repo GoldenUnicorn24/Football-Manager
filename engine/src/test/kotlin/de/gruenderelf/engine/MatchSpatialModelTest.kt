@@ -114,4 +114,48 @@ class MatchSpatialModelTest {
         assertTrue(home.map { it.lateral }.average() < .50)
         assertTrue(home.maxOf { it.lateral } - home.minOf { it.lateral } > .30)
     }
+    @Test
+    fun dangerousAttackKeepsRestDefenceHighForBothTeams() {
+        val (w, m) = running()
+
+        setOwner(m, home = true, phase = LivePhase.DANGEROUS_ATTACK, ballX = .54f, ballY = .10f)
+        val homeFrame = MatchSpatialModel.frame(w, m)
+        val homeCbs = homeFrame.players.filter { it.isHome && it.position == Position.IV }
+        val homeCbProgress = homeCbs.map { MatchSpatialModel.progressFromOwnGoal(true, it.longitudinal) }
+        assertTrue("HOME centre-backs must leave their own box in a settled attack", homeCbProgress.average() >= .46)
+        assertTrue("HOME back line should remain a line, not scatter", homeCbProgress.maxOrNull()!! - homeCbProgress.minOrNull()!! < .09)
+
+        setOwner(m, home = false, phase = LivePhase.DANGEROUS_ATTACK, ballX = .46f, ballY = .90f)
+        val awayFrame = MatchSpatialModel.frame(w, m)
+        val awayCbs = awayFrame.players.filter { !it.isHome && it.position == Position.IV }
+        val awayCbProgress = awayCbs.map { MatchSpatialModel.progressFromOwnGoal(false, it.longitudinal) }
+        assertTrue("AWAY centre-backs must leave their own box in a settled attack", awayCbProgress.average() >= .46)
+        assertTrue("AWAY back line should remain a line, not scatter", awayCbProgress.maxOrNull()!! - awayCbProgress.minOrNull()!! < .09)
+    }
+
+    @Test
+    fun deepDefenceKeepsCentreBacksTogetherWhileMidfieldPresses() {
+        val (w, m) = running()
+        setOwner(m, home = false, phase = LivePhase.DANGEROUS_ATTACK, ballX = .25f, ballY = .88f)
+
+        val frame = MatchSpatialModel.frame(w, m)
+        val homeDefenders = frame.players.filter { it.isHome && it.position in setOf(Position.IV, Position.LV, Position.RV) }
+        val homeCbs = homeDefenders.filter { it.position == Position.IV }
+        val cbProgress = homeCbs.map { MatchSpatialModel.progressFromOwnGoal(true, it.longitudinal) }
+
+        assertTrue("Defending centre-backs should stay close to the own box", cbProgress.average() < .24)
+        assertTrue("Centre-backs should keep a compact horizontal line", cbProgress.maxOrNull()!! - cbProgress.minOrNull()!! < .07)
+        assertTrue("Defensive line should keep useful lateral width", homeDefenders.maxOf { it.lateral } - homeDefenders.minOf { it.lateral } > .24)
+    }
+
+    @Test
+    fun progressConversionMirrorsHomeAndAwayExactly() {
+        assertEquals(.9, MatchSpatialModel.progressFromOwnGoal(true, .1f).toDouble(), .0001)
+        assertEquals(.1, MatchSpatialModel.progressFromOwnGoal(true, .9f).toDouble(), .0001)
+        assertEquals(.1, MatchSpatialModel.progressFromOwnGoal(false, .1f).toDouble(), .0001)
+        assertEquals(.9, MatchSpatialModel.progressFromOwnGoal(false, .9f).toDouble(), .0001)
+        assertEquals(.1, MatchSpatialModel.absoluteY(true, .9f).toDouble(), .0001)
+        assertEquals(.9, MatchSpatialModel.absoluteY(false, .9f).toDouble(), .0001)
+    }
+
 }
