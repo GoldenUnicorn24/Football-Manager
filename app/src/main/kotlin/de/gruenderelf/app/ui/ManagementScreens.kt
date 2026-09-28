@@ -295,10 +295,10 @@ private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}
   Section("Match-Ansicht"){
    Text("Wähle die Darstellung für Live-Spiele.",color=Muted,style=MaterialTheme.typography.bodySmall)
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
-    Column(Modifier.weight(1f)){Text("Dynamische 3D-Übersicht",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Alle 22 Spieler sichtbar · Spieler am Ball im Fokus · laufende Bewegungen." else "Klassische Gründerelf-Matchansicht ist aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+    Column(Modifier.weight(1f)){Text("Taktische Draufsicht",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Alle 22 Spieler als Punkte · Ballbesitzer groß · realistische Verschiebungen." else "Klassische Gründerelf-Matchansicht ist aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)}
     Switch(checked=tacticalMatchView,onCheckedChange={vm.setTacticalMatchView(it)})
    }
-   Text("AUS = bisherige Matchansicht unverändert. AN = neue Übersicht mit Formation, Pressing-/Laufbewegungen und größerem Ballbesitzer. Du kannst jederzeit wechseln.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   Text("AUS = bisherige Matchansicht unverändert. AN = Draufsicht wie auf einem Taktikfeld. Bei Schüssen springt die bekannte Toransicht wieder automatisch hinein.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
   Section("Match-Sounds"){
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
