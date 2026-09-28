@@ -191,4 +191,23 @@ class MatchSpatialModelTest {
         assertTrue(away.map { it.longitudinal }.distinct().size >= 4)
     }
 
+    @Test
+    fun attackingPlayersUseDifferentChannelsAndDefendersDoNotAllPress() {
+        val (w, m) = running()
+        setOwner(m, home = true, phase = LivePhase.DANGEROUS_ATTACK, ballX = .28f, ballY = .12f)
+
+        val frame = MatchSpatialModel.frame(w, m)
+        val home = frame.players.filter { it.isHome }
+        val away = frame.players.filter { !it.isHome }
+
+        val movers = home.filter { it.motion in setOf(MatchSpatialMotion.RUN, MatchSpatialMotion.SUPPORT) }
+        assertTrue("Attackers/supporters need several independent target lanes", movers.map { (it.lateral * 100).toInt() }.distinct().size >= 3)
+        assertTrue("Off-ball attacking jobs must not all end on the same depth", movers.map { (it.longitudinal * 100).toInt() }.distinct().size >= 2)
+
+        val pressers = away.filter { it.motion == MatchSpatialMotion.PRESS }
+        val markers = away.filter { it.motion == MatchSpatialMotion.MARK }
+        assertTrue("Only a small group should press the carrier", pressers.size in 1..3)
+        assertTrue("The rest of the defensive block should keep individual marking jobs", markers.size >= 3)
+    }
+
 }
