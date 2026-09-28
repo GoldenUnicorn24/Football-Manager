@@ -246,13 +246,11 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     // Realistische Seitenwechsel: Die Engine behält ihre kanonischen
                     // Koordinaten (HOME -> y=0, AWAY -> y=1). Für die Darstellung
                     // drehen wir in Halbzeit 2 und 4 nur die Längsachse.
-                    val switchEnds = m.period == 2 || m.period == 4
-                    fun displayLongitudinal(longitudinal: Float): Float =
-                        if (switchEnds) 1f - longitudinal else longitudinal
+                    val switchEnds = MatchSpatialModel.sidesSwitched(m.period)
 
                     fun screenPoint(lateral: Float, longitudinal: Float): Offset {
                         return Offset(
-                            fieldLeft + displayLongitudinal(longitudinal.coerceIn(.015f, .985f)) * fieldW,
+                            fieldLeft + MatchSpatialModel.displayLongitudinal(m.period, longitudinal.coerceIn(.015f, .985f)) * fieldW,
                             fieldTop + lateral.coerceIn(.015f, .985f) * fieldH,
                         )
                     }
@@ -363,8 +361,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                         // Engine: HOME attacks toward y=0, AWAY toward y=1.
                         // On screen the direction flips after the interval because
                         // teams change ends, while ball/player coordinates stay consistent.
-                        val canonicalDirection = if (activeDot.isHome) -1f else 1f
-                        val screenDirection = if (switchEnds) -canonicalDirection else canonicalDirection
+                        val screenDirection = MatchSpatialModel.screenAttackDirection(activeDot.isHome, m.period).toFloat()
                         Offset(activeDot.point.x + 12.dp.toPx() * screenDirection, activeDot.point.y + 7.dp.toPx())
                     } else engineBall
                     drawCircle(Color.Black.copy(alpha = .42f), 4.6.dp.toPx(), Offset(ballPoint.x + 1.dp.toPx(), ballPoint.y + 1.3.dp.toPx()))
@@ -399,10 +396,10 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                 }
             }
 
-            val endsSwitched = m.period == 2 || m.period == 4
+            val endsSwitched = MatchSpatialModel.sidesSwitched(m.period)
             Text(
                 if (!endsSwitched)
-                    "← ${home.shortName} greift an · ${away.shortName} greift an → · Seiten & Ballrichtung stimmen mit der Match-Engine"
+                    "← ${home.shortName} greift an · ${away.shortName} greift an → · 1. Halbzeit / feste Engine-Richtung"
                 else
                     "← ${away.shortName} greift an · ${home.shortName} greift an → · Seitenwechsel nach der Pause",
                 color = Muted,
