@@ -609,6 +609,19 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                                 }
                                 if (PlayerInstruction.CUT_INSIDE in instructions) lateral += (.5f - lateral) * .30f
                                 if (PlayerInstruction.RUN_IN_BEHIND in instructions) progress += .055f
+
+                                // Läufe orientieren sich an Ball UND gegnerischer Abseitslinie.
+                                // Dadurch stehen die vordersten Punkte nicht dauerhaft 10–20 Meter
+                                // hinter der Abwehr, während der Ball noch deutlich tiefer ist.
+                                if (m.livePhase != LivePhase.CORNER) {
+                                    val opponentBackFromOwnGoal = teamBackLine(!isHome, false)
+                                    val opponentLineFromOurView = 1f - opponentBackFromOwnGoal
+                                    val legalRunCeiling = maxOf(
+                                        ballProgress + .018f,
+                                        opponentLineFromOurView + .018f,
+                                    ).coerceAtMost(.965f)
+                                    progress = minOf(progress, legalRunCeiling)
+                                }
                             } else {
                                 if (index in pressers) {
                                     val pressing = effectivePressing(isHome)
