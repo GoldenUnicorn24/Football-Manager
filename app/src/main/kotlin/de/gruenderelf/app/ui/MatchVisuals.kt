@@ -191,6 +191,15 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
         frameDurationMs,
     ) {
         val baseAnimationMs = (frameDurationMs * .70).toInt().coerceIn(240, 2250)
+        val startBallX = ballX.value
+        val startBallY = ballY.value
+        val midFrame = MatchSpatialModel.frame(
+            w,
+            m,
+            (startBallX + targetX) * .5f,
+            (startBallY + targetY) * .5f,
+        ).players.associateBy { it.id }
+
         coroutineScope {
             spatialFrame.players.forEach { p ->
                 val lat = playerLatAnimations.getValue(p.id)
@@ -202,44 +211,74 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                 val pace = w.players[p.id]?.attributes?.pace ?: 50
                 val paceFactor = (1.13f - pace.coerceIn(20, 120) / 420f).coerceIn(.82f, 1.08f)
                 val actionFactor = when (p.motion) {
-                    MatchSpatialMotion.BALL -> .74f
-                    MatchSpatialMotion.RUN -> .76f
-                    MatchSpatialMotion.PRESS -> .80f
-                    MatchSpatialMotion.SUPPORT -> .88f
-                    MatchSpatialMotion.MARK -> .94f
+                    MatchSpatialMotion.BALL -> .72f
+                    MatchSpatialMotion.RUN -> .74f
+                    MatchSpatialMotion.PRESS -> .78f
+                    MatchSpatialMotion.SUPPORT -> .86f
+                    MatchSpatialMotion.MARK -> .93f
                     MatchSpatialMotion.SHIFT -> 1.00f
-                    MatchSpatialMotion.HOLD -> 1.08f
+                    MatchSpatialMotion.HOLD -> 1.10f
                 }
                 val movementMs = (baseAnimationMs *
-                    (.68f + distance.coerceAtMost(.32f) * 1.45f) *
+                    (.66f + distance.coerceAtMost(.32f) * 1.45f) *
                     paceFactor * actionFactor)
                     .toInt()
-                    .coerceIn(180, 2650)
+                    .coerceIn(180, 2600)
                 val reactionDelay = when (p.motion) {
                     MatchSpatialMotion.BALL -> 0L
-                    MatchSpatialMotion.RUN -> (12 + (p.id * 17 % 55)).toLong()
-                    MatchSpatialMotion.PRESS -> (18 + (p.id * 23 % 70)).toLong()
-                    MatchSpatialMotion.SUPPORT -> (28 + (p.id * 19 % 90)).toLong()
-                    MatchSpatialMotion.MARK -> (42 + (p.id * 29 % 105)).toLong()
-                    MatchSpatialMotion.SHIFT -> (58 + (p.id * 31 % 125)).toLong()
-                    MatchSpatialMotion.HOLD -> (75 + (p.id * 37 % 145)).toLong()
+                    MatchSpatialMotion.RUN -> (8 + (p.id * 17 % 45)).toLong()
+                    MatchSpatialMotion.PRESS -> (12 + (p.id * 23 % 55)).toLong()
+                    MatchSpatialMotion.SUPPORT -> (24 + (p.id * 19 % 75)).toLong()
+                    MatchSpatialMotion.MARK -> (36 + (p.id * 29 % 90)).toLong()
+                    MatchSpatialMotion.SHIFT -> (48 + (p.id * 31 % 110)).toLong()
+                    MatchSpatialMotion.HOLD -> (70 + (p.id * 37 % 130)).toLong()
                 }
 
-                // Jeder Spieler reagiert mit eigener Geschwindigkeit und minimal
-                // anderer Reaktionszeit. Dadurch bewegen sich nicht mehr alle
-                // Punkte synchron wie an einer unsichtbaren Schnur.
+                val mid = midFrame[p.id] ?: p
+                val bendSign = if ((p.id + p.slotIndex) % 2 == 0) 1f else -1f
+                val bendStrength = when (p.motion) {
+                    MatchSpatialMotion.RUN -> .014f
+                    MatchSpatialMotion.PRESS -> .010f
+                    MatchSpatialMotion.SUPPORT -> .012f
+                    MatchSpatialMotion.MARK -> .006f
+                    MatchSpatialMotion.SHIFT -> .004f
+                    MatchSpatialMotion.HOLD -> .0015f
+                    MatchSpatialMotion.BALL -> 0f
+                } * p.intensity
+                val midLat = (mid.lateral + bendSign * bendStrength).coerceIn(.035f, .965f)
+                val engineAttackDirection = if (p.isHome) -1f else 1f
+                val forwardCurve = when (p.motion) {
+                    MatchSpatialMotion.RUN -> .008f
+                    MatchSpatialMotion.PRESS -> .004f
+                    MatchSpatialMotion.SUPPORT -> .003f
+                    else -> 0f
+                } * engineAttackDirection * p.intensity
+                val midLong = (mid.longitudinal + forwardCurve).coerceIn(.025f, .975f)
+                val firstLegMs = (movementMs * .46f).toInt().coerceAtLeast(90)
+                val secondLegMs = (movementMs - firstLegMs).coerceAtLeast(100)
+
+                // Jeder Spieler bekommt einen eigenen Reaktionszeitpunkt, Tempo
+                // und eine leicht gekrümmte Route über ein taktisches Zwischenziel.
+                // Dadurch laufen Presser, Unterstützer und Tiefenläufer unabhängig,
+                // während die Formation trotzdem als Orientierung erhalten bleibt.
                 launch {
                     if (reactionDelay > 0) delay(reactionDelay)
-                    lat.animateTo(p.lateral, tween(movementMs, easing = LinearOutSlowInEasing))
+                    if (!p.active && distance > .008f) {
+                        lat.animateTo(midLat, tween(firstLegMs, easing = FastOutSlowInEasing))
+                    }
+                    lat.animateTo(p.lateral, tween(secondLegMs, easing = LinearOutSlowInEasing))
                 }
                 launch {
                     if (reactionDelay > 0) delay(reactionDelay)
-                    long.animateTo(p.longitudinal, tween(movementMs, easing = LinearOutSlowInEasing))
+                    if (!p.active && distance > .008f) {
+                        long.animateTo(midLong, tween(firstLegMs, easing = FastOutSlowInEasing))
+                    }
+                    long.animateTo(p.longitudinal, tween(secondLegMs, easing = LinearOutSlowInEasing))
                 }
                 launch {
                     scale.animateTo(
                         if (p.active) 2.35f else 1f,
-                        tween(170, easing = FastOutSlowInEasing),
+                        tween(160, easing = FastOutSlowInEasing),
                     )
                 }
             }
