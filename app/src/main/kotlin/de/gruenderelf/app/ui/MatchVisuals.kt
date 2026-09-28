@@ -33,6 +33,7 @@ import de.gruenderelf.app.R
 import de.gruenderelf.engine.Formations
 import de.gruenderelf.engine.LiveMatch
 import de.gruenderelf.engine.MatchEngine
+import de.gruenderelf.engine.MatchSpatialModel
 import de.gruenderelf.engine.Position
 import de.gruenderelf.engine.PlayerRole
 import de.gruenderelf.engine.PlayerInstruction
@@ -116,8 +117,6 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
     val activeClubId = m.effectiveLiveClubId()
     val activeClub = if (activeClubId == home.id) home else away
     val actor = w.players[m.livePlayerId]
-    val homeCoords = remember(m.homeFormation) { Formations.coordinates(m.homeFormation) }
-    val awayCoords = remember(m.awayFormation) { Formations.coordinates(m.awayFormation) }
 
     val ballX = remember(m.fixtureId) { Animatable(m.ballX.coerceIn(.025f, .975f)) }
     val ballY = remember(m.fixtureId) { Animatable(m.ballY.coerceIn(.025f, .975f)) }
@@ -157,6 +156,44 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
             AnnotatedString(actorNumber),
             style = TextStyle(color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black),
         )
+    }
+
+    // One canonical spatial model decides both team directions and every tactical
+    // target. The UI only interpolates between those targets.
+    val spatialFrame = MatchSpatialModel.frame(w, m, targetX, targetY)
+    val playerLatAnimations = remember(m.fixtureId) { mutableMapOf<Int, Animatable<Float, AnimationVector1D>>() }
+    val playerLongAnimations = remember(m.fixtureId) { mutableMapOf<Int, Animatable<Float, AnimationVector1D>>() }
+    spatialFrame.players.forEach { p ->
+        playerLatAnimations.getOrPut(p.id) { Animatable(p.lateral) }
+        playerLongAnimations.getOrPut(p.id) { Animatable(p.longitudinal) }
+    }
+
+    LaunchedEffect(
+        event,
+        m.livePhase,
+        m.homeFormation,
+        m.awayFormation,
+        m.homeMentality,
+        m.awayMentality,
+        m.homeConserveEnergy,
+        m.awayConserveEnergy,
+        m.homeAllOutAttack,
+        m.awayAllOutAttack,
+        m.homeControlGame,
+        m.awayControlGame,
+        targetX,
+        targetY,
+        frameDurationMs,
+    ) {
+        val playerAnimationMs = (frameDurationMs * .94).toInt().coerceIn(300, 3500)
+        coroutineScope {
+            spatialFrame.players.forEach { p ->
+                val lat = playerLatAnimations.getValue(p.id)
+                val long = playerLongAnimations.getValue(p.id)
+                launch { lat.animateTo(p.lateral, tween(playerAnimationMs, easing = FastOutSlowInEasing)) }
+                launch { long.animateTo(p.longitudinal, tween(playerAnimationMs, easing = FastOutSlowInEasing)) }
+            }
+        }
     }
 
     Surface(
@@ -237,430 +274,6 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                     drawRect(Color.White.copy(alpha = .58f), Offset(fieldLeft - goalDepth, goalY), Size(goalDepth, goalH), style = Stroke(1.0.dp.toPx()))
                     drawRect(Color.White.copy(alpha = .58f), Offset(fieldRight, goalY), Size(goalDepth, goalH), style = Stroke(1.0.dp.toPx()))
 
-                    /**
-                     * Taktische Formationslogik 2.0
-                     *
-                     * Intern wird jede Mannschaft immer aus Sicht "eigenes Tor = 0,
-                     * gegnerisches Tor = 1" berechnet. Dadurch kann die komplette
-                     * Formation als Block mit dem Ball nachrücken, statt dass die
-                     * Viererkette bei einem Angriff an ihrer Startposition klebt.
-                     */
-                    fun teamClub(isHome: Boolean) = if (isHome) home else away
-                    fun teamXi(isHome: Boolean) = if (isHome) m.homeXi else m.awayXi
-                    fun teamFormation(isHome: Boolean) = if (isHome) m.homeFormation else m.awayFormation
-                    fun teamSlots(isHome: Boolean) = Formations.positions(teamFormation(isHome))
-                    fun teamCoords(isHome: Boolean) = if (isHome) homeCoords else awayCoords
-                    fun teamHasBall(isHome: Boolean) = activeClubId == if (isHome) home.id else away.id
-                    fun canonicalBallProgress(isHome: Boolean) = if (isHome) liveBallY else 1f - liveBallY
-                    fun screenLongitudinal(isHome: Boolean, progress: Float) = if (isHome) progress else 1f - progress
-
-                    fun effectiveLine(isHome: Boolean): Int {
-                        val c = teamClub(isHome)
-                        return when {
-                            (if (isHome) m.homeConserveEnergy else m.awayConserveEnergy) -> 1
-                            (if (isHome) m.homeAllOutAttack else m.awayAllOutAttack) -> 5
-                            (if (isHome) m.homeControlGame else m.awayControlGame) -> 2
-                            else -> c.tactics.line
-                        }.coerceIn(1, 5)
-                    }
-
-                    fun effectivePressing(isHome: Boolean): Int {
-                        val c = teamClub(isHome)
-                        return when {
-                            (if (isHome) m.homeConserveEnergy else m.awayConserveEnergy) -> 1
-                            (if (isHome) m.homeAllOutAttack else m.awayAllOutAttack) -> 5
-                            (if (isHome) m.homeControlGame else m.awayControlGame) -> 2
-                            else -> c.tactics.pressing
-                        }.coerceIn(1, 5)
-                    }
-
-                    fun effectiveWidth(isHome: Boolean): Int {
-                        val c = teamClub(isHome)
-                        val base = c.tactics.width.coerceIn(1, 5)
-                        return when {
-                            if (isHome) m.homeAllOutAttack else m.awayAllOutAttack -> base.coerceAtLeast(4)
-                            if (isHome) m.homeConserveEnergy else m.awayConserveEnergy -> base.coerceAtMost(3)
-                            else -> base
-                        }
-                    }
-
-                    fun effectiveMentality(isHome: Boolean): Int =
-                        (if (isHome) m.homeMentality else m.awayMentality).coerceIn(1, 5)
-
-                    fun slotPosition(isHome: Boolean, index: Int, id: Int): Position =
-                        teamSlots(isHome).getOrElse(index) { w.players[id]?.position ?: Position.ZM }
-
-                    fun playerRole(isHome: Boolean, id: Int): PlayerRole =
-                        teamClub(isHome).tactics.roles[id] ?: w.players[id]?.role ?: PlayerRole.AUTO
-
-                    fun playerInstructions(isHome: Boolean, id: Int): List<PlayerInstruction> =
-                        teamClub(isHome).tactics.instructions[id]?.toList() ?: emptyList()
-
-                    fun formationBase(isHome: Boolean, index: Int): Pair<Float, Float> {
-                        val base = teamCoords(isHome).getOrNull(index) ?: (.5f to .5f)
-                        // Formations.coordinates: GK liegt bei ~.90, Stürmer bei ~.12.
-                        // Für unsere taktische Achse drehen wir das zu 0 = eigenes Tor.
-                        return base.first to (1f - base.second)
-                    }
-
-                    fun depthNorm(isHome: Boolean, index: Int): Float {
-                        val depth = formationBase(isHome, index).second
-                        return ((depth - .29f) / .59f).coerceIn(0f, 1f)
-                    }
-
-                    fun teamBackLine(isHome: Boolean, hasBall: Boolean): Float {
-                        val ballProgress = canonicalBallProgress(isHome)
-                        val line = effectiveLine(isHome)
-                        val mentality = effectiveMentality(isHome)
-                        val lineBias = (line - 3) * .022f
-                        val mentalityBias = (mentality - 3) * .012f
-
-                        return if (hasBall) {
-                            val teamLength = when (m.livePhase) {
-                                LivePhase.DANGEROUS_ATTACK -> .34f
-                                LivePhase.ATTACK -> .41f
-                                LivePhase.COUNTER -> .54f
-                                LivePhase.CORNER -> .29f
-                                LivePhase.DANGEROUS_FREE_KICK -> .32f
-                                LivePhase.FREE_KICK -> .40f
-                                else -> .47f
-                            }
-                            var back = ballProgress - teamLength + lineBias + mentalityBias
-
-                            // Entscheidender Unterschied zur alten Version:
-                            // Bei etabliertem Angriff rückt die Restverteidigung wirklich bis
-                            // an/über die Mittellinie nach und bleibt nicht am eigenen 16er.
-                            if (m.livePhase == LivePhase.DANGEROUS_ATTACK && ballProgress >= .68f) {
-                                back = maxOf(back, ballProgress - .38f)
-                                back = maxOf(back, .40f + (ballProgress - .68f) * .38f)
-                            } else if (m.livePhase == LivePhase.ATTACK && ballProgress >= .60f) {
-                                back = maxOf(back, ballProgress - .45f)
-                            }
-                            if (if (isHome) m.homeAllOutAttack else m.awayAllOutAttack) back += .045f
-                            if (if (isHome) m.homeConserveEnergy else m.awayConserveEnergy) back -= .045f
-                            back.coerceIn(.16f, .64f)
-                        } else {
-                            // Ohne Ball folgt die Kette der Ballhöhe. Je näher der Gegner dem
-                            // eigenen Tor kommt, desto tiefer und kompakter wird der Block.
-                            var back = .095f + ballProgress * .53f + lineBias + mentalityBias * .35f
-                            if (m.livePhase == LivePhase.DANGEROUS_ATTACK && ballProgress <= .30f) {
-                                back = minOf(back, .18f + ballProgress * .10f)
-                            }
-                            if (m.livePhase == LivePhase.COUNTER && ballProgress <= .42f) back -= .025f
-                            back.coerceIn(.085f, .61f)
-                        }
-                    }
-
-                    fun teamFrontLine(isHome: Boolean, hasBall: Boolean, backLine: Float): Float {
-                        val ballProgress = canonicalBallProgress(isHome)
-                        return if (hasBall) {
-                            val ahead = when (m.livePhase) {
-                                LivePhase.COUNTER -> .11f
-                                LivePhase.DANGEROUS_ATTACK -> .055f
-                                LivePhase.ATTACK -> .065f
-                                LivePhase.CORNER -> .035f
-                                else -> .08f
-                            }
-                            maxOf(backLine + .25f, ballProgress + ahead).coerceIn(.42f, .975f)
-                        } else {
-                            val length = when (m.livePhase) {
-                                LivePhase.DANGEROUS_ATTACK -> .285f
-                                LivePhase.ATTACK -> .335f
-                                LivePhase.COUNTER -> .40f
-                                else -> .36f
-                            }
-                            (backLine + length).coerceAtMost(.79f)
-                        }
-                    }
-
-                    fun skeletonPosition(isHome: Boolean, index: Int, id: Int): Pair<Float, Float> {
-                        val hasBall = teamHasBall(isHome)
-                        val (baseLat, _) = formationBase(isHome, index)
-                        val position = slotPosition(isHome, index, id)
-                        val width = effectiveWidth(isHome)
-                        val ballProgress = canonicalBallProgress(isHome)
-                        val backLine = teamBackLine(isHome, hasBall)
-                        val frontLine = teamFrontLine(isHome, hasBall, backLine)
-                        val keeper = position == Position.TW || index == 0
-
-                        if (keeper) {
-                            // Torwart rückt als Sweeper mit hoch, aber bleibt klar hinter der Kette.
-                            var keeperProgress = .048f + backLine * .38f
-                            if (playerRole(isHome, id) == PlayerRole.BUILD_UP_KEEPER) keeperProgress += .025f
-                            keeperProgress = minOf(keeperProgress, backLine - .12f).coerceIn(.045f, .28f)
-                            val keeperLat = .5f + (liveBallX - .5f) * .22f
-                            return keeperLat.coerceIn(.36f, .64f) to keeperProgress
-                        }
-
-                        val norm = depthNorm(isHome, index)
-                        var progress = backLine + (frontLine - backLine) * norm
-
-                        // Mannschaftsbreite plus ballseitiges Verschieben.
-                        val widthScale = if (hasBall) .77f + width * .072f else .61f + width * .054f
-                        val ballShift = if (hasBall) .16f else .29f
-                        val center = .5f + (liveBallX - .5f) * ballShift
-                        var lateral = center + (baseLat - .5f) * widthScale
-
-                        // Defensive Rollen-/Positionsgrundordnung.
-                        when (position) {
-                            Position.IV -> if (hasBall) progress -= .006f
-                            Position.LV, Position.RV -> if (hasBall) progress += .028f
-                            Position.DM -> progress -= if (hasBall) .025f else .012f
-                            Position.ZM -> Unit
-                            Position.OM -> if (hasBall) progress += .018f
-                            Position.LA, Position.RA -> if (hasBall) progress += .025f
-                            Position.ST -> if (hasBall) progress += .018f
-                            Position.TW -> Unit
-                        }
-
-                        // Ballferne Seite rückt ein, ballnahe Seite bleibt etwas breiter.
-                        if (!hasBall) {
-                            val sameSide = (baseLat < .5f) == (liveBallX < .5f)
-                            if (!sameSide) lateral += (.5f - lateral) * .18f
-                        }
-
-                        // In einem gefährlichen Angriff muss die eigene Kette sichtbar hoch stehen.
-                        if (hasBall && m.livePhase == LivePhase.DANGEROUS_ATTACK && ballProgress > .70f) {
-                            when (position) {
-                                Position.IV -> progress = maxOf(progress, backLine)
-                                Position.LV, Position.RV -> progress = maxOf(progress, backLine + .055f)
-                                Position.DM -> progress = maxOf(progress, backLine + .11f)
-                                else -> Unit
-                            }
-                        }
-
-                        return lateral.coerceIn(.055f, .945f) to progress.coerceIn(.07f, .975f)
-                    }
-
-                    fun supportIndexes(isHome: Boolean): Set<Int> {
-                        if (!teamHasBall(isHome)) return emptySet()
-                        val xi = teamXi(isHome)
-                        val ballProgress = canonicalBallProgress(isHome)
-                        return xi.indices
-                            .filter { idx ->
-                                val id = xi[idx]
-                                id != 0 && id != m.livePlayerId && id !in m.sentOff && id !in m.injured &&
-                                    slotPosition(isHome, idx, id) != Position.TW &&
-                                    PlayerInstruction.HOLD_POSITION !in playerInstructions(isHome, id)
-                            }
-                            .sortedBy { idx ->
-                                val id = xi[idx]
-                                val p = skeletonPosition(isHome, idx, id)
-                                val dx = p.first - liveBallX
-                                val dy = p.second - ballProgress
-                                val pos = slotPosition(isHome, idx, id)
-                                val positionalBonus = when (pos) {
-                                    Position.DM, Position.ZM, Position.OM, Position.LA, Position.RA -> -.035f
-                                    else -> 0f
-                                }
-                                dx * dx + dy * dy + positionalBonus
-                            }
-                            .take(if (m.livePhase == LivePhase.DANGEROUS_ATTACK) 3 else 2)
-                            .toSet()
-                    }
-
-                    fun runnerIndexes(isHome: Boolean): Set<Int> {
-                        if (!teamHasBall(isHome)) return emptySet()
-                        val xi = teamXi(isHome)
-                        val count = when (m.livePhase) {
-                            LivePhase.DANGEROUS_ATTACK -> 3
-                            LivePhase.COUNTER -> 3
-                            LivePhase.ATTACK -> 2
-                            else -> 1
-                        }
-                        return xi.indices
-                            .filter { idx ->
-                                val id = xi[idx]
-                                if (id == 0 || id == m.livePlayerId || id in m.sentOff || id in m.injured) false
-                                else {
-                                    val pos = slotPosition(isHome, idx, id)
-                                    pos in setOf(Position.ST, Position.LA, Position.RA, Position.OM, Position.LV, Position.RV) &&
-                                        PlayerInstruction.HOLD_POSITION !in playerInstructions(isHome, id)
-                                }
-                            }
-                            .sortedByDescending { idx ->
-                                val id = xi[idx]
-                                val p = w.players[id]
-                                val pos = slotPosition(isHome, idx, id)
-                                val instructions = playerInstructions(isHome, id)
-                                val role = playerRole(isHome, id)
-                                depthNorm(isHome, idx) * 100f +
-                                    (p?.attributes?.pace ?: 50) * .12f +
-                                    (if (PlayerInstruction.RUN_IN_BEHIND in instructions) 18f else 0f) +
-                                    (if (role in setOf(PlayerRole.OVERLAPPING_FULLBACK, PlayerRole.WINGER, PlayerRole.INSIDE_FORWARD, PlayerRole.POACHER)) 7f else 0f) +
-                                    (if (pos == Position.ST) 6f else 0f)
-                            }
-                            .take(count)
-                            .toSet()
-                    }
-
-                    fun pressingIndexes(isHome: Boolean): Set<Int> {
-                        if (teamHasBall(isHome)) return emptySet()
-                        val xi = teamXi(isHome)
-                        val ballProgress = canonicalBallProgress(isHome)
-                        val press = effectivePressing(isHome)
-                        var count = when (press) {
-                            1 -> 1
-                            2, 3 -> 2
-                            else -> 3
-                        }
-                        // Im eigenen Strafraumnähe nicht drei Spieler blind aus der Kette ziehen.
-                        if (ballProgress < .23f) count = minOf(count, 2)
-
-                        return xi.indices
-                            .filter { idx ->
-                                val id = xi[idx]
-                                id != 0 && id !in m.sentOff && id !in m.injured &&
-                                    slotPosition(isHome, idx, id) != Position.TW
-                            }
-                            .sortedBy { idx ->
-                                val id = xi[idx]
-                                val p = skeletonPosition(isHome, idx, id)
-                                val dx = p.first - liveBallX
-                                val dy = p.second - ballProgress
-                                val pos = slotPosition(isHome, idx, id)
-                                val role = playerRole(isHome, id)
-                                val instructions = playerInstructions(isHome, id)
-                                var score = dx * dx + dy * dy
-                                if (pos == Position.IV) score += if (ballProgress < .24f) .015f else .075f
-                                if (pos == Position.DM) score -= .025f
-                                if (role == PlayerRole.PRESSING_FORWARD) score -= .045f
-                                if (PlayerInstruction.PRESS_MORE in instructions) score -= .055f
-                                if (PlayerInstruction.PRESS_LESS in instructions) score += .12f
-                                score
-                            }
-                            .take(count)
-                            .toSet()
-                    }
-
-                    val homeSupport = supportIndexes(true)
-                    val awaySupport = supportIndexes(false)
-                    val homeRunners = runnerIndexes(true)
-                    val awayRunners = runnerIndexes(false)
-                    val homePressers = pressingIndexes(true)
-                    val awayPressers = pressingIndexes(false)
-
-                    fun logicalPlayerPosition(isHome: Boolean, index: Int, id: Int): Pair<Float, Float> {
-                        val hasBall = teamHasBall(isHome)
-                        val ballProgress = canonicalBallProgress(isHome)
-                        val position = slotPosition(isHome, index, id)
-                        val role = playerRole(isHome, id)
-                        val instructions = playerInstructions(isHome, id)
-                        val keeper = position == Position.TW || index == 0
-                        val support = if (isHome) homeSupport else awaySupport
-                        val runners = if (isHome) homeRunners else awayRunners
-                        val pressers = if (isHome) homePressers else awayPressers
-                        val skeleton = skeletonPosition(isHome, index, id)
-                        var lateral = skeleton.first
-                        var progress = skeleton.second
-
-                        if (id == m.livePlayerId) {
-                            lateral = liveBallX
-                            progress = ballProgress
-                        } else if (!keeper) {
-                            if (hasBall) {
-                                val side = if (formationBase(isHome, index).first < .5f) -1f else 1f
-
-                                if (index in support && PlayerInstruction.HOLD_POSITION !in instructions) {
-                                    // Dreiecke um den Ball statt elf Punkte auf parallelen Linien.
-                                    lateral += (liveBallX - lateral) * .34f + side * .018f
-                                    progress += (ballProgress - progress) * .30f
-                                }
-
-                                if (index in runners && PlayerInstruction.HOLD_POSITION !in instructions) {
-                                    val run = when (m.livePhase) {
-                                        LivePhase.COUNTER -> .105f
-                                        LivePhase.DANGEROUS_ATTACK -> .080f
-                                        LivePhase.ATTACK -> .055f
-                                        else -> .035f
-                                    }
-                                    progress += run * (.72f + .28f * ((sin(motion + id * .37f) + 1f) / 2f))
-                                }
-
-                                when (role) {
-                                    PlayerRole.OVERLAPPING_FULLBACK -> {
-                                        progress += .060f
-                                        lateral += side * .045f
-                                    }
-                                    PlayerRole.INVERTED_FULLBACK -> {
-                                        progress += .025f
-                                        lateral += (.5f - lateral) * .38f
-                                    }
-                                    PlayerRole.ANCHOR -> progress -= .055f
-                                    PlayerRole.DEEP_PLAYMAKER -> progress -= .025f
-                                    PlayerRole.BOX_TO_BOX -> progress += .030f
-                                    PlayerRole.PLAYMAKER -> {
-                                        lateral += (liveBallX - lateral) * .12f
-                                        progress += (ballProgress - progress) * .10f
-                                    }
-                                    PlayerRole.INSIDE_FORWARD -> {
-                                        lateral += (.5f - lateral) * .33f
-                                        progress += .035f
-                                    }
-                                    PlayerRole.WINGER -> lateral += side * .035f
-                                    PlayerRole.POACHER -> progress += .050f
-                                    PlayerRole.TARGET_FORWARD -> progress -= .012f
-                                    else -> Unit
-                                }
-
-                                if (PlayerInstruction.OVERLAP in instructions) {
-                                    progress += .050f
-                                    lateral += side * .040f
-                                }
-                                if (PlayerInstruction.CUT_INSIDE in instructions) lateral += (.5f - lateral) * .30f
-                                if (PlayerInstruction.RUN_IN_BEHIND in instructions) progress += .055f
-
-                                // Läufe orientieren sich an Ball UND gegnerischer Abseitslinie.
-                                // Dadurch stehen die vordersten Punkte nicht dauerhaft 10–20 Meter
-                                // hinter der Abwehr, während der Ball noch deutlich tiefer ist.
-                                if (m.livePhase != LivePhase.CORNER) {
-                                    val opponentBackFromOwnGoal = teamBackLine(!isHome, false)
-                                    val opponentLineFromOurView = 1f - opponentBackFromOwnGoal
-                                    val legalRunCeiling = maxOf(
-                                        ballProgress + .018f,
-                                        opponentLineFromOurView + .018f,
-                                    ).coerceAtMost(.965f)
-                                    progress = minOf(progress, legalRunCeiling)
-                                }
-                            } else {
-                                if (index in pressers) {
-                                    val pressing = effectivePressing(isHome)
-                                    val pressure = (.38f + pressing * .065f).coerceIn(.44f, .70f)
-                                    lateral += (liveBallX - lateral) * pressure
-                                    progress += (ballProgress - progress) * pressure
-                                } else if (PlayerInstruction.TIGHT_MARKING in instructions) {
-                                    lateral += (liveBallX - lateral) * .08f
-                                    progress += (ballProgress - progress) * .07f
-                                }
-
-                                // Rollen beeinflussen auch die Höhe gegen den Ball.
-                                when (role) {
-                                    PlayerRole.ANCHOR -> progress -= .025f
-                                    PlayerRole.PRESSING_FORWARD -> if (effectivePressing(isHome) >= 3) progress += .025f
-                                    else -> Unit
-                                }
-                            }
-
-                            // "Position halten" reduziert bewusst die individuellen Ausreißer,
-                            // die Mannschaftsverschiebung als Ganzes bleibt aber erhalten.
-                            if (PlayerInstruction.HOLD_POSITION in instructions) {
-                                lateral = skeleton.first + (lateral - skeleton.first) * .18f
-                                progress = skeleton.second + (progress - skeleton.second) * .18f
-                            }
-
-                            // Sehr kleine Laufbewegung nur als Animation. Die taktische Position
-                            // kommt aus Formation/Ball/Phase und nicht aus diesem Sinus.
-                            val phaseMotion = if (m.livePhase in setOf(LivePhase.COUNTER, LivePhase.ATTACK, LivePhase.DANGEROUS_ATTACK)) 1.25f else 1f
-                            lateral += sin(motion + id * .79f) * .0028f * phaseMotion
-                            progress += sin(motion * 1.09f + id * .43f) * .0022f * phaseMotion
-                        }
-
-                        // Verhindert unrealistische Überlappung des Torwarts/der Torlinie.
-                        progress = if (keeper) progress.coerceIn(.04f, .30f) else progress.coerceIn(.07f, .975f)
-                        val screenLong = screenLongitudinal(isHome, progress)
-                        return lateral.coerceIn(.035f, .965f) to screenLong.coerceIn(.018f, .982f)
-                    }
-
                     data class DotPlayer(
                         val isHome: Boolean,
                         val index: Int,
@@ -669,18 +282,16 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                         val active: Boolean,
                     )
 
-                    val dots = mutableListOf<DotPlayer>()
-                    m.homeXi.forEachIndexed { index, id ->
-                        if (id != 0) {
-                            val p = logicalPlayerPosition(true, index, id)
-                            dots += DotPlayer(true, index, id, screenPoint(p.first, p.second), id == m.livePlayerId)
-                        }
-                    }
-                    m.awayXi.forEachIndexed { index, id ->
-                        if (id != 0) {
-                            val p = logicalPlayerPosition(false, index, id)
-                            dots += DotPlayer(false, index, id, screenPoint(p.first, p.second), id == m.livePlayerId)
-                        }
+                    val dots = spatialFrame.players.map { p ->
+                        val lateral = playerLatAnimations[p.id]?.value ?: p.lateral
+                        val longitudinal = playerLongAnimations[p.id]?.value ?: p.longitudinal
+                        DotPlayer(
+                            isHome = p.isHome,
+                            index = p.slotIndex,
+                            id = p.id,
+                            point = screenPoint(lateral, longitudinal),
+                            active = p.active,
+                        )
                     }
 
                     fun drawDot(v: DotPlayer) {
@@ -758,7 +369,7 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
             }
 
             Text(
-                "Draufsicht · alle 22 Spieler · Ballbesitzer groß · Mitspieler verschieben & laufen · Gegner pressen/komprimieren",
+                "← ${home.shortName} greift links an · ${away.shortName} greift rechts an → · Formation, Linien & Pressing bewegen sich mit dem Ball",
                 color = Muted,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
