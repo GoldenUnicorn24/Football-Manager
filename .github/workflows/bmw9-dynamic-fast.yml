@@ -1,5 +1,9 @@
 name: BMW9 Dynamic Fast Build
 
+concurrency:
+  group: bmw9-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [ "feature/bmw9-dynamic-match-view" ]
