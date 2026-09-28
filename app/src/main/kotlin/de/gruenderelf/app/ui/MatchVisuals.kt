@@ -489,7 +489,9 @@ private fun TopDownMatchOverview(w: World, m: LiveMatch, frameDurationMs: Long) 
                         val bProg = ballProgress(isHome)
 
                         if (id == m.livePlayerId) {
-                            return liveBallX to bProg
+                            // Canvas-Koordinaten sind absolut; für Auswärts darf der Ballbesitzer
+                            // nicht ein zweites Mal gespiegelt werden.
+                            return liveBallX to liveBallY
                         }
 
                         var shape = if (attacking) attackingBaseShape(isHome, index, id) else defendingBaseShape(isHome, index, id)
