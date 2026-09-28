@@ -25,6 +25,7 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  val lastSlot=repo.lastSlot.stateIn(viewModelScope,SharingStarted.Eagerly,1)
  val matchSpeed=repo.matchSpeed.stateIn(viewModelScope,SharingStarted.Eagerly,MatchSpeed.NORMAL)
  val soundsEnabled=repo.soundsEnabled.stateIn(viewModelScope,SharingStarted.Eagerly,true)
+ val tacticalMatchView=repo.tacticalMatchView.stateIn(viewModelScope,SharingStarted.Eagerly,true)
  val changelogSeenVersion=repo.changelogSeenVersion.stateIn(viewModelScope,SharingStarted.Eagerly,CHANGELOG_LOADING)
  private fun memoryPressure(){
   liveRunnerEnabled=false;liveRunnerJob?.cancel();liveRunnerJob=null;decisionJob?.cancel();decisionJob=null
@@ -51,6 +52,7 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  }}
  fun setMatchSpeed(v: MatchSpeed)=preferenceWrite("Das Spieltempo konnte nicht gespeichert werden."){repo.setMatchSpeed(v)}
  fun setSoundsEnabled(enabled: Boolean)=preferenceWrite("Die Sound-Einstellung konnte nicht gespeichert werden."){repo.setSoundsEnabled(enabled)}
+ fun setTacticalMatchView(enabled:Boolean)=preferenceWrite("Die Match-Ansicht konnte nicht gespeichert werden."){repo.setTacticalMatchView(enabled)}
  fun markChangelogSeen(version:String=CHANGELOG_VERSION)=preferenceWrite("Der Changelog-Status konnte nicht gespeichert werden."){repo.markChangelogSeen(version)}
  fun action(message: String?=null,block: (World)->Unit)=work{
   val current=mutable.value.world?:return@work;val next=withContext(Dispatchers.Default){SaveCodec.copy(current).also{w->block(w);SaveCodec.requireRuntimeIntegrity(w)}}
