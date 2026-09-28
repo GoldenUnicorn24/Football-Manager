@@ -238,7 +238,7 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
    if(liveTab==0)Section("Live-Animation"){
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Text("Spielfeld-Grafik anzeigen");Switch(showLiveGraphic,{showLiveGraphic=it})}
     if(showLiveGraphic)LiveMatchAnimation(w,m,MatchEngine.liveFrameDurationMs(m.livePhase,speed),tacticalMatchView) else Text("Die Spielfeld-Grafik ist ausgeblendet. Das Match läuft normal weiter.",color=Muted)
-    Text(if(tacticalMatchView)"Dynamische Übersicht aktiv: Formation, Pressing und Laufwege bewegen sich um den echten Engine-Zustand; der Ballbesitzer bleibt hervorgehoben." else "Klassische Matchansicht aktiv. Die neue Übersicht kannst du in den Einstellungen einschalten.",color=Muted,style=MaterialTheme.typography.bodySmall)
+    Text(if(tacticalMatchView)"Taktische Draufsicht aktiv: alle Spieler bewegen sich mit Ballposition, Ballbesitz, Formation und Pressing; der Ballbesitzer wird groß angezeigt. Bei Abschlüssen wechselt die Ansicht in die bekannte Torkamera." else "Klassische Matchansicht aktiv. Die taktische Draufsicht kannst du in den Einstellungen einschalten.",color=Muted,style=MaterialTheme.typography.bodySmall)
    }else if(liveTab==1) Section("Taktik-Zentrale"){Text("Formation, Sofortanweisungen und Wechsel stehen weiter unten in diesem Tab. Während du Live ansiehst, werden diese schweren UI-Berechnungen nicht permanent neu aufgebaut.",color=Muted)} else if(liveTab==2) LiveStatistics(w,m,h,a) else MatchAnalysisView(w,m)
   }else{
    LiveStatistics(w,m,h,a,"Endstand & Statistik")
