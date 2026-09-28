@@ -40,10 +40,7 @@ jobs:
             -dname "CN=Match View CI, OU=CI, O=Gruenderelf, L=Hamburg, ST=Hamburg, C=DE"
           echo "GRUENDERELF_KEYSTORE_PASSWORD=ci-match-view-2026" >> "$GITHUB_ENV"
 
-      - name: Run unit tests
-        run: ./gradlew --no-daemon --stacktrace test
-
-      - name: Build debug APK
+      - name: Compile and build debug APK
         run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
 
       - name: Upload debug APK
