@@ -415,6 +415,74 @@ object MatchEngine {
   m.chainOwnerClubId=id;m.homeInPossession=home;m.livePhase=phase;m.liveClubId=id;m.livePlayerId=playerId;m.liveDetail=detail;m.liveEventSerial++
  }
 
+ /**
+  * Open-play labels are territorial, not merely narrative chain states.
+  *
+  * progress: 0 = own goal, 1 = opponent goal.
+  * - own half: possession/build-up
+  * - opponent half: attack
+  * - final ~30%: dangerous attack
+  * A live counter remains a counter while its counter window is active.
+  */
+ fun territorialPhase(
+  home:Boolean,
+  ballY:Float,
+  requested:LivePhase,
+  counterActive:Boolean=false,
+ ):LivePhase{
+  val progress=(if(home)1f-ballY else ballY).coerceIn(0f,1f)
+  if(requested==LivePhase.COUNTER&&counterActive)return LivePhase.COUNTER
+  if(requested !in setOf(LivePhase.POSSESSION,LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK,LivePhase.COUNTER))return requested
+  return when{
+   progress<.50f->LivePhase.POSSESSION
+   progress<.72f->LivePhase.ATTACK
+   else->LivePhase.DANGEROUS_ATTACK
+  }
+ }
+
+ private fun territorialDetail(m:LiveMatch,home:Boolean,phase:LivePhase):String{
+  val progress=(if(home)1f-m.ballY else m.ballY).coerceIn(0f,1f)
+  val wide=m.ballX !in .22f.. .78f
+  return when(phase){
+   LivePhase.POSSESSION->when{
+    progress<.25f->"Spielaufbau im eigenen Drittel"
+    progress<.50f->"Ballbesitz in der eigenen Hälfte"
+    else->"Ballbesitz"
+   }
+   LivePhase.ATTACK->when{
+    wide&&progress>=.62f->"Angriff über außen im letzten Drittel"
+    progress>=.62f->"Angriff im letzten Drittel"
+    else->"Angriff in der gegnerischen Hälfte"
+   }
+   LivePhase.DANGEROUS_ATTACK->when{
+    wide->"Gefährlicher Angriff über außen"
+    progress>=.84f->"Gefährlicher Angriff am Strafraum"
+    else->"Gefährlicher Angriff im letzten Drittel"
+   }
+   LivePhase.COUNTER->"Schneller Gegenstoß"
+   else->m.liveDetail
+  }
+ }
+
+ private fun synchronizeOpenPlayTerritory(m:LiveMatch,home:Boolean,requested:LivePhase=m.livePhase){
+  if(requested !in setOf(LivePhase.POSSESSION,LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK,LivePhase.COUNTER))return
+  val phase=territorialPhase(home,m.ballY,requested,requested==LivePhase.COUNTER&&m.counterTicksRemaining>0)
+  val changed=phase!=m.livePhase
+  m.livePhase=phase
+  when(phase){
+   LivePhase.POSSESSION->{m.chainStep=0;m.chainZone=0}
+   LivePhase.ATTACK->{m.chainStep=1;m.chainZone=1}
+   LivePhase.DANGEROUS_ATTACK->{m.chainStep=2;m.chainZone=2}
+   LivePhase.COUNTER->{m.chainZone=1}
+   else->Unit
+  }
+  if(changed||m.liveDetail.isBlank()||
+   (phase==LivePhase.POSSESSION&&m.liveDetail.contains("Angriff",true))||
+   (phase==LivePhase.ATTACK&&m.liveDetail.contains("Tornähe",true))||
+   (phase!=LivePhase.DANGEROUS_ATTACK&&m.liveDetail.contains("Gefährlich",true))
+  )m.liveDetail=territorialDetail(m,home,phase)
+ }
+
  private fun setIncidentPhase(m: LiveMatch,phase: LivePhase,clubId: Int,playerId: Int,detail: String=""){
   require(phase !in ballPhases);m.livePhase=phase;m.liveClubId=clubId;m.livePlayerId=playerId;m.liveDetail=detail;m.liveEventSerial++
  }
@@ -549,6 +617,7 @@ object MatchEngine {
 
  private fun moveBallToward(w: World,m: LiveMatch,home: Boolean,phase: LivePhase,rng: SeededRandom){
   val c=w.clubs.getValue(clubId(m,home));val opp=w.clubs.getValue(clubId(m,!home));val effective=effectiveTactics(w,m,home);val oppEffective=effectiveTactics(w,m,!home);val build=effective.buildUp
+  fun finishMove(){synchronizeOpenPlayTerritory(m,home,phase)}
   val dir=if(home)-1f else 1f
   val ownKeeperY=if(home).91f else .09f
   val widthLevel=(effective.width-1)/4f
@@ -564,7 +633,7 @@ object MatchEngine {
     val backward=.08f+rng.nextDouble().toFloat()*.12f;m.ballY=(m.ballY-dir*backward).coerceIn(.05f,.95f)
     val lane=listOf(.18f,.32f,.50f,.68f,.82f)[rng.int(0,4)];m.ballX=(m.ballX+(lane-m.ballX)*.55f).coerceIn(.04f,.96f);m.liveDetail=if(build==BuildUp.TIKI_TAKA)"Neuaufbau über hinten" else "Angriff abgebrochen – Neuaufbau"
    }
-   return
+   finishMove();return
   }
 
   // Seitenwechsel nutzen bewusst fast die komplette Platzbreite.
@@ -573,7 +642,7 @@ object MatchEngine {
    val opposite=if(m.ballX<.5f)(.88f+rng.nextDouble().toFloat()*.08f) else (.04f+rng.nextDouble().toFloat()*.08f)
    val forward=when(phase){LivePhase.COUNTER->.13f;LivePhase.ATTACK->.085f;else->.035f}
    m.ballY=(m.ballY+dir*forward).coerceIn(.04f,.96f);m.ballX=opposite.coerceIn(.035f,.965f);m.liveDetail=if(build==BuildUp.WIDE)"Schneller Seitenwechsel auf den Flügel" else "Diagonaler Seitenwechsel"
-   return
+   finishMove();return
   }
 
   // Direkte Systeme und Konter schlagen sichtbar lange Bälle/Steilpässe.
@@ -585,7 +654,7 @@ object MatchEngine {
    val lanes=if(effective.width>=4)listOf(.06f,.16f,.84f,.94f)else listOf(.22f,.38f,.62f,.78f)
    m.ballX=(lanes[rng.int(0,lanes.lastIndex)]+(rng.nextDouble().toFloat()-.5f)*.035f).coerceIn(.035f,.965f)
    m.liveDetail=when{phase==LivePhase.COUNTER->"Steilpass in den freien Raum";build==BuildUp.DIRECT->"Langer Ball hinter die Kette";else->"Langer Diagonalball"}
-   return
+   finishMove();return
   }
 
   val target=when(phase){
@@ -620,6 +689,7 @@ object MatchEngine {
    phase==LivePhase.ATTACK->"Angriff wird ausgespielt"
    else->"Ball zirkuliert"
   }
+  finishMove()
  }
 
  private fun counterProbability(w: World,m: LiveMatch,newHome: Boolean): Double {
@@ -968,6 +1038,10 @@ object MatchEngine {
   if(periodComplete(m)){endCurrentPeriod(w,m,rng);return}
 
   val ownerHome=m.chainOwnerClubId==m.homeId
+  // Repair stale saves / prior event labels before risk, foul and chain logic.
+  // This guarantees that "Angriff" cannot exist in the team's own half and
+  // "Gefährlicher Angriff" cannot exist around midfield.
+  synchronizeOpenPlayTerritory(m,ownerHome)
   // Einwürfe sind kurze Unterbrechungen innerhalb einer laufenden Spielminute. Sie werden
   // sichtbar simuliert, verbrauchen aber keine komplette Match-Minute und keine Fitnessminute.
   if(maybeThrowIn(w,m,ownerHome,rng)){m.rngState=rng.state;return}
