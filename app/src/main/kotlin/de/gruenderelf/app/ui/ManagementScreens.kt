@@ -295,10 +295,10 @@ private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}
   Section("Match-Ansicht"){
    Text("Wähle die Darstellung für Live-Spiele.",color=Muted,style=MaterialTheme.typography.bodySmall)
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
-    Column(Modifier.weight(1f)){Text("Taktische Draufsicht 6.0",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Jeder Spieler mit eigener Route, Reaktionszeit und Aufgabe · Heimteam zunächst nach rechts · Seitenwechsel zur Pause." else "Klassische Gründerelf-Matchansicht ist aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+    Column(Modifier.weight(1f)){Text("Taktische Draufsicht 7.0",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Phasen folgen jetzt der echten Ballposition · jeder Spieler mit eigener Route, Reaktionszeit und Aufgabe." else "Klassische Gründerelf-Matchansicht ist aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)}
     Switch(checked=tacticalMatchView,onCheckedChange={vm.setTacticalMatchView(it)})
    }
-   Text("AUS = bisherige Matchansicht unverändert. AN = Spieler reagieren einzeln: Tiefenläufe nutzen verschiedene Kanäle, Unterstützer bilden unterschiedliche Passdreiecke, Presser starten nacheinander und Verteidiger verfolgen eigene Gegenspieler. Tempo und Laufroute hängen auch vom Spieler ab. Bei Schüssen springt die bekannte Toransicht automatisch hinein.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   Text("AUS = bisherige Matchansicht unverändert. AN = Ballbesitz/Aufbau bleibt bis klar hinter die Mittellinie erreicht ist; Angriff gibt es erst in der gegnerischen Hälfte und gefährlichen Angriff erst im letzten Drittel. Spieler reagieren weiterhin einzeln mit Tiefenläufen, Passdreiecken, Pressing und Deckung. Bei Schüssen springt die bekannte Toransicht automatisch hinein.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
   Section("Match-Sounds"){
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
