@@ -925,7 +925,12 @@ object MatchEngine {
  private fun showQueuedSetPiece(w: World,m: LiveMatch,rng: SeededRandom): Boolean {
   val id=m.pendingSetPieceClubId;if(id==0||m.pendingSetPieceType==SetPieceType.NONE)return false
   val home=id==m.homeId;val taker=m.pendingSetPiecePlayerId.takeIf{it in xi(m,home)}?:setPieceTaker(w,m,home,m.pendingSetPieceType)
-  m.pendingSetPiecePlayerId=taker;m.ballX=m.pendingSetPieceX;m.ballY=m.pendingSetPieceY
+  m.pendingSetPiecePlayerId=taker
+  if(m.pendingSetPieceType==SetPieceType.PENALTY){
+   m.ballX=.5f;m.ballY=penaltySpotY(home)
+  }else{
+   m.ballX=m.pendingSetPieceX;m.ballY=m.pendingSetPieceY
+  }
   val reason=if(m.chainOwnerClubId==id)PossessionChangeReason.NONE else PossessionChangeReason.FOUL
   setBallPhase(m,setPiecePhase(m.pendingSetPieceType),home,taker,m.pendingSetPieceType.label,reason)
   m.setPieceAwaitingResolution=true
@@ -943,8 +948,8 @@ object MatchEngine {
   val p=w.players[taker]
   when(type){
    SetPieceType.PENALTY->{
-    setDistanceFromGoal(m,home,11.0,.5f)
-    log(m,"Elfmeter für ${w.clubs.getValue(id).shortName}. ${p?.name?:"Der Schütze"} läuft an.","decision")
+    m.ballX=.5f;m.ballY=penaltySpotY(home)
+    log(m,"Elfmeter für ${w.clubs.getValue(id).shortName}. ${p?.name?:"Der Schütze"} läuft vom Elfmeterpunkt an.","decision")
     resolveShot(w,m,home,taker,rng,typeHint=ShotType.PENALTY)
    }
    SetPieceType.DANGEROUS_FREE_KICK->{
