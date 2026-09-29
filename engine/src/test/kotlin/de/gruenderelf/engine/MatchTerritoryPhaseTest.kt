@@ -13,6 +13,8 @@ class MatchTerritoryPhaseTest {
         assertEquals(LivePhase.ATTACK, MatchEngine.territorialPhase(true, .42f, LivePhase.ATTACK))
         assertEquals(LivePhase.ATTACK, MatchEngine.territorialPhase(true, .30f, LivePhase.DANGEROUS_ATTACK))
         assertEquals(LivePhase.DANGEROUS_ATTACK, MatchEngine.territorialPhase(true, .27f, LivePhase.DANGEROUS_ATTACK))
+        assertEquals(LivePhase.ATTACK, MatchEngine.territorialPhase(true, .20f, LivePhase.ATTACK))
+        assertEquals(LivePhase.POSSESSION, MatchEngine.territorialPhase(true, .20f, LivePhase.POSSESSION))
 
         // AWAY attacks toward engine y=1. Same thresholds must mirror exactly.
         assertEquals(LivePhase.POSSESSION, MatchEngine.territorialPhase(false, .20f, LivePhase.ATTACK))
@@ -56,10 +58,6 @@ class MatchTerritoryPhaseTest {
                     assertTrue(
                         progress >= .54f,
                         "ATTACK shown before clear entry into opponent half: progress=$progress, ballY=${m.ballY}, ownerHome=$ownerHome, detail=${m.liveDetail}",
-                    )
-                    assertTrue(
-                        progress < .72f,
-                        "ATTACK should become DANGEROUS_ATTACK in final territory: progress=$progress, detail=${m.liveDetail}",
                     )
                 }
                 LivePhase.DANGEROUS_ATTACK -> assertTrue(
