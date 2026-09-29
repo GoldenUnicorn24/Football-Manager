@@ -433,10 +433,25 @@ object MatchEngine {
   val progress=(if(home)1f-ballY else ballY).coerceIn(0f,1f)
   if(requested==LivePhase.COUNTER&&counterActive)return LivePhase.COUNTER
   if(requested !in setOf(LivePhase.POSSESSION,LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK,LivePhase.COUNTER))return requested
-  return when{
-   progress<.54f->LivePhase.POSSESSION
-   progress<.72f->LivePhase.ATTACK
-   else->LivePhase.DANGEROUS_ATTACK
+
+  // Territory is a hard ceiling, not an automatic promotion:
+  // simply carrying the ball into the final third does not magically turn calm
+  // possession into a "dangerous attack". The engine must first request that
+  // attacking intent, and the ball must physically have reached the zone.
+  return when(requested){
+   LivePhase.POSSESSION->LivePhase.POSSESSION
+   LivePhase.ATTACK->if(progress>=.54f)LivePhase.ATTACK else LivePhase.POSSESSION
+   LivePhase.DANGEROUS_ATTACK->when{
+    progress>=.72f->LivePhase.DANGEROUS_ATTACK
+    progress>=.54f->LivePhase.ATTACK
+    else->LivePhase.POSSESSION
+   }
+   LivePhase.COUNTER->when{
+    progress>=.72f->LivePhase.DANGEROUS_ATTACK
+    progress>=.54f->LivePhase.ATTACK
+    else->LivePhase.POSSESSION
+   }
+   else->requested
   }
  }
 
