@@ -485,9 +485,174 @@ object MatchSpatialModel {
         return best
     }
 
+    private fun penaltyFrame(w: World, m: LiveMatch, ballX: Float, ballY: Float): MatchSpatialFrame {
+        val attackingHome = ownerClubId(m) == m.homeId
+        val takerId = m.livePlayerId
+        val out = mutableListOf<MatchSpatialPlayer>()
+        val attackingProgressAtSpot = progressFromOwnGoal(attackingHome, ballY)
+        val waitingBase = (attackingProgressAtSpot - .105f).coerceIn(.755f, .805f)
+
+        for (isHome in listOf(true, false)) {
+            val list = xi(m, isHome)
+            val defending = isHome != attackingHome
+            list.forEachIndexed { index, id ->
+                if (id == 0 || id in m.sentOff || id in m.injured) return@forEachIndexed
+                val pos = slotPosition(w, m, isHome, index, id)
+                val keeper = pos == Position.TW || index == 0
+                val active = id == takerId && isHome == attackingHome
+                val baseLat = formationBase(m, isHome, index).first
+                val lateral: Float
+                val absoluteLong: Float
+                val motion: MatchSpatialMotion
+
+                when {
+                    active -> {
+                        lateral = .5f
+                        absoluteLong = ballY
+                        motion = MatchSpatialMotion.BALL
+                    }
+                    keeper && defending -> {
+                        // Goalkeeper stands on the goal line, centred for the penalty.
+                        lateral = .5f
+                        absoluteLong = absoluteY(isHome, .018f)
+                        motion = MatchSpatialMotion.HOLD
+                    }
+                    keeper -> {
+                        lateral = .5f
+                        absoluteLong = absoluteY(isHome, .055f)
+                        motion = MatchSpatialMotion.HOLD
+                    }
+                    else -> {
+                        // All remaining players wait outside the penalty area/arc and
+                        // behind the penalty mark. Slight rank offsets stop them stacking.
+                        val rankOffset = ((index % 4) - 1.5f) * .008f
+                        val attackerViewProgress = (waitingBase + rankOffset).coerceIn(.755f, .815f)
+                        absoluteLong = absoluteY(attackingHome, attackerViewProgress)
+                        lateral = (.5f + (baseLat - .5f) * .58f).coerceIn(.20f, .80f)
+                        motion = if (defending) MatchSpatialMotion.MARK else MatchSpatialMotion.HOLD
+                    }
+                }
+
+                out += MatchSpatialPlayer(
+                    id = id,
+                    isHome = isHome,
+                    slotIndex = index,
+                    position = pos,
+                    lateral = lateral,
+                    longitudinal = absoluteLong,
+                    active = active,
+                    motion = motion,
+                    intensity = if (active) 1f else .18f,
+                )
+            }
+        }
+        return MatchSpatialFrame(out)
+    }
+
+    private fun throwInFrame(w: World, m: LiveMatch, ballX: Float, ballY: Float): MatchSpatialFrame {
+        val throwingHome = ownerClubId(m) == m.homeId
+        val leftTouchline = ballX < .5f
+        val attackDir = if (throwingHome) -1f else 1f
+        val out = mutableListOf<MatchSpatialPlayer>()
+
+        data class BasePlayer(
+            val isHome: Boolean,
+            val index: Int,
+            val id: Int,
+            val pos: Position,
+            val lat: Float,
+            val long: Float,
+        )
+
+        val basePlayers = mutableListOf<BasePlayer>()
+        for (isHome in listOf(true, false)) {
+            xi(m, isHome).forEachIndexed { index, id ->
+                if (id == 0 || id in m.sentOff || id in m.injured) return@forEachIndexed
+                val pos = slotPosition(w, m, isHome, index, id)
+                val sk = skeleton(w, m, isHome, index, id, ballX, ballY)
+                basePlayers += BasePlayer(isHome, index, id, pos, sk.first, absoluteY(isHome, sk.second))
+            }
+        }
+
+        fun distToThrow(p: BasePlayer): Float {
+            val dx = p.lat - ballX
+            val dy = p.long - ballY
+            return dx * dx + dy * dy
+        }
+
+        val ownerSupport = basePlayers
+            .filter { it.isHome == throwingHome && it.id != m.livePlayerId && it.pos != Position.TW }
+            .sortedBy(::distToThrow)
+            .take(3)
+            .map { it.id }
+        val defenderMarkers = basePlayers
+            .filter { it.isHome != throwingHome && it.pos != Position.TW }
+            .sortedBy(::distToThrow)
+            .take(3)
+            .map { it.id }
+
+        basePlayers.forEach { p ->
+            val active = p.id == m.livePlayerId && p.isHome == throwingHome
+            var lat = p.lat
+            var long = p.long
+            var motion = MatchSpatialMotion.SHIFT
+            var intensity = .35f
+
+            if (active) {
+                lat = if (leftTouchline) .035f else .965f
+                long = ballY
+                motion = MatchSpatialMotion.BALL
+                intensity = 1f
+            } else if (p.id in ownerSupport) {
+                val rank = ownerSupport.indexOf(p.id)
+                val inside = listOf(.13f, .22f, .31f)[rank]
+                lat = if (leftTouchline) inside else 1f - inside
+                val longitudinalOffset = when (rank) {
+                    0 -> attackDir * .035f
+                    1 -> -attackDir * .030f
+                    else -> attackDir * .080f
+                }
+                long = (ballY + longitudinalOffset).coerceIn(.045f, .955f)
+                motion = MatchSpatialMotion.SUPPORT
+                intensity = .72f
+            } else if (p.id in defenderMarkers) {
+                val rank = defenderMarkers.indexOf(p.id)
+                val inside = listOf(.18f, .27f, .36f)[rank]
+                lat = if (leftTouchline) inside else 1f - inside
+                val longitudinalOffset = when (rank) {
+                    0 -> attackDir * .025f
+                    1 -> -attackDir * .020f
+                    else -> attackDir * .065f
+                }
+                long = (ballY + longitudinalOffset).coerceIn(.045f, .955f)
+                motion = MatchSpatialMotion.MARK
+                intensity = .58f
+            } else if (p.pos == Position.TW) {
+                motion = MatchSpatialMotion.HOLD
+                intensity = .15f
+            }
+
+            out += MatchSpatialPlayer(
+                id = p.id,
+                isHome = p.isHome,
+                slotIndex = p.index,
+                position = p.pos,
+                lateral = lat.coerceIn(.025f, .975f),
+                longitudinal = long.coerceIn(.025f, .975f),
+                active = active,
+                motion = motion,
+                intensity = intensity,
+            )
+        }
+
+        return MatchSpatialFrame(out)
+    }
+
     fun frame(w: World, m: LiveMatch, ballX: Float = m.ballX, ballY: Float = m.ballY): MatchSpatialFrame {
         val bx = ballX.coerceIn(.025f, .975f)
         val by = ballY.coerceIn(.025f, .975f)
+        if (m.livePhase == LivePhase.PENALTY) return penaltyFrame(w, m, bx, by)
+        if (m.livePhase == LivePhase.THROW_IN) return throwInFrame(w, m, bx, by)
         val homeSupport = supportIndexes(w, m, true, bx, by)
         val awaySupport = supportIndexes(w, m, false, bx, by)
         val homeRunners = runnerIndexes(w, m, true)
