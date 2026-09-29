@@ -434,7 +434,7 @@ object MatchEngine {
   if(requested==LivePhase.COUNTER&&counterActive)return LivePhase.COUNTER
   if(requested !in setOf(LivePhase.POSSESSION,LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK,LivePhase.COUNTER))return requested
   return when{
-   progress<.50f->LivePhase.POSSESSION
+   progress<.54f->LivePhase.POSSESSION
    progress<.72f->LivePhase.ATTACK
    else->LivePhase.DANGEROUS_ATTACK
   }
@@ -480,7 +480,11 @@ object MatchEngine {
    (phase==LivePhase.POSSESSION&&m.liveDetail.contains("Angriff",true))||
    (phase==LivePhase.ATTACK&&m.liveDetail.contains("Tornähe",true))||
    (phase!=LivePhase.DANGEROUS_ATTACK&&m.liveDetail.contains("Gefährlich",true))
-  )m.liveDetail=territorialDetail(m,home,phase)
+  ){
+   val detail=territorialDetail(m,home,phase)
+   m.liveDetail=detail
+   m.chainNarrative=detail
+  }
  }
 
  private fun setIncidentPhase(m: LiveMatch,phase: LivePhase,clubId: Int,playerId: Int,detail: String=""){
@@ -1152,7 +1156,7 @@ object MatchEngine {
     val primeProgress=if(w.players[m.livePlayerId]?.messiMentored==true).11 else 0.0
     val progress=(1.02*attackRatio.coerceIn(.72,1.48)*buildProgress(effective.buildUp)*(.92+effective.tempo*.024)*fatigue*modeProgress*calibration.chanceCreation+flankBonus+primeProgress).coerceIn(.34,.995)
     if(rng.chance(progress)){
-     val mover=moverFor(w,m,home,rng);ensurePerformance(w,m,mover).chancesCreated++;m.chainStep=2;m.chainTicks=0;setBallPhase(m,LivePhase.DANGEROUS_ATTACK,home,mover,if(m.ballX !in .24f.. .76f)"Über außen in Tornähe" else "In Tornähe");moveBallToward(w,m,home,LivePhase.DANGEROUS_ATTACK,rng)
+     val mover=moverFor(w,m,home,rng);m.chainStep=2;m.chainTicks=0;setBallPhase(m,LivePhase.DANGEROUS_ATTACK,home,mover,if(m.ballX !in .24f.. .76f)"Über außen in Tornähe" else "In Tornähe");moveBallToward(w,m,home,LivePhase.DANGEROUS_ATTACK,rng);if(m.livePhase==LivePhase.DANGEROUS_ATTACK)ensurePerformance(w,m,mover).chancesCreated++
     }else if(m.chainTicks>=3){m.chainStep=0;m.chainTicks=0;setBallPhase(m,LivePhase.POSSESSION,home,detail="Angriff neu aufgebaut");moveBallToward(w,m,home,LivePhase.POSSESSION,rng)}
     else{setBallPhase(m,LivePhase.ATTACK,home,moverFor(w,m,home,rng),"Angriff läuft");moveBallToward(w,m,home,LivePhase.ATTACK,rng)}
    }
