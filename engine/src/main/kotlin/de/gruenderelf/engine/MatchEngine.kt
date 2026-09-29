@@ -841,16 +841,21 @@ object MatchEngine {
   when(reason){
    PossessionChangeReason.KICK_OFF->{m.ballY=.5f;m.ballX=.5f}
    PossessionChangeReason.GOAL_KICK,PossessionChangeReason.SAVE->{m.ballY=if(home).84f else .16f;m.ballX=.5f}
-   PossessionChangeReason.THROW_IN->{m.ballX=if(m.ballX<.5f).045f else .955f;m.ballY=m.ballY.coerceIn(.10f,.90f)}
+   PossessionChangeReason.THROW_IN->{m.ballX=throwInTouchlineX(m.ballX);m.ballY=m.ballY.coerceIn(.035f,.965f)}
    PossessionChangeReason.OFFSIDE->{m.ballY=(m.ballY+(if(home).08f else -.08f)).coerceIn(.12f,.88f);m.ballX=m.ballX.coerceIn(.16f,.84f)}
    else->{m.ballY=(m.ballY*.72f+.5f*.28f).coerceIn(.09f,.91f)}
   }
   val preserveThrow=reason==PossessionChangeReason.THROW_IN&&id==m.chainOwnerClubId
-  if(preserveThrow){
+  if(reason==PossessionChangeReason.THROW_IN){
+   val taker=m.livePlayerId.takeIf{it in xi(m,home)&&it !in m.injured&&it !in m.sentOff}
+    ?:throwInTaker(w,m,home,m.ballX<.5f)
    val progress=if(home)1f-m.ballY else m.ballY
-   val phase=when{progress>=.78f->LivePhase.DANGEROUS_ATTACK;progress>=.50f->LivePhase.ATTACK;else->LivePhase.POSSESSION}
-   m.chainStep=m.chainStep.coerceAtLeast(if(phase==LivePhase.DANGEROUS_ATTACK)2 else 1);m.chainTicks=(m.chainTicks+1).coerceAtMost(5);m.counterTicksRemaining=0
-   setBallPhase(m,phase,home,detail="Einwurf schnell ausgeführt",reason=reason)
+   val requested=if(progress>=.54f)LivePhase.ATTACK else LivePhase.POSSESSION
+   val phase=territorialPhase(home,m.ballY,requested)
+   m.chainStep=if(phase==LivePhase.ATTACK)1 else 0
+   m.chainTicks=if(preserveThrow)(m.chainTicks+1).coerceAtMost(4) else 0
+   m.counterTicksRemaining=0
+   setBallPhase(m,phase,home,taker,if(preserveThrow)"Einwurf schnell ausgeführt" else "Einwurf ausgeführt",reason)
   }else{
    m.chainStep=0;m.chainTicks=0;m.counterTicksRemaining=0
    val keeperRestart=reason in setOf(PossessionChangeReason.SAVE,PossessionChangeReason.GOAL_KICK)
