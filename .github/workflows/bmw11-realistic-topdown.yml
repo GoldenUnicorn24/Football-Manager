@@ -1,4 +1,4 @@
-name: BMW16 Territory Sync Build
+name: BMW17 Restart Realism Build
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: bmw16-territory-sync-${{ github.ref }}
+  group: bmw17-restart-realism-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
         run: ./gradlew --no-daemon :app:assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: Gruenderelf-v0.5.23-bmw16-territory-sync
+          name: Gruenderelf-v0.5.23-bmw17-restart-realism
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
