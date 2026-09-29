@@ -210,4 +210,56 @@ class MatchSpatialModelTest {
         assertTrue("The rest of the defensive block should keep individual marking jobs", markers.size >= 3)
     }
 
+    @Test
+    fun penaltyUsesExactSpotAndKeepsOtherPlayersOutsideTheArea() {
+        val (w, m) = running()
+        setOwner(
+            m,
+            home = true,
+            phase = LivePhase.PENALTY,
+            ballX = .5f,
+            ballY = MatchEngine.penaltySpotY(true),
+        )
+
+        val frame = MatchSpatialModel.frame(w, m)
+        val active = frame.players.first { it.active }
+        val defendingKeeper = frame.players.first { !it.isHome && it.position == Position.TW }
+
+        assertEquals(.5, active.lateral.toDouble(), .0001)
+        assertEquals(MatchEngine.penaltySpotY(true).toDouble(), active.longitudinal.toDouble(), .0001)
+        assertTrue("Defending keeper must stay on the goal line", defendingKeeper.longitudinal < .04f)
+
+        val waiting = frame.players.filter { !it.active && it.position != Position.TW }
+        assertTrue(waiting.isNotEmpty())
+        assertTrue(
+            "All non-takers should wait behind the penalty mark/outside the area",
+            waiting.all { MatchSpatialModel.progressFromOwnGoal(true, it.longitudinal) <= .82f },
+        )
+    }
+
+    @Test
+    fun throwInPlacesTakerOnTouchlineAndCreatesLocalSupportAndMarking() {
+        val (w, m) = running()
+        setOwner(m, home = true, phase = LivePhase.THROW_IN, ballX = .035f, ballY = .62f)
+
+        val frame = MatchSpatialModel.frame(w, m)
+        val active = frame.players.first { it.active }
+        val support = frame.players.filter { it.isHome && it.motion == MatchSpatialMotion.SUPPORT }
+        val markers = frame.players.filter { !it.isHome && it.motion == MatchSpatialMotion.MARK }
+
+        assertEquals(.035, active.lateral.toDouble(), .0001)
+        assertEquals(.62, active.longitudinal.toDouble(), .0001)
+        assertTrue("Throw-in needs nearby receiving options", support.size >= 2)
+        assertTrue("Opposition should mark the local throw-in area", markers.size >= 2)
+        assertTrue("Support players must be inside the field", support.all { it.lateral > .08f })
+    }
+
+    @Test
+    fun restartGeometryHelpersAreMirroredAndExact() {
+        assertEquals(11.0 / 105.0, MatchEngine.penaltySpotY(true).toDouble(), .0001)
+        assertEquals(1.0 - 11.0 / 105.0, MatchEngine.penaltySpotY(false).toDouble(), .0001)
+        assertEquals(.035, MatchEngine.throwInTouchlineX(.12f).toDouble(), .0001)
+        assertEquals(.965, MatchEngine.throwInTouchlineX(.88f).toDouble(), .0001)
+    }
+
 }
