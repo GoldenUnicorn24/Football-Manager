@@ -456,6 +456,15 @@ object MatchEngine {
   }
  }
 
+ /** Exact 11 m penalty spot in canonical engine coordinates. */
+ fun penaltySpotY(home:Boolean):Float{
+  val fromGoal=(11f/105f).coerceIn(.03f,.97f)
+  return if(home)fromGoal else 1f-fromGoal
+ }
+
+ /** Touchline used by a throw-in; longitudinal position is preserved separately. */
+ fun throwInTouchlineX(ballX:Float):Float=if(ballX<.5f).035f else .965f
+
  private fun territorialDetail(m:LiveMatch,home:Boolean,phase:LivePhase):String{
   val progress=(if(home)1f-m.ballY else m.ballY).coerceIn(0f,1f)
   val wide=m.ballX !in .22f.. .78f
@@ -742,22 +751,71 @@ object MatchEngine {
 
  private fun queueRestart(m: LiveMatch,clubId: Int,reason: PossessionChangeReason){m.pendingPossessionClubId=clubId;m.pendingPossessionReason=reason}
 
+ private fun throwInTaker(w:World,m:LiveMatch,home:Boolean,leftTouchline:Boolean):Int{
+  val team=xi(m,home).filter{it!=0&&it !in m.injured&&it !in m.sentOff}
+  if(team.isEmpty())return 0
+  fun score(id:Int):Double{
+   val p=w.players[id]?:return -999.0
+   if(p.position==Position.TW)return -200.0
+   val sideFit=when{
+    leftTouchline&&p.position==Position.LV->34.0
+    leftTouchline&&p.position==Position.LA->30.0
+    !leftTouchline&&p.position==Position.RV->34.0
+    !leftTouchline&&p.position==Position.RA->30.0
+    p.position in setOf(Position.ZM,Position.DM,Position.OM)->12.0
+    p.position==Position.ST->5.0
+    else->8.0
+   }
+   val technique=p.attributes.passing*.18+p.attributes.technique*.12+p.attributes.vision*.08
+   val stamina=p.attributes.stamina*.04
+   return sideFit+technique+stamina
+  }
+  return team.maxByOrNull(::score)?:team.first()
+ }
+
  private fun maybeThrowIn(w: World,m: LiveMatch,ownerHome: Boolean,rng: SeededRandom): Boolean {
   if(m.minute<=0||m.lastThrowInMinute==m.minute)return false
   if(m.livePhase !in setOf(LivePhase.POSSESSION,LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK,LivePhase.COUNTER))return false
-  val wide=m.ballX !in .16f.. .84f
-  val phaseFactor=when(m.livePhase){LivePhase.POSSESSION->.11;LivePhase.ATTACK->.15;LivePhase.DANGEROUS_ATTACK->.09;LivePhase.COUNTER->.12;else->0.0}
-  val chance=(phaseFactor+(if(wide).09 else 0.0)).coerceIn(.08,.24)
+
+  val edgeDistance=minOf(m.ballX,1f-m.ballX)
+  if(edgeDistance>.22f)return false
+  val veryWide=edgeDistance<.105f
+  val defenderHome=!ownerHome
+  val defenderPress=effectiveTactics(w,m,defenderHome).pressing
+  val phaseBase=when(m.livePhase){
+   LivePhase.POSSESSION->.040
+   LivePhase.ATTACK->.062
+   LivePhase.DANGEROUS_ATTACK->.072
+   LivePhase.COUNTER->.050
+   else->0.0
+  }
+  val edgeBoost=((.22f-edgeDistance)/.22f*.105f).toDouble()
+  val pressureBoost=(defenderPress-1)*.008
+  val chance=(phaseBase+edgeBoost+pressureBoost+(if(veryWide).035 else 0.0)).coerceIn(.025,.235)
   if(!rng.chance(chance))return false
-  val receivingHome=if(rng.chance(if(wide).63 else .56))ownerHome else !ownerHome
-  val id=clubId(m,receivingHome);stats(m,receivingHome).throwIns++;m.lastThrowInMinute=m.minute;addStoppageTime(m,3)
-  m.ballX=if(m.ballX<.5f).035f else .965f
+
+  val ownerProgress=(if(ownerHome)1f-m.ballY else m.ballY).coerceIn(0f,1f)
+  val retainChance=(.42+
+   (if(m.livePhase==LivePhase.ATTACK).055 else 0.0)+
+   (if(m.livePhase==LivePhase.DANGEROUS_ATTACK).105 else 0.0)+
+   (defenderPress-3)*.018+
+   (if(ownerProgress>.72f).035 else 0.0)).coerceIn(.34,.69)
+  val receivingHome=if(rng.chance(retainChance))ownerHome else !ownerHome
+  val id=clubId(m,receivingHome)
+  val left=m.ballX<.5f
+  val throwY=(m.ballY+(rng.nextDouble().toFloat()-.5f)*.018f).coerceIn(.035f,.965f)
+  m.ballX=throwInTouchlineX(m.ballX);m.ballY=throwY
+  val taker=throwInTaker(w,m,receivingHome,left)
+
+  stats(m,receivingHome).throwIns++
+  m.lastThrowInMinute=m.minute
+  addStoppageTime(m,rng.int(6,13))
   queueRestart(m,id,PossessionChangeReason.THROW_IN)
-  setIncidentPhase(m,LivePhase.THROW_IN,id,0,"Einwurf")
-  log(m,"Einwurf für ${w.clubs.getValue(id).shortName}.")
+  val side=if(left)"linken" else "rechten"
+  setIncidentPhase(m,LivePhase.THROW_IN,id,taker,"Einwurf an der ${side} Seitenlinie")
+  log(m,"Einwurf für ${w.clubs.getValue(id).shortName} an der ${side} Seitenlinie.")
   return true
  }
-
  private fun maybeOffside(w: World,m: LiveMatch,home: Boolean,runnerId: Int,type: ShotType,rng: SeededRandom): Boolean {
   if(type in setOf(ShotType.PENALTY,ShotType.FREE_KICK,ShotType.REBOUND)||runnerId==0)return false
   val attack=w.clubs.getValue(clubId(m,home));val defending=w.clubs.getValue(clubId(m,!home));val attackEffective=effectiveTactics(w,m,home);val defendEffective=effectiveTactics(w,m,!home)
