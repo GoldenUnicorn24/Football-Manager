@@ -295,10 +295,10 @@ private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}
   Section("Match-Ansicht"){
    Text("Wähle die Darstellung für Live-Spiele.",color=Muted,style=MaterialTheme.typography.bodySmall)
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
-    Column(Modifier.weight(1f)){Text("Taktische Draufsicht 7.0",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Phasen folgen jetzt der echten Ballposition · jeder Spieler mit eigener Route, Reaktionszeit und Aufgabe." else "Klassische Gründerelf-Matchansicht ist aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+    Column(Modifier.weight(1f)){Text("Taktische Draufsicht 8.0",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Ballposition, Einwürfe und Standards sind räumlich synchron · jeder Spieler reagiert einzeln." else "Klassische Gründerelf-Matchansicht ist aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)}
     Switch(checked=tacticalMatchView,onCheckedChange={vm.setTacticalMatchView(it)})
    }
-   Text("AUS = bisherige Matchansicht unverändert. AN = Ballbesitz/Aufbau bleibt bis klar hinter die Mittellinie erreicht ist; Angriff gibt es erst in der gegnerischen Hälfte und gefährlichen Angriff erst im letzten Drittel. Spieler reagieren weiterhin einzeln mit Tiefenläufen, Passdreiecken, Pressing und Deckung. Bei Schüssen springt die bekannte Toransicht automatisch hinein.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   Text("AUS = bisherige Matchansicht unverändert. AN = Phasen folgen der echten Ballposition. Einwürfe entstehen an der tatsächlichen Seitenlinie und bekommen lokale Anspiel-/Deckungsoptionen; beim Elfmeter liegt der Ball exakt auf dem 11-m-Punkt und alle anderen Spieler warten außerhalb des Strafraums. Die individuellen Lauf-, Pressing- und Deckungswege bleiben aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
   Section("Match-Sounds"){
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
