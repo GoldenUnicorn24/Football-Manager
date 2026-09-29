@@ -413,6 +413,7 @@ object MatchEngine {
   m.chainZone=when(phase){LivePhase.POSSESSION->0;LivePhase.ATTACK,LivePhase.COUNTER->1;LivePhase.DANGEROUS_ATTACK->2;LivePhase.SHOT_ON_TARGET,LivePhase.SHOT_OFF_TARGET,LivePhase.WOODWORK,LivePhase.GOAL->3;else->m.chainZone}
   if(detail.isNotBlank())m.chainNarrative=detail
   m.chainOwnerClubId=id;m.homeInPossession=home;m.livePhase=phase;m.liveClubId=id;m.livePlayerId=playerId;m.liveDetail=detail;m.liveEventSerial++
+  if(phase in setOf(LivePhase.POSSESSION,LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK,LivePhase.COUNTER))synchronizeOpenPlayTerritory(m,home,phase)
  }
 
  /**
