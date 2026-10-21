@@ -131,13 +131,13 @@ fun ratingColor(fraction: Float)=when{fraction<.4f->Clay;fraction<.65f->Gold;els
 /* ───────────────────────── Seitengerüst ───────────────────────── */
 
 /** Hintergrund mit Flutlicht-Schein und zentrierter, scrollbarer Spalte. */
-@Composable fun PageFrame(transparent: Boolean=false,content: @Composable ColumnScope.()->Unit){
+@Composable fun PageFrame(transparent: Boolean=false,wide: Boolean=false,content: @Composable ColumnScope.()->Unit){
  Box(Modifier.fillMaxSize().background(if(transparent)Color.Transparent else Ink).drawBehind{
   val r=(size.width*1.1f).coerceAtLeast(1f)
   drawRect(Brush.radialGradient(listOf(Grass.copy(alpha=.11f),Color.Transparent),center=Offset(size.width*.92f,-size.width*.08f),radius=r))
   drawRect(Brush.radialGradient(listOf(Color(0xFF1B4A6B).copy(alpha=.10f),Color.Transparent),center=Offset(0f,size.height*.35f),radius=r*.8f))
  },contentAlignment=Alignment.TopCenter){
-  Column(Modifier.widthIn(max=640.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=16.dp).padding(top=18.dp,bottom=32.dp),verticalArrangement=Arrangement.spacedBy(14.dp),content=content)
+  Column(Modifier.widthIn(max=if(wide)1040.dp else 640.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=16.dp).padding(top=18.dp,bottom=32.dp),verticalArrangement=Arrangement.spacedBy(14.dp),content=content)
  }
 }
 
@@ -148,8 +148,8 @@ fun ratingColor(fraction: Float)=when{fraction<.4f->Clay;fraction<.65f->Gold;els
  }
 }
 
-@Composable fun Page(title: String,kicker: String="DEIN VEREIN. DEIN WEG.",content: @Composable ColumnScope.()->Unit){
- PageFrame{
+@Composable fun Page(title: String,kicker: String="DEIN VEREIN. DEIN WEG.",wide: Boolean=false,content: @Composable ColumnScope.()->Unit){
+ PageFrame(wide=wide){
   Column(Modifier.padding(top=6.dp,bottom=4.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
    Eyebrow(kicker,if(UiBrand.bmwMode)Color(0xFF9BCBFF) else Grass)
    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
@@ -167,6 +167,16 @@ fun ratingColor(fraction: Float)=when{fraction<.4f->Clay;fraction<.65f->Gold;els
   Box(Modifier.width(5.dp).height(height).background(Color(0xFF55B8FF)))
   Box(Modifier.width(5.dp).height(height).background(Color(0xFF1261A0)))
   Box(Modifier.width(5.dp).height(height).background(BmwMRed))
+ }
+}
+
+/** Zwei Spalten ab Tablet-Breite, sonst untereinander. */
+@Composable fun AdaptiveColumns(left: @Composable ColumnScope.()->Unit,right: @Composable ColumnScope.()->Unit){
+ BoxWithConstraints(Modifier.fillMaxWidth()){
+  if(maxWidth>=760.dp)Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(14.dp)){
+   Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(14.dp),content=left)
+   Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(14.dp),content=right)
+  }else Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(14.dp)){left();right()}
  }
 }
 
@@ -262,27 +272,36 @@ fun ratingColor(fraction: Float)=when{fraction<.4f->Clay;fraction<.65f->Gold;els
  }
 }
 
-@Composable fun SuitabilityBadge(player: Player,target: Position){val rating=player.ratingAt(target);val fit=player.fit(target);val color=when{player.position==target->Grass;fit>=.92->Blue;fit>=.84->Gold;else->Clay};Pill("${target.name} · $rating",color)}
+/** Eignungssymbol zusätzlich zur Farbe – auch bei Farbschwäche eindeutig. */
+fun suitabilitySymbol(player: Player?,target: Position)=when{player==null->"–";player.position==target->"✓";player.fit(target)>=.92->"≈";player.fit(target)>=.84->"~";else->"✕"}
+@Composable fun SuitabilityBadge(player: Player,target: Position){val rating=player.ratingAt(target);val fit=player.fit(target);val color=when{player.position==target->Grass;fit>=.92->Blue;fit>=.84->Gold;else->Clay};Pill("${suitabilitySymbol(player,target)} ${target.name} · $rating",color)}
 
 @Composable fun ClubHero(w: World){
  val c=w.club();val p=w.self();val primary=Color(c.primary)
  val realMode=w.privateTopClubMode&&w.leagues.size==5;val sandbox=w.user.difficulty==Difficulty.SANDBOX
  Surface(shape=RoundedCornerShape(24.dp),color=Panel,border=BorderStroke(1.dp,LineStrong),modifier=Modifier.fillMaxWidth()){
   Box(Modifier.fillMaxWidth().heightIn(min=188.dp)){
+   val phase=rememberFloodlightPhase(11000)
    Canvas(Modifier.matchParentSize()){
-    drawRect(Brush.linearGradient(listOf(androidx.compose.ui.graphics.lerp(primary,Ink,.62f),Panel,Ink),start=Offset.Zero,end=Offset(size.width,size.height)))
-    // Flutlichtkegel von oben rechts
-    for(i in 0..2){
-     val beam=Path().apply{moveTo(size.width*(.86f+i*.05f),-10f);lineTo(size.width*(.18f+i*.16f),size.height);lineTo(size.width*(.30f+i*.16f),size.height);close()}
-     drawPath(beam,Brush.verticalGradient(listOf(Chalk.copy(alpha=.07f),Color.Transparent)))
-    }
-    // Rasen mit Mähstreifen
-    val turfTop=size.height*.80f
-    drawRect(Brush.verticalGradient(listOf(PitchGreen.copy(alpha=0f),PitchGreen.copy(alpha=.85f)),startY=turfTop-30f,endY=size.height),Offset(0f,turfTop-30f),Size(size.width,size.height-turfTop+30f))
-    for(i in 0..7)if(i%2==0)drawRect(Color.White.copy(alpha=.025f),Offset(size.width*i/8f,turfTop),Size(size.width/8f,size.height-turfTop))
-    // Glanz hinter dem Wappen
-    val glow=Offset(size.width*.80f,size.height*.44f);val gr=(size.height*.8f).coerceAtLeast(1f)
-    drawCircle(Brush.radialGradient(listOf(primary.copy(alpha=.38f),Color.Transparent),center=glow,radius=gr),radius=gr,center=glow)
+    val w=size.width;val h=size.height
+    drawRect(Brush.linearGradient(listOf(androidx.compose.ui.graphics.lerp(primary,Ink,.70f),Panel,Ink),start=Offset.Zero,end=Offset(w,h)))
+    // Rasen mit Mähstreifen und Lichtinsel unter dem Wappen
+    val turfTop=h*.70f
+    drawRect(Brush.verticalGradient(listOf(PitchGreen.copy(alpha=0f),PitchGreen.copy(alpha=.9f)),startY=turfTop-24f,endY=h),Offset(0f,turfTop-24f),Size(w,h-turfTop+24f))
+    for(i in 0..9)if(i%2==0)drawRect(Color.White.copy(alpha=.03f),Offset(w*i/10f,turfTop),Size(w/10f,h-turfTop))
+    lightPool(Offset(w*.78f,h*.94f),w*.34f,h*.14f,.7f)
+    // Zwei Flutlichter oben rechts, Kegel auf das Wappen
+    val heads=listOf(Offset(w*.93f,h*.08f),Offset(w*.66f,h*.05f))
+    floodlightBeam(heads[0],Offset(w*.58f,h),Offset(w*.96f,h),.6f)
+    floodlightBeam(heads[1],Offset(w*.60f,h),Offset(w*.90f,h),.4f)
+    floodlightHaze(listOf(heads[0] to (Offset(w*.6f,h) to Offset(w*.95f,h)),heads[1] to (Offset(w*.6f,h) to Offset(w*.9f,h))),phase,14)
+    floodlightHead(heads[0],w*.075f)
+    floodlightHead(heads[1],w*.055f,.75f)
+    // Glanz hinter dem Wappen in Vereinsfarbe
+    val glow=Offset(w*.80f,h*.48f);val gr=(h*.75f).coerceAtLeast(1f)
+    drawCircle(Brush.radialGradient(listOf(primary.copy(alpha=.34f),Color.Transparent),center=glow,radius=gr),radius=gr,center=glow)
+    // Overlay links für ruhigen Textgrund
+    drawRect(Brush.horizontalGradient(0f to Ink.copy(alpha=.72f),.55f to Ink.copy(alpha=.25f),1f to Color.Transparent))
    }
    Row(Modifier.fillMaxWidth().padding(20.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
     Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(8.dp)){
@@ -335,7 +354,9 @@ fun ratingColor(fraction: Float)=when{fraction<.4f->Clay;fraction<.65f->Gold;els
      Icon(Icons.Filled.KeyboardArrowDown,contentDescription=null,tint=if(open)Grass else Muted)
     }
    }
-   DropdownMenu(open,{open=false},modifier=Modifier.heightIn(max=380.dp)){
+   if(options.size>SEARCHABLE_PICK_THRESHOLD){
+    if(open)SearchSelectDialog(label,value,options,name,{open=false}){open=false;onChange(it)}
+   }else DropdownMenu(open,{open=false},modifier=Modifier.heightIn(max=380.dp)){
     options.forEach{option->
      val selected=option==value
      DropdownMenuItem(
@@ -344,6 +365,47 @@ fun ratingColor(fraction: Float)=when{fraction<.4f->Clay;fraction<.65f->Gold;els
       trailingIcon=if(selected){{Icon(Icons.Filled.Check,contentDescription=null,tint=Grass)}} else null
      )
     }
+   }
+  }
+ }
+}
+
+/** Ab dieser Länge öffnet [Pick] eine durchsuchbare Liste statt eines Dropdowns. */
+const val SEARCHABLE_PICK_THRESHOLD=12
+
+/** Vollflächige Auswahl mit Suchfeld – für lange Listen wie Vereine oder Spieler. */
+@Composable fun <T> SearchSelectDialog(title: String,value: T,options: List<T>,name: (T)->String,onDismiss: ()->Unit,onSelect: (T)->Unit){
+ var query by remember{mutableStateOf("")}
+ val filtered=remember(query,options){val q=query.trim();if(q.isEmpty())options else options.filter{name(it).contains(q,ignoreCase=true)}}
+ androidx.compose.ui.window.Dialog(onDismissRequest=onDismiss){
+  Surface(color=PanelHigh,shape=RoundedCornerShape(CardRadius),border=BorderStroke(1.dp,LineStrong),modifier=Modifier.fillMaxWidth().heightIn(max=600.dp)){
+   Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+    Text(title,style=MaterialTheme.typography.headlineSmall,color=Chalk)
+    Field("Suchen",query){query=it}
+    Text("${filtered.size} von ${options.size}",color=Faint,style=MaterialTheme.typography.labelMedium)
+    androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f,fill=false)){
+     items(filtered.size){i->
+      val option=filtered[i];val selected=option==value
+      Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if(selected)Grass.copy(alpha=.10f) else Color.Transparent).clickable{onSelect(option)}.padding(horizontal=10.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically){
+       Text(name(option),Modifier.weight(1f),color=if(selected)Grass else Chalk,fontWeight=if(selected)FontWeight.SemiBold else FontWeight.Normal,style=MaterialTheme.typography.bodyLarge)
+       if(selected)Icon(Icons.Filled.Check,contentDescription="ausgewählt",tint=Grass)
+      }
+     }
+    }
+    if(filtered.isEmpty())Text("Kein Treffer.",color=Muted)
+    TextButton(onClick=onDismiss,modifier=Modifier.align(Alignment.End)){Text("Schließen",color=Muted)}
+   }
+  }
+ }
+}
+
+/** Waagerecht scrollbare Filter-Chips. */
+@Composable fun ChipRow(options: List<String>,selected: String,onSelect: (String)->Unit){
+ Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+  options.forEach{o->
+   val active=o==selected
+   Surface(onClick={onSelect(o)},shape=RoundedCornerShape(if(UiBrand.bmwMode)6.dp else 20.dp),color=if(active)Grass.copy(alpha=.16f) else Inset,border=BorderStroke(1.dp,if(active)Grass.copy(alpha=.55f) else Line)){
+    Text(o,Modifier.padding(horizontal=14.dp,vertical=8.dp),color=if(active)Grass else Muted,style=MaterialTheme.typography.labelLarge,fontWeight=if(active)FontWeight.Bold else FontWeight.Normal)
    }
   }
  }

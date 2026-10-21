@@ -79,66 +79,58 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
 }
 
 @Composable fun HomeScreen(w: World,onGame: ()->Unit,onProfile: ()->Unit,onNavigate:(String)->Unit){val c=w.club();val p=w.self()
- Page("Übersicht","SAISON ${w.calendar.season}/${(w.calendar.season+1)%100} · SPIELTAG ${w.calendar.matchday}"){
+ Page("Übersicht","SAISON ${w.calendar.season}/${(w.calendar.season+1)%100} · SPIELTAG ${w.calendar.matchday}",wide=true){
   ClubHero(w)
-  w.nextFixture()?.let{NextGame(w,it,onGame=onGame)}
   val seniors=w.squad().filter{!it.youth}
   val tired=w.squad().filter{it.available&&!it.youth&&it.fitness<65}.sortedBy{it.fitness};val hot=seniors.maxByOrNull{it.form};val expiring=seniors.filter{it.contractYears<=1}.take(4);val finishedReports=w.scoutReports.values.filter{it.progress>=100}.take(4)
   val table=WorldFactory.table(w,c.tier);val rank=table.indexOfFirst{it.clubId==c.id}+1
   val morale=seniors.takeIf{it.isNotEmpty()}?.map{it.morale}?.average()?.roundToInt()?:0
   val fitness=seniors.takeIf{it.isNotEmpty()}?.map{it.fitness}?.average()?.roundToInt()?:0
-  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
-   StatTile("Tabelle",if(rank>0)"$rank." else "–",Modifier.weight(1f),caption="von ${table.size}",accent=if(rank in 1..3)Grass else Chalk)
-   StatTile("Kasse",euros(c.budget),Modifier.weight(1f),accent=if(c.budget<0)Clay else Chalk)
-  }
-  Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
-   StatTile("Ø Moral","$morale",Modifier.weight(1f),accent=ratingColor(morale/100f))
-   StatTile("Ø Fitness","$fitness %",Modifier.weight(1f),accent=ratingColor(fitness/100f))
-  }
-  Section("Diese Woche"){
-   var count=0
-   if(w.live!=null){count++;ListRow("Laufende Partie fortsetzen","Das Spiel wartet auf dich.",Icons.Filled.PlayArrow,Clay,onClick=onGame)}
-   if(tired.isNotEmpty()){count++;ListRow("${tired.size} Spieler unter 65 % Fitness",tired.take(3).joinToString{it.lastName},Icons.Filled.Warning,Gold){onNavigate("kader")}}
-   if(expiring.isNotEmpty()){count++;ListRow(if(expiring.size==1)"1 Vertrag läuft aus" else "${expiring.size} Verträge laufen aus",expiring.joinToString{it.lastName},Icons.Filled.DateRange,Gold){onNavigate("kader")}}
-   if(finishedReports.isNotEmpty()){count++;ListRow(if(finishedReports.size==1)"1 Scoutbericht vollständig" else "${finishedReports.size} Scoutberichte vollständig","Im Scouting ansehen",Icons.Filled.Search,Blue){onNavigate("transfers")}}
-   if(count==0)ListRow("Alles erledigt","Keine dringenden Aufgaben – volle Konzentration aufs nächste Spiel.",Icons.Filled.CheckCircle,Grass)
-  }
-  Section("Form & Kabine"){
-   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
-    Text("Letzte Spiele",color=Muted,style=MaterialTheme.typography.bodySmall)
-    if(c.form.isEmpty())Text("Die Geschichte beginnt.",color=Muted,style=MaterialTheme.typography.bodySmall) else Row(horizontalArrangement=Arrangement.spacedBy(5.dp)){c.form.takeLast(5).forEach{FormDot(it)}}
-   }
-   HairlineDivider()
-   if(tired.isEmpty())Text("Der Kader wirkt frisch.",color=Grass,style=MaterialTheme.typography.bodyMedium)else Text("${tired.take(3).joinToString{it.lastName}} brauchen Aufmerksamkeit.",color=Gold,style=MaterialTheme.typography.bodyMedium)
-   hot?.let{Text("Beste Form: ${it.name} · ${dec(it.form)}",color=Muted,style=MaterialTheme.typography.bodySmall)}
-  }
-  Section("Gründer. Trainer. Nummer ${p.number}."){
-   Row(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically){
-    PlayerPortrait(p.appearance,c.kits.home)
-    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)){Text(p.name,style=MaterialTheme.typography.titleLarge,maxLines=1,overflow=TextOverflow.Ellipsis);Text(p.position.label,color=Grass,style=MaterialTheme.typography.bodyMedium);Text("${p.stats.goals} Tore · ${p.stats.assists} Vorlagen",color=Muted,style=MaterialTheme.typography.bodySmall)}
-    RatingBadge("${p.ca}",Grass,50.dp)
-   }
-   Meter("Deine Fitness",p.fitness.roundToInt())
-   if(!p.available)Text(if(p.injuryWeeks>0)"${p.injury}: ${p.injuryWeeks} Wochen" else "${p.unavailableReason?.label}",color=Clay)
+  val history=remember(w.calendar.absoluteWeek,w.calendar.season){tableHistory(w)}
+  AdaptiveColumns(left={
+   NextStepCard(w,onGame,onNavigate)
+   w.nextFixture()?.let{NextGame(w,it,onGame=onGame)}
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
-    Box(Modifier.weight(1f)){Action("Profil",secondary=true,onClick=onProfile)}
-    Box(Modifier.weight(1f)){Action("Karriere",secondary=true){onNavigate("karriere")}}
+    StatTile("Tabelle",if(rank>0)"$rank." else "–",Modifier.weight(1f),caption="von ${table.size}",accent=if(rank in 1..3)Grass else Chalk)
+    StatTile("Kasse",euros(c.budget),Modifier.weight(1f),accent=if(c.budget<0)Clay else Chalk)
    }
-  }
-  if(w.news.isNotEmpty())Section("Am Spielfeldrand"){
-   w.news.take(10).forEachIndexed{i,n->
-    if(i>0)HairlineDivider()
-    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
-     val tone=when(n.tone){"good"->Grass;"bad"->Clay;else->Blue}
-     Box(Modifier.padding(top=6.dp).size(8.dp).background(tone,CircleShape))
-     Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)){
-      Text(n.title,style=MaterialTheme.typography.titleMedium,color=Chalk)
-      Text(n.text,style=MaterialTheme.typography.bodyMedium,color=Chalk.copy(alpha=.8f))
-      Text("VEREINSWOCHE ${n.week+1}",style=MaterialTheme.typography.labelSmall,color=Faint)
-     }
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
+    StatTile("Ø Moral","$morale",Modifier.weight(1f),accent=ratingColor(morale/100f))
+    StatTile("Ø Fitness","$fitness %",Modifier.weight(1f),accent=ratingColor(fitness/100f))
+   }
+   Section("Hinweise"){
+    var count=0
+    if(expiring.isNotEmpty()){count++;ListRow(if(expiring.size==1)"1 Vertrag läuft aus" else "${expiring.size} Verträge laufen aus",expiring.joinToString{it.lastName},Icons.Filled.DateRange,Gold){onNavigate("kader")}}
+    if(finishedReports.isNotEmpty()){count++;ListRow(if(finishedReports.size==1)"1 Scoutbericht vollständig" else "${finishedReports.size} Scoutberichte vollständig","Im Scouting ansehen",Icons.Filled.Search,Blue){onNavigate("transfers")}}
+    if(count==0)ListRow("Keine offenen Hinweise","Verträge und Scouting sind im grünen Bereich.",Icons.Filled.CheckCircle,Grass)
+   }
+   Section("Form & Kabine"){
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+     Text("Letzte Spiele",color=Muted,style=MaterialTheme.typography.bodySmall)
+     if(c.form.isEmpty())Text("Die Geschichte beginnt.",color=Muted,style=MaterialTheme.typography.bodySmall) else Row(horizontalArrangement=Arrangement.spacedBy(5.dp)){c.form.takeLast(5).forEach{FormDot(it)}}
+    }
+    HairlineDivider()
+    if(tired.isEmpty())Text("Der Kader wirkt frisch.",color=Grass,style=MaterialTheme.typography.bodyMedium)else Text("${tired.take(3).joinToString{it.lastName}} brauchen Aufmerksamkeit.",color=Gold,style=MaterialTheme.typography.bodyMedium)
+    hot?.let{Text("Beste Form: ${it.name} · ${dec(it.form)}",color=Muted,style=MaterialTheme.typography.bodySmall)}
+   }
+  },right={
+   BoardSection(w)
+   Section("Saisonverlauf"){TableHistoryChart(history,table.size)}
+   InboxPreview(w){onNavigate("posteingang")}
+   Section("Gründer. Trainer. Nummer ${p.number}."){
+    Row(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically){
+     PlayerPortrait(p.appearance,c.kits.home)
+     Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)){Text(p.name,style=MaterialTheme.typography.titleLarge,maxLines=1,overflow=TextOverflow.Ellipsis);Text(p.position.label,color=Grass,style=MaterialTheme.typography.bodyMedium);Text("${p.stats.goals} Tore · ${p.stats.assists} Vorlagen",color=Muted,style=MaterialTheme.typography.bodySmall)}
+     RatingBadge("${p.ca}",Grass,50.dp)
+    }
+    Meter("Deine Fitness",p.fitness.roundToInt())
+    if(!p.available)Text(if(p.injuryWeeks>0)"${p.injury}: ${p.injuryWeeks} Wochen" else "${p.unavailableReason?.label}",color=Clay)
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
+     Box(Modifier.weight(1f)){Action("Profil",secondary=true,onClick=onProfile)}
+     Box(Modifier.weight(1f)){Action("Karriere",secondary=true){onNavigate("karriere")}}
     }
    }
-  }
+  })
  }
 }
 
@@ -244,6 +236,7 @@ private fun tableRowModifier(own: Boolean)=Modifier.fillMaxWidth().background(if
     if(tier==ownLeague.tier)Pill("Deine aktuelle Liga",Grass)
     SegmentedTabs(listOf("Kompakt","Ausführlich"),if(fullTable)1 else 0){fullTable=it==1}
     LeagueTable(w,tier,fullTable)
+    TopScorersSection(w,tier)
     val rounds=(w.leagues.first{it.tier==tier}.clubIds.size-1)*2;if(day !in 1..rounds)day=1
     Pick("Spieltag",day,(1..rounds).toList(),{"Spieltag $it"}){day=it}
     Section("Spieltag $day"){w.fixtures.filter{it.competition==CompetitionType.LEAGUE&&it.tier==tier&&it.matchday==day}.forEach{f->CompetitionResultRow(w,f)}}

@@ -1,8 +1,13 @@
 package de.gruenderelf.app.ui
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
@@ -19,8 +24,9 @@ import androidx.compose.ui.unit.dp
 import de.gruenderelf.app.GameViewModel
 import de.gruenderelf.engine.*
 
-@Composable fun MoreScreen(newScoutReports:Int,onNavigate: (String)->Unit,onMenu: ()->Unit){Page("Hinter der Bande","VEREIN & VERANTWORTUNG"){
+@Composable fun MoreScreen(newScoutReports:Int,unreadNews:Int=0,onNavigate: (String)->Unit,onMenu: ()->Unit){Page("Hinter der Bande","VEREIN & VERANTWORTUNG"){
  Section("Verein"){
+  ListRow("Posteingang",if(unreadNews>0)"$unreadNews ungelesene Meldungen" else "Alle Meldungen gelesen",Icons.Filled.Email,Gold,unreadNews){onNavigate("posteingang")}
   ListRow("Verein, Finanzen & Partner","Stadion, Ausbauten, Sponsoren",Icons.Filled.Place){onNavigate("verein")}
   ListRow("Training & Co-Trainer","Wochenplan, Intensität, Eliteentwicklung",Icons.Filled.Build){onNavigate("training")}
   ListRow("Transfers & Jugend",if(newScoutReports>0)"$newScoutReports neue Scoutberichte" else "Scouting, Verhandlungen, U19 & U23",Icons.Filled.ShoppingCart,Blue,newScoutReports){onNavigate("transfers")}
@@ -39,6 +45,41 @@ import de.gruenderelf.engine.*
   Text("Offline. Ohne Werbung. Ohne Käufe.",color=Faint,style=MaterialTheme.typography.bodySmall)
  }
 }}
+
+private val weekDays=listOf("Mo","Di","Mi","Do","Fr","Sa","So")
+private fun unitColor(u: UnitType)=when{u==UnitType.OFF||u==UnitType.RECOVERY->Blue;u.load>=6->Clay;u.load>=3->Gold;else->Grass}
+
+/** Wochenleiste: Tag antippen, dann Einheit wählen. Farbe = Belastung. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable private fun WeekPlanner(days: List<UnitType>,effective: List<Int>,onChange: (Int,UnitType)->Unit){
+ var selected by rememberSaveable{mutableIntStateOf(0)}
+ Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(5.dp)){
+  days.forEachIndexed{i,u->
+   val active=i==selected;val color=unitColor(u)
+   Surface(onClick={selected=i},shape=RoundedCornerShape(ControlRadius),color=if(active)PanelHigher else Inset,border=BorderStroke(if(active)2.dp else 1.dp,if(active)Grass else Line),modifier=Modifier.weight(1f)){
+    Column(Modifier.padding(vertical=8.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(5.dp)){
+     Text(weekDays.getOrElse(i){"?"},style=MaterialTheme.typography.labelLarge,color=if(active)Chalk else Muted)
+     Box(Modifier.size(10.dp).background(color,CircleShape))
+     Text(u.label.take(4),style=MaterialTheme.typography.labelSmall,color=color,maxLines=1)
+     if(i in effective)Text("●",style=MaterialTheme.typography.labelSmall,color=Grass) else Text(" ",style=MaterialTheme.typography.labelSmall)
+    }
+   }
+  }
+ }
+ val unit=days.getOrElse(selected){UnitType.OFF}
+ Text("${listOf("Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag")[selected]}: ${unit.label} · Belastung ${unit.load}${if(selected in effective)" · wirksame Einheit" else ""}",style=MaterialTheme.typography.bodyMedium,color=Chalk)
+ FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+  UnitType.entries.forEach{u->
+   val active=u==unit;val color=unitColor(u)
+   Surface(onClick={onChange(selected,u)},shape=RoundedCornerShape(if(UiBrand.bmwMode)6.dp else 20.dp),color=if(active)color.copy(alpha=.18f) else Inset,border=BorderStroke(1.dp,if(active)color else Line)){
+    Text(u.label,Modifier.padding(horizontal=12.dp,vertical=7.dp),color=if(active)color else Chalk,style=MaterialTheme.typography.labelLarge)
+   }
+  }
+ }
+ Row(horizontalArrangement=Arrangement.spacedBy(14.dp)){LegendChip(Grass,"leicht");LegendChip(Gold,"mittel");LegendChip(Clay,"hart");LegendChip(Blue,"Erholung")}
+ Text("● = zählt voll für die Entwicklung",color=Faint,style=MaterialTheme.typography.labelMedium)
+}
+@Composable private fun LegendChip(color: androidx.compose.ui.graphics.Color,text: String){Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(5.dp)){Box(Modifier.size(8.dp).background(color,CircleShape));Text(text,color=Muted,style=MaterialTheme.typography.labelMedium)}}
 
 @Composable fun TrainingScreen(w: World,vm: GameViewModel){
  val effective=TrainingEngine.effectiveDays(w);val amateur=w.club().tier>=7;val assistant=w.assistantCoach
@@ -60,10 +101,10 @@ import de.gruenderelf.engine.*
    if(assistant.lastSubReason.isNotBlank())Text("Letzter automatischer Wechsel: ${assistant.lastSubReason}",color=Muted)
   }
   Section("Dein Wochenplan"){
-   if(assistant.autoSeniorTraining)Text("Automatik aktiv: manuelle Änderungen bleiben sichtbar, werden vor der nächsten Trainingsauswertung aber vom Co-Trainer sinnvoll neu geplant.",color=Gold)
-   Text(if(amateur)"Nur die ersten drei echten Einheiten wirken voll. Regeneration und freie Tage helfen zusätzlich bei der Erholung." else "Im Profibereich wirken alle sieben Tage. Achte auf Belastung und Erholung.",color=Muted)
-   Pick("Vorlage laden","Individuell",listOf("Individuell","Matchwoche","Aufbau","Schonung","Pressing","Mental")){if(it!="Individuell")vm.action{w2->TrainingEngine.preset(w2,it)}}
-   listOf("Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag").forEachIndexed{i,day->val unit=w.training.days[i];Pick(day,unit,UnitType.entries.toList(),{it.label}){u->vm.action{it.training.days[i]=u}};Text(when{unit==UnitType.OFF->"Erholung · frei";unit==UnitType.RECOVERY->"Erholung · aktive Regeneration";i in effective->"Wirksame Einheit ${effective.indexOf(i)+1} · Belastung ${unit.load}";else->"Zählt nicht voll: Arbeit und Familie gehen vor."},color=if(i in effective)Grass else Muted,style=MaterialTheme.typography.bodySmall)}
+   if(assistant.autoSeniorTraining)Text("Co-Trainer-Automatik aktiv: Er plant die Woche vor der Auswertung neu.",color=Gold,style=MaterialTheme.typography.bodySmall)
+   Text(if(amateur)"Amateurbereich: Nur die ersten drei echten Einheiten wirken voll." else "Profibereich: Alle sieben Tage wirken – achte auf die Belastung.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   ChipRow(listOf("Matchwoche","Aufbau","Schonung","Pressing","Mental"),""){preset->vm.action("Vorlage „$preset“ geladen."){w2->TrainingEngine.preset(w2,preset)}}
+   WeekPlanner(w.training.days,effective){day,unit->vm.action{it.training.days[day]=unit}}
   }
   Section("Belastung & Matchvorbereitung"){
    Pick("Intensität",w.training.intensity,(1..5).toList(),{when(it){1->"Sehr leicht";2->"Leicht";3->"Normal";4->"Hart";else->"Sehr hart"}}){v->vm.action{it.training.intensity=v}}
@@ -101,7 +142,7 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
    val active=c.sponsorDeals.filter{it.active};Text("Aktive Partner · ${active.size} / 4",style=MaterialTheme.typography.titleMedium);active.forEach{d->Text("${d.category.label}: ${d.name}",style=MaterialTheme.typography.titleMedium);Text("${euros(d.weekly.toLong())}/Woche · Siegbonus ${euros(d.performanceBonus.toLong())} · noch ${d.weeksLeft} Wochen",color=Muted);if(d.youthBoost>0)Text("Jugendnetzwerk +${d.youthBoost} beim Abschluss",color=Grass);if(d.membersBoost>0)Text("Regionalwirkung: +${d.membersBoost} Mitglieder beim Abschluss",color=Grass);HorizontalDivider()}
    if(c.sponsorOffers.isEmpty())Text("Aktuell liegen keine zusätzlichen Partnerangebote vor.",color=Muted) else {Text("Offene Angebote",style=MaterialTheme.typography.titleMedium);c.sponsorOffers.forEach{d->Text("${d.category.label}: ${d.name}",style=MaterialTheme.typography.titleMedium);Text("${euros(d.weekly.toLong())}/Woche · Handgeld ${euros(d.signingBonus)} · ${d.weeksLeft} Wochen · Mindest-Reputation ${d.minReputation}",color=Muted);Action("Partnerschaft annehmen",c.reputation>=d.minReputation&&active.size<4&&active.none{it.category==d.category}){vm.action("Partnerschaft abgeschlossen."){EconomySystem.accept(it,it.user.clubId,d.id)}};HorizontalDivider()}}
    val canRefresh=w.calendar.absoluteWeek-c.lastCommercialRefreshWeek>=8;Action(if(canRefresh)"Neue Sponsorangebote prüfen" else "Neue Angebote in ${(8-(w.calendar.absoluteWeek-c.lastCommercialRefreshWeek)).coerceAtLeast(0)} Wochen",enabled=canRefresh,secondary=true){vm.action{EconomySystem.refreshOffers(it,it.club())}}
-   Text("Einnahmen bestehen nicht mehr nur aus dem Hauptsponsor: Mitglieder, Merchandising, Medienwert, Siegboni und mehrere Partner fließen ein. Trikotpartner stärken Merchandising, Hauptpartner den Medienwert; Finanzvertrauen beeinflusst neue Angebote. Gleichzeitig kosten Stadion, Staff und Academy laufend Geld.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   Text("Einnahmen: Mitglieder, Merchandising, Medienwert, Siegboni und bis zu vier Partner. Trikotpartner stärken das Merchandising, Hauptpartner den Medienwert. Stadion, Staff und Academy kosten laufend Geld.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
   Section(s.name){Text("${s.surface.label} · ${s.capacity} Plätze · ${s.seats} Sitzplätze");Text(if(s.floodlights)"Flutlicht vorhanden" else "Noch ohne Flutlicht",color=if(s.floodlights)Grass else Muted);Meter("Platzqualität",s.pitchQuality,FACILITY_LEVEL_MAX)}
   if(w.construction.isNotEmpty())Section("Laufende Arbeiten"){w.construction.forEach{p->Text(p.facility.label,style=MaterialTheme.typography.titleMedium);LinearProgressIndicator(progress={1f-p.weeksLeft.toFloat()/p.totalWeeks},modifier=Modifier.fillMaxWidth());Text("Noch ${p.weeksLeft} von ${p.totalWeeks} Wochen",color=Muted)}}
@@ -118,7 +159,7 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
  var youthFirst by rememberSaveable{mutableStateOf("")};var youthLast by rememberSaveable{mutableStateOf("")};var youthNation by rememberSaveable{mutableStateOf("Deutschland")};var youthAge by rememberSaveable{mutableIntStateOf(16)};var youthPos by rememberSaveable{mutableStateOf(Position.ZM)};var youthFoot by rememberSaveable{mutableStateOf(Foot.RIGHT)};var youthBlueprint by rememberSaveable{mutableStateOf(YouthBlueprint.BALANCED)};var youthRole by rememberSaveable{mutableStateOf(PlayerRole.BOX_TO_BOX)}
  Page("Kaderplanung & Academy","SUCHE · SCOUTING · U19/U23 · VERTRÄGE"){
   val c=w.club();val academy=c.academy
-  Section("Bereich"){Pick("Ansicht",planningView,listOf("Transfers","Jugend")){planningView=it};Text(if(planningView=="Jugend")"U19 und U23 sind eigenständige Nachwuchsmannschaften mit getrennten Kadern, Spielzeiten, Statistiken und Entwicklungswegen." else "Merkliste, Scoutberichte, Konkurrenzangebote, Vorverträge, Leihen und Historie an einem Ort.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+  SegmentedTabs(listOf("Transfermarkt","Jugend & Academy"),if(planningView=="Jugend")1 else 0){planningView=if(it==1)"Jugend" else "Transfers"}
   if(planningView=="Jugend"){
    Section("Academy"){
     Pick("Academy-Identität",academy.identity,AcademyIdentity.entries.toList(),{it.label}){v->vm.action{it.club().academy.identity=v}}
@@ -128,7 +169,7 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
    Section("U19 & U23 Spielbetrieb"){
     fun summary(label:String,x:AcademyTeamSeason)="$label · ${x.played} Sp · ${x.wins}S ${x.draws}U ${x.losses}N · ${x.points} P · ${x.goalsFor}:${x.goalsAgainst}${x.lastResult.takeIf{it.isNotBlank()}?.let{" · zuletzt $it"}?:""}"
     Text(summary("U19",academy.u19Season),color=Grass);Text(summary("U23",academy.u23Season),color=Gold)
-    Text("Beide Mannschaften haben einen eigenen Kader und eine eigene Saison. Alle zwei Vereinswochen wird je ein Nachwuchsspiel simuliert; Einsätze, Tore, Vorlagen und Bewertungen wirken auf die Entwicklung.",color=Muted,style=MaterialTheme.typography.bodySmall)
+    Text("Eigener Kader und eigene Saison je Team. Alle zwei Wochen ein Nachwuchsspiel – Einsätze und Leistungen treiben die Entwicklung.",color=Muted,style=MaterialTheme.typography.bodySmall)
     Text("Jugendspieler können dauerhaft hochgezogen oder nur für das nächste Profispiel nominiert werden. Eine Notfall-Nominierung kehrt nach diesem Spiel automatisch zurück.",color=Grass,style=MaterialTheme.typography.bodySmall)
    }
    Section("Junge Profis in den Nachwuchs schicken"){
@@ -197,8 +238,15 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
     }
    }
    Section("Transfermarkt"){
-    Pick("Ansicht",marketView,listOf("Spielersuche","Jugendmarkt","Merkliste","Interesse an unserem Verein")){marketView=it}
-    if(marketView=="Spielersuche"||marketView=="Jugendmarkt"){Field("Name suchen",nameQuery){nameQuery=it.take(40)};val clubIds=listOf(0)+w.clubs.values.sortedBy{it.name}.map{it.id};Pick("Verein",clubFilter,clubIds,{id->if(id==0)"Alle Vereine" else w.clubs[id]?.name?:"Verein"}){clubFilter=it};Pick("Position",filter,listOf("Alle")+Position.entries.map{it.name}){filter=it}}
+    val views=listOf("Spielersuche" to "Suche","Jugendmarkt" to "Talente","Merkliste" to "Merkliste (${w.watchlist.size})","Interesse an unserem Verein" to "Interesse")
+    ChipRow(views.map{it.second},views.firstOrNull{it.first==marketView}?.second?:"Suche"){label->marketView=views.first{it.second==label}.first}
+    if(marketView=="Spielersuche"||marketView=="Jugendmarkt"){
+     Field("Name suchen",nameQuery){nameQuery=it.take(40)}
+     val clubIds=listOf(0)+w.clubs.values.sortedBy{it.name}.map{it.id}
+     Pick("Verein",clubFilter,clubIds,{id->if(id==0)"Alle Vereine" else w.clubs[id]?.name?:"Verein"}){clubFilter=it}
+     Text("Position",color=Muted,style=MaterialTheme.typography.labelMedium)
+     ChipRow(listOf("Alle")+Position.entries.map{it.name},filter){filter=it}
+    }
     Pick("Deal",dealType,DealType.entries.toList(),{it.label}){dealType=it};Pick("Versprochene Rolle",role,SquadRole.entries.toList(),{it.label}){role=it};Text(ScoutingTransferSystem.transferWindowLabel(w),color=if(ScoutingTransferSystem.transferWindowOpen(w))Grass else Clay,style=MaterialTheme.typography.bodySmall)
    }
    val candidates=remember(w.calendar.absoluteWeek,w.players.size,w.watchlist.hashCode(),marketView,filter,clubFilter,nameQuery){
@@ -296,43 +344,40 @@ private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}
  }
 }
 
+@Composable private fun HelpTopic(title: String,vararg lines: String){
+ Section(title){lines.forEach{Text("• $it",color=Chalk.copy(alpha=.86f),style=MaterialTheme.typography.bodyMedium)}}
+}
+
 @Composable fun HelpScreen(w:World,vm:GameViewModel){Page("Hilfe & Tutorial","MANAGER-HANDBUCH · v${de.gruenderelf.app.BuildConfig.VERSION_NAME}"){
- Section("Geführtes Tutorial"){Text(if(w.user.tutorialEnabled&&!w.user.tutorialCompleted)"Das geführte Tutorial ist in dieser Karriere aktiv." else "Das Tutorial ist aktuell beendet oder deaktiviert.",color=Muted);Text("Es führt durch Startseite, Matchday-Kader, Training, Transfers/Jugend, Wettbewerbe und das Live-Spiel. Der Ablauf entspricht den aktuellen Systemen von v0.5.22.",color=Muted,style=MaterialTheme.typography.bodySmall);Action("Tutorial von vorn starten",secondary=true){vm.action("Tutorial neu gestartet."){it.user.tutorialEnabled=true;it.user.tutorialCompleted=false;it.user.tutorialStep=0}};if(w.user.tutorialEnabled&&!w.user.tutorialCompleted)Action("Tutorial beenden",secondary=true){vm.action{it.user.tutorialEnabled=false;it.user.tutorialCompleted=true}}}
- Section("Startelf & Ersatzbank"){Text("Die Startelf bleibt deine Auswahl, solange die Spieler verfügbar sind. Vor dem Spiel bestimmst du die sieben Ersatzspieler selbst. Das Spiel ergänzt nur fehlende oder ungültige Plätze, statt deine komplette Bank oder Elf neu zu sortieren.",color=Muted)}
- Section("Live-Aufstellung"){Text("Im Taktik-/Wechselbereich siehst du die komplette Formation. Spieler antippen wählt ihn für einen Wechsel aus; danach führt ein Tipp auf einen Ersatzspieler den Wechsel aus. Per Halten und Ziehen kannst du Positionsplätze tauschen. Nach einem Platzverweis bleibt eine sichtbare Lücke, die du taktisch verschieben kannst.",color=Muted)}
- Section("Co-Trainer-Wechsel"){Text("Wechselvorschläge berücksichtigen Live-Rating, Form, Fitness, Kartenrisiko, Spielstand, Minute, Positionspassung und Bankqualität. Derselbe Spieler wird innerhalb eines Pakets nicht mehrfach vorgeschlagen. Mehrfachvorschläge können einzeln angenommen oder abgelehnt werden.",color=Muted)}
- Section("U19 & U23"){Text("U19 und U23 sind eigenständige Mannschaften. Jugendspieler zählen nicht zur Profikadergrenze und müssen vor einem Einsatz bei den Profis hochgezogen oder notfallnominiert werden. Talente können gezielt entwickelt, gekauft, verkauft und verliehen werden.",color=Muted)}
- Section("Training & Potenzial"){Text("Wochenplan, Intensität, Gegnerfokus und Extra-Foki beeinflussen Entwicklung und Belastung. Potenzialtraining kann Potenzial und Attribute erhöhen; unter 20-Jährige profitieren besonders stark und können zusätzlich echte Gesamtstärke gewinnen. Ältere Profis entwickeln sich moderater.",color=Muted)}
- Section("Transfers & Verhandlungen"){Text("Scouting verbessert Berichte mit der Zeit. Eigene Spieler können mehrere Kauf- oder Leihangebote erhalten. Aktive Verhandlungen reservieren Budget; beim Rücktritt wird es wieder freigegeben. Medizincheck und Registrierung bleiben Teil desselben Deals. Transfers und Leih-Rückkehr setzen eine gültige manuelle Elf nicht mehr unnötig zurück.",color=Muted)}
- Section("Wettbewerbe & Preisgeld"){Text("Liga, nationale Pokale, Champions League, Europa League, Club World Cup und die optionale Krone der Kontinente werden getrennt geführt. Die Krone nimmt die besten sechs Vereine jeder spielbaren Liga auf und läuft nach einer möglichen Vorrunde direkt im K.-o.-System. Rundenprämien steigen je Runde; der Sieger erhält zusätzlich 50 Mio. €. Internationale Titelprämien werden nur einmal ausgezahlt.",color=Muted)}
- Section("Live-Spiel & Simulation"){Text("Live, Taktik, Statistik und Analyse greifen auf denselben Match-Zustand zu. Torhüter wirken deutlich auf Abschlusswahrscheinlichkeiten; internationale Pokale besitzen eine eigene Tor-Kalibrierung. Schnellsimulation und Live-Runner nutzen dieselbe Matchlogik.",color=Muted)}
- Section("Statistik & Analyse"){Text("Statistik zeigt Matchwerte. Analyse nutzt echte Ereignisse für xG, Schusskarte, Passnetz und Taktikänderungen. xG beschreibt Chancenqualität und ist keine Garantie für Tore.",color=Muted)}
- Section("Speichern & Stabilität"){Text("Spielstände werden komprimiert mit Sicherheitskopie und speicherschonenden Live-Checkpoints geschrieben. UI-Aktionen veröffentlichen sofort einen neuen Zustand, damit Schalter, Formation und Kaderänderungen ohne erneutes Öffnen sichtbar werden. Ältere Saves werden migriert und auf bekannte Altzustände geprüft.",color=Muted)}
- Section("What's New"){Text("Die wichtigsten Änderungen jeder neuen Version erscheinen beim ersten Start einmal automatisch. Unter Mehr → What's New kannst du die aktuelle Übersicht jederzeit erneut öffnen.",color=Muted)}
- Section("Spielerkarriere"){Text("Karrierefokus, Saisonziele, Vermächtnis, Meilensteine, Vereinsrekorde und abgeschlossene Spielzeiten machen lange Karrieren nachvollziehbar.",color=Muted)}
+ Section("Geführtes Tutorial"){Text(if(w.user.tutorialEnabled&&!w.user.tutorialCompleted)"Das Tutorial ist in dieser Karriere aktiv." else "Das Tutorial ist beendet oder ausgeschaltet.",color=Muted);Action("Tutorial von vorn starten",secondary=true){vm.action("Tutorial neu gestartet."){it.user.tutorialEnabled=true;it.user.tutorialCompleted=false;it.user.tutorialStep=0}};if(w.user.tutorialEnabled&&!w.user.tutorialCompleted)Action("Tutorial beenden",secondary=true){vm.action{it.user.tutorialEnabled=false;it.user.tutorialCompleted=true}}}
+ HelpTopic("Die Woche","„Nächster Schritt“ auf der Übersicht zeigt, was vor dem Anpfiff offen ist.","Grüne Haken = erledigt, gelbe Hinweise führen direkt zur passenden Seite.","Der Vorstand misst dich an der Kaderstärke im Ligavergleich – Tabelle, Form und Finanzen zählen.")
+ HelpTopic("Kader & Aufstellung","Platz auf dem Spielfeld antippen, um ihn neu zu besetzen.","✓ Hauptposition · ≈ Nebenposition · ~ spielbar · ✕ unpassend.","Die sieben Ersatzspieler wählst du selbst; fehlende Plätze werden beim Anpfiff ergänzt.")
+ HelpTopic("Live-Spiel","Live, Taktik, Statistik und Analyse zeigen dieselbe Partie.","Spieler in der Live-Aufstellung antippen und dann einen Ersatz wählen = Wechsel.","Halten und Ziehen tauscht Positionen, auch nach einem Platzverweis.","Simulation spart Zeit und rechnet mit derselben Match-KI.")
+ HelpTopic("Training","Tag in der Wochenleiste antippen, dann die Einheit wählen.","Farbe = Belastung: grün leicht, gold mittel, rot hart, blau Erholung.","Im Amateurbereich zählen nur die ersten drei echten Einheiten voll.","Intensiv- und Potenzialtraining kosten Geld und erhöhen das Verletzungsrisiko.")
+ HelpTopic("Jugend","U19 und U23 sind eigene Mannschaften und zählen nicht zur Profikadergrenze.","Talente dauerhaft hochziehen oder nur für ein Spiel nominieren.")
+ HelpTopic("Transfers","Scouts liefern mit der Zeit genauere Berichte.","Laufende Verhandlungen reservieren Budget; beim Rückzug wird es frei.","Lange Listen wie Vereine und Spieler lassen sich durchsuchen.")
+ HelpTopic("Wettbewerbe","Liga, Pokal, Europapokale, Club World Cup und die Krone der Kontinente laufen getrennt.","Unter Liga findest du Tabellen, Spieltage sowie Torjäger und Vorlagengeber.")
+ HelpTopic("Speichern","Nach jedem Spieltag wird automatisch gespeichert, laufende Spiele regelmäßig zwischendurch.","Spielstände sind in der Android-Datensicherung enthalten.","Für einen Gerätewechsel: Mehr → Speicherstände → Exportieren.")
  }}
 
 @Composable fun SettingsScreen(vm: GameViewModel){
  val soundsEnabled by vm.soundsEnabled.collectAsState()
  val tacticalMatchView by vm.tacticalMatchView.collectAsState()
- Page("Einstellungen","AUDIO & SPIELERLEBNIS"){
+ Page("Einstellungen","SPIELERLEBNIS"){
   Section("Match-Ansicht"){
-   Text("Wähle die Darstellung für Live-Spiele.",color=Muted,style=MaterialTheme.typography.bodySmall)
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
-    Column(Modifier.weight(1f)){Text("Taktische Draufsicht 8.0",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Ballposition, Einwürfe und Standards sind räumlich synchron · jeder Spieler reagiert einzeln." else "Klassische Gründerelf-Matchansicht ist aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+    Column(Modifier.weight(1f)){Text("Taktische Draufsicht",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Alle Spieler bewegen sich einzeln mit dem Ball." else "Klassische Gründerelf-Ansicht.",color=Muted,style=MaterialTheme.typography.bodySmall)}
     Switch(checked=tacticalMatchView,onCheckedChange={vm.setTacticalMatchView(it)})
    }
-   Text("AUS = bisherige Matchansicht unverändert. AN = Phasen folgen der echten Ballposition. Einwürfe entstehen an der tatsächlichen Seitenlinie und bekommen lokale Anspiel-/Deckungsoptionen; beim Elfmeter liegt der Ball exakt auf dem 11-m-Punkt und alle anderen Spieler warten außerhalb des Strafraums. Die individuellen Lauf-, Pressing- und Deckungswege bleiben aktiv.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
   Section("Match-Sounds"){
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
-    Column(Modifier.weight(1f)){Text("Stadion- und Spielsounds",style=MaterialTheme.typography.titleMedium);Text(if(soundsEnabled)"Alle Match-Sounds sind aktiv." else "Alle Match-Sounds sind stummgeschaltet.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+    Column(Modifier.weight(1f)){Text("Stadion- und Spielsounds",style=MaterialTheme.typography.titleMedium);Text(if(soundsEnabled)"An · Pfiffe, Ball, Publikum und Torjubel." else "Aus · alle Match-Sounds stumm.",color=Muted,style=MaterialTheme.typography.bodySmall)}
     Switch(checked=soundsEnabled,onCheckedChange={vm.setSoundsEnabled(it)})
    }
-   Text("Ein einziger Schalter steuert sämtliche Pfiffe, Ballkontakte, Schüsse, Pfosten, Torjubel, Crowd-Reaktionen, Karten, Standards, Wechsel, Nachspielzeit, Elfmeter und VAR-Sounds. Es gibt bewusst keine einzelnen Sound-Schalter.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   Text("Läuft die App im Hintergrund, verstummen alle Sounds sofort.",color=Faint,style=MaterialTheme.typography.bodySmall)
   }
-  Section("Hinweis"){Text("Die Einstellung gilt appweit und bleibt auch nach einem Neustart erhalten. Beim Ausschalten oder sobald die App in den Hintergrund wechselt, werden laufende Match-Sounds sofort beendet.",color=Muted)}
-  Section("Audio-Quellen"){Text("v0.5.2 verwendet weiterhin echte Aufnahmen: Stadion/Crowd aus ‘WWS FootballAustriavs.Sweden’ (CC BY 4.0), echter Applaus aus ‘Applause.ogg’ (CC BY-SA) und echter Pfiff aus ‘Whistle.ogg’ (CC BY-SA 3.0). Ballkontakt, Keeper- und Metall-Samples bleiben reale Aufnahmen. FFmpeg wird nur für Schnitt, Pegel, Filter und Mischung verwendet – keine synthetischen Crowd-/Pfiffgeneratoren mehr.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+  Section("Audio-Quellen"){Text("Echte Aufnahmen: Stadion/Publikum aus „WWS FootballAustriavs.Sweden“ (CC BY 4.0), Applaus aus „Applause.ogg“ (CC BY-SA), Pfiff aus „Whistle.ogg“ (CC BY-SA 3.0). Ballkontakt-, Torwart- und Pfostengeräusche sind ebenfalls reale Aufnahmen; bearbeitet wurde nur Schnitt, Pegel und Mischung.",color=Muted,style=MaterialTheme.typography.bodySmall)}
  }
 }
 

@@ -37,38 +37,6 @@ import java.util.Locale
  Text("Spieltag ${s.matchday} · ${s.difficulty} · ${SimpleDateFormat("dd.MM.yyyy · HH:mm",Locale.GERMANY).format(Date(s.updatedAt))}",color=Muted,style=MaterialTheme.typography.bodySmall)
 }
 
-/** Nächtliches Stadion: Flutlichtmasten, Lichtkegel und Rasen in Perspektive. */
-@Composable private fun StadiumIllustration(modifier: Modifier){
- Canvas(modifier){
-  val w=size.width;val h=size.height
-  drawRect(Brush.verticalGradient(listOf(Color(0xFF0B1A16),Color(0xFF0A1311),Ink)))
-  // Lichtkegel
-  for((x,dir) in listOf(.12f to 1f,.88f to -1f)){
-   val beam=Path().apply{moveTo(w*x,h*.16f);lineTo(w*(.5f-dir*.05f),h*.95f);lineTo(w*(.5f+dir*.42f),h*.95f);close()}
-   drawPath(beam,Brush.verticalGradient(listOf(Chalk.copy(alpha=.13f),Color.Transparent),startY=h*.16f,endY=h*.95f))
-   // Mast und Scheinwerferkopf
-   drawLine(Color(0xFF2A3A34),Offset(w*x,h*.16f),Offset(w*x,h*.62f),3.dp.toPx())
-   drawRoundRect(Chalk.copy(alpha=.9f),Offset(w*x-12.dp.toPx(),h*.13f),Size(24.dp.toPx(),8.dp.toPx()),androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()))
-   drawCircle(Brush.radialGradient(listOf(Chalk.copy(alpha=.45f),Color.Transparent),center=Offset(w*x,h*.15f),radius=46.dp.toPx()),46.dp.toPx(),Offset(w*x,h*.15f))
-  }
-  // Tribüne
-  drawRect(Brush.verticalGradient(listOf(Color(0xFF13201C),Color(0xFF0E1714))),Offset(0f,h*.48f),Size(w,h*.12f))
-  for(i in 0..40){val x=w*i/40f;drawCircle(listOf(Grass,Chalk,Gold,Blue)[i%4].copy(alpha=.18f),1.4.dp.toPx(),Offset(x,h*(.52f+(i%3)*.025f)))}
-  // Rasen in Perspektive
-  val top=h*.58f
-  val turf=Path().apply{moveTo(w*.06f,top);lineTo(w*.94f,top);lineTo(w*1.2f,h);lineTo(-w*.2f,h);close()}
-  drawPath(turf,Brush.verticalGradient(listOf(PitchGreenLight,PitchGreen),startY=top,endY=h))
-  for(i in 0..9)if(i%2==0){val a=i/10f;val b=(i+1)/10f
-   val stripe=Path().apply{moveTo(w*(.06f+.88f*a),top);lineTo(w*(.06f+.88f*b),top);lineTo(w*(-.2f+1.4f*b),h);lineTo(w*(-.2f+1.4f*a),h);close()}
-   drawPath(stripe,Color.White.copy(alpha=.03f))}
-  val chalk=Chalk.copy(alpha=.4f);val stroke=Stroke(1.5.dp.toPx())
-  drawPath(turf,chalk,style=stroke)
-  drawLine(chalk,Offset(w*-.07f,h*.66f),Offset(w*1.07f,h*.66f),1.5.dp.toPx())
-  drawOval(chalk,Offset(w*.38f,h*.625f),Size(w*.24f,h*.07f),style=stroke)
-  drawRect(Brush.verticalGradient(listOf(Color.Transparent,Ink),startY=h*.6f,endY=h*.84f))
- }
-}
-
 @Composable private fun SlotCard(slot: Int,s: SaveSummary?,busy: Boolean,highlighted: Boolean,onLoad: ()->Unit,onDelete: ()->Unit){
  Surface(color=Panel,shape=RoundedCornerShape(18.dp),border=BorderStroke(1.dp,if(highlighted)Grass.copy(alpha=.45f) else Line),modifier=Modifier.fillMaxWidth()){
   Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)){
@@ -95,9 +63,10 @@ import java.util.Locale
  val developerConfigured by vm.developerPasswordConfigured.collectAsState()
  val latest=slots.firstOrNull{it.slot==lastSlot}?:slots.maxByOrNull{it.updatedAt}
  Box(Modifier.fillMaxSize().background(Ink)){
-  StadiumIllustration(Modifier.fillMaxWidth().height(320.dp))
+  NightStadium(Modifier.fillMaxWidth().height(380.dp))
+  StadiumScrim(Modifier.fillMaxWidth().height(380.dp))
   PageFrame(transparent=true){
-   Spacer(Modifier.height(214.dp))
+   Spacer(Modifier.height(268.dp))
    Column(verticalArrangement=Arrangement.spacedBy(6.dp)){
     Eyebrow("VOM HARTPLATZ NACH GANZ OBEN")
     Text("GRÜNDERELF",style=MaterialTheme.typography.displaySmall,color=Chalk)
@@ -144,7 +113,7 @@ import java.util.Locale
    Action("Jetzt speichern",!state.busy){vm.saveAs(state.slot)}
   }}
   Section("Ziel auswählen"){Pick("Speicherplatz",slot,(1..5).toList(),{i->"Slot $i · ${slots.firstOrNull{it.slot==i}?.clubName?:"Leer"}"}){slot=it};if(state.world!=null)Action("Speichern unter Slot $slot",!state.busy){if(slots.any{it.slot==slot}&&slot!=state.slot)confirm="save" else vm.saveAs(slot)};Action("Datei in Slot $slot importieren",!state.busy,true){if(slots.any{it.slot==slot})confirm="import" else openImport()};state.world?.let{w->Action("Als .gruenderelf exportieren",!state.busy,true){export.launch("Gruenderelf-${w.calendar.season}-Spieltag-${w.calendar.matchday}.gruenderelf")}}}
-  Section("Speicherverhalten"){Text("Nach einem bestätigten Spieltag wird die gesamte Welt automatisch gespeichert. Aufstellung, Training und Ausbauten werden bei einer Änderung gesichert.",style=MaterialTheme.typography.bodyMedium);Text("Laufende Spiele werden etwa alle 15 Spielminuten und zusätzlich bei Entscheidungen, Unterbrechungen, Halbzeit und Abpfiff gesichert. Exportdateien vor dem Deinstallieren aufbewahren.",color=Muted,style=MaterialTheme.typography.bodySmall)};Action("Zurück",secondary=true,onClick=onBack)
+  Section("Speicherverhalten"){Text("Nach einem bestätigten Spieltag wird die gesamte Welt automatisch gespeichert. Aufstellung, Training und Ausbauten werden bei einer Änderung gesichert.",style=MaterialTheme.typography.bodyMedium);Text("Laufende Spiele werden etwa alle 15 Minuten und bei Halbzeit, Unterbrechungen und Abpfiff gesichert. Exportdateien vor dem Deinstallieren aufbewahren.",color=Muted,style=MaterialTheme.typography.bodySmall)};Action("Zurück",secondary=true,onClick=onBack)
  }
  confirm?.let{action->Confirm("Slot $slot überschreiben?","Die bisherige Karriere in diesem Slot wird ersetzt. Beim Dateiimport nur, wenn die Datei gültig ist.",{confirm=null}){confirm=null;if(action=="save")vm.saveAs(slot)else openImport()}}
 }

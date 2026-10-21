@@ -48,7 +48,7 @@ private fun suitabilityColor(p: Player?,target: Position)=when{p==null->Muted;p.
    Column(Modifier.offset((maxWidth-64.dp)*x,(maxHeight-72.dp)*y).width(64.dp).heightIn(min=62.dp).clip(RoundedCornerShape(12.dp)).clickable{onSlot(i)}.semantics{contentDescription="${target.label}: ${p?.name?:"Unbesetzt"}. Antippen zum Aufstellen."},horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(2.dp)){
     Box(Modifier.size(36.dp).background(Brush.verticalGradient(listOf(if(self)GrassBright else color,(if(self)Grass else color).copy(alpha=.78f))),CircleShape).border(2.dp,if(self)Chalk else Ink.copy(alpha=.35f),CircleShape),contentAlignment=Alignment.Center){Text(p?.number?.toString()?:"–",color=Ink,fontWeight=FontWeight.Bold)}
     Box(Modifier.background(Ink.copy(alpha=.62f),RoundedCornerShape(6.dp)).padding(horizontal=5.dp,vertical=1.dp)){Text(p?.shortName?.take(10)?:"Offen",fontSize=10.sp,maxLines=1,color=Chalk)}
-    Text("${target.name} ${p?.ratingAt(target)?:"–"}",fontSize=10.sp,fontWeight=FontWeight.Bold,color=color,maxLines=1)
+    Text("${suitabilitySymbol(p,target)} ${target.name} ${p?.ratingAt(target)?:"–"}",fontSize=10.sp,fontWeight=FontWeight.Bold,color=color,maxLines=1)
    }
   }
  }
@@ -79,8 +79,8 @@ private fun suitabilityColor(p: Player?,target: Position)=when{p==null->Muted;p.
   Section("Aufstellung"){
    Pick("Formation",c.tactics.formation,Formations.all.keys.toList()){v->vm.action{require(it.live==null){"Formation nach dem Spiel ändern."};it.club().tactics.formation=v;WorldFactory.autoLineup(it)}}
    Pitch(w){slot=it}
-   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){LegendDot(Grass,"Hauptposition");LegendDot(Blue,"Nebenposition")}
-   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){LegendDot(Gold,"Spielbar");LegendDot(Clay,"Unpassend")}
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){LegendDot(Grass,"✓ Hauptposition");LegendDot(Blue,"≈ Nebenposition")}
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){LegendDot(Gold,"~ Spielbar");LegendDot(Clay,"✕ Unpassend")}
    Action("Beste Elf nach Position & Fitness",w.live==null){vm.action{WorldFactory.autoLineup(it)}}
    Text("Jeder Platz zeigt die Stärke des Spielers genau auf dieser Position. Antippen zum Umstellen.",color=Faint,style=MaterialTheme.typography.bodySmall)
   }
@@ -104,7 +104,7 @@ private fun suitabilityColor(p: Player?,target: Position)=when{p==null->Muted;p.
    Text("Lege fest, wer Verantwortung übernimmt und wen die Mannschaft im Angriff gezielt sucht.",color=Muted,style=MaterialTheme.typography.bodySmall)
    Pick("Kapitän",c.tactics.captainId,roleIds,{roleName(it)}){v->vm.action{require(it.live==null){"Rollen erst nach dem Spiel ändern."};it.club().tactics.captainId=v}}
    Pick("Zielspieler",c.tactics.targetPlayerId,targetIds,{roleName(it,"Kein fester Zielspieler")}){v->vm.action{require(it.live==null){"Rollen erst nach dem Spiel ändern."};it.club().tactics.targetPlayerId=v}}
-   Text("Der Zielspieler wird im letzten Drittel häufiger gesucht – bei Steilpässen, Flanken, zweiten Bällen und Abschlüssen. Das erhöht seine Abschlussbeteiligung, garantiert aber keine Tore.",color=Muted,style=MaterialTheme.typography.bodySmall)
+   Text("Wird im letzten Drittel häufiger gesucht – mehr Abschlüsse, aber keine Torgarantie.",color=Muted,style=MaterialTheme.typography.bodySmall)
    HairlineDivider()
    Pick("Elfmeterschütze",c.tactics.penaltyTakerId,roleIds,{roleName(it)}){v->vm.action{require(it.live==null){"Standards erst nach dem Spiel ändern."};it.club().tactics.penaltyTakerId=v}}
    Pick("Freistöße",c.tactics.freeKickTakerId,roleIds,{roleName(it)}){v->vm.action{require(it.live==null){"Standards erst nach dem Spiel ändern."};it.club().tactics.freeKickTakerId=v}}

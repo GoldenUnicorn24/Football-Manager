@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -186,8 +187,9 @@ fun BmwDeveloperShell(state:GameState,vm:GameViewModel,slots:List<SaveSummary>,m
   Triple("bmw_more","Mehr",Icons.Default.MoreVert)
  )
  Scaffold(containerColor=Ink,snackbarHost={SnackbarHost(snack)},bottomBar={
-  Surface(color=Color(0xFF090C10),shadowElevation=12.dp,tonalElevation=0.dp){
-   NavigationBar(containerColor=Color.Transparent,tonalElevation=0.dp){
+  Column{
+   HorizontalDivider(color=Line,thickness=1.dp)
+   NavigationBar(containerColor=Panel,tonalElevation=0.dp){
     tabs.forEach{(dest,label,icon)->
      val selected=route==dest||(dest=="bmw_more"&&route !in tabs.map{it.first})
      NavigationBarItem(
@@ -196,9 +198,9 @@ fun BmwDeveloperShell(state:GameState,vm:GameViewModel,slots:List<SaveSummary>,m
       icon={Icon(icon,label)},
       label={Text(label,fontWeight=if(selected)FontWeight.Bold else FontWeight.Medium)},
       colors=NavigationBarItemDefaults.colors(
-       selectedIconColor=Color.White,selectedTextColor=Color.White,
-       indicatorColor=Color(0xFF14365D),
-       unselectedIconColor=Color(0xFF8995A3),unselectedTextColor=Color(0xFFA8B1BC)
+       selectedIconColor=GrassBright,selectedTextColor=Chalk,
+       indicatorColor=Grass.copy(alpha=.20f),
+       unselectedIconColor=Muted,unselectedTextColor=Muted
       )
      )
     }
@@ -222,6 +224,7 @@ fun BmwDeveloperShell(state:GameState,vm:GameViewModel,slots:List<SaveSummary>,m
     composable("transfers"){TransfersScreen(w,vm){nav.navigate("spieler/$it")}}
     composable("karriere"){CareerScreen(w,vm)}
     composable("einstellungen"){SettingsScreen(vm)}
+    composable("posteingang"){InboxScreen(w,vm)}
     composable("spieler/{id}"){back->ProfileScreen(w,back.arguments?.getString("id")?.toIntOrNull()?:w.user.playerId,vm){nav.popBackStack()}}
    }
    if(state.busy)LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
@@ -519,24 +522,25 @@ private fun BmwMoreScreen(w:World,vm:GameViewModel,onNavigate:(String)->Unit,onE
    }
   }
   Section("Intelligence & Performance"){
-   Action("Global Intelligence Rankings",secondary=true){onNavigate("bmw_rankings")}
-   Action("NEXUS PRIME",secondary=true){onNavigate("bmw_tech")}
-   Action("BMW Performance Campus",secondary=true){onNavigate("bmw_infrastructure")}
-   Action("Human Performance & Longevity",secondary=true){onNavigate("bmw_medical")}
-   Action("Kaderdaten & Finanzen",secondary=true){onNavigate("bmw_roster")}
+   ListRow("Global Intelligence Rankings","Weltrangliste und Technologievergleich",Icons.Default.Star){onNavigate("bmw_rankings")}
+   ListRow("NEXUS PRIME","Performance Compute & Projekte",Icons.Default.Settings,Color(0xFF55B8FF)){onNavigate("bmw_tech")}
+   ListRow("BMW Performance Campus","Infrastruktur im Vergleich",Icons.Default.Place){onNavigate("bmw_infrastructure")}
+   ListRow("Human Performance & Longevity","Medizin und biologisches Alter",Icons.Default.Favorite,Color(0xFF70D79B)){onNavigate("bmw_medical")}
+   ListRow("Kaderdaten & Finanzen","Marktwerte, Potenzial, Alter",Icons.Default.Info){onNavigate("bmw_roster")}
   }
   Section("Football Operations"){
-   Action("Training & Co-Trainer",secondary=true){onNavigate("training")}
-   Action("Transfers & Jugend",secondary=true){onNavigate("transfers")}
-   Action("Liga & Wettbewerbe",secondary=true){onNavigate("liga")}
-   Action("Verein & Finanzen",secondary=true){onNavigate("verein")}
-   Action("Karriere",secondary=true){onNavigate("karriere")}
+   ListRow("Posteingang",unreadNews(w).let{if(it>0)"$it ungelesene Meldungen" else "Alle Meldungen gelesen"},Icons.Default.Email,BmwMRed,unreadNews(w)){onNavigate("posteingang")}
+   ListRow("Training & Co-Trainer",null,Icons.Default.Build){onNavigate("training")}
+   ListRow("Transfers & Jugend",null,Icons.Default.ShoppingCart){onNavigate("transfers")}
+   ListRow("Liga & Wettbewerbe",null,Icons.AutoMirrored.Filled.List){onNavigate("liga")}
+   ListRow("Verein & Finanzen",null,Icons.Default.Home){onNavigate("verein")}
+   ListRow("Karriere",null,Icons.Default.Person){onNavigate("karriere")}
   }
   Section("Developer"){
-   Action("BMW Developer-Spielstand sichern",secondary=true){vm.saveAs(BMW_DEVELOPER_SAVE_SLOT)}
-   Action("Einstellungen",secondary=true){onNavigate("einstellungen")}
-   Action("BMW FC Experience verlassen",secondary=true,onClick=onExit)
+   ListRow("Developer-Spielstand sichern",null,Icons.Default.Lock,Muted){vm.saveAs(BMW_DEVELOPER_SAVE_SLOT)}
+   ListRow("Einstellungen",null,Icons.Default.Settings,Muted){onNavigate("einstellungen")}
   }
+  Action("BMW FC Experience verlassen",secondary=true,onClick=onExit)
  }
 }
 

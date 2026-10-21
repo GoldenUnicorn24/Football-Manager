@@ -64,12 +64,13 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
      composable("kader"){SquadScreen(w,vm){nav.navigate("spieler/$it")}}
      composable("spiel"){MatchScreen(state,vm,matchSpeed)}
      composable("liga"){LeagueScreen(w)}
-     composable("mehr"){MoreScreen(reportCount,{nav.navigate(it)},{exitConfirm=true})}
+     composable("mehr"){MoreScreen(reportCount,unreadNews(w),{nav.navigate(it)},{exitConfirm=true})}
      composable("verein"){ClubScreen(w,vm){nav.navigate("speichern")}}
      composable("training"){TrainingScreen(w,vm)}
      composable("transfers"){TransfersScreen(w,vm){nav.navigate("spieler/$it")}}
      composable("karriere"){CareerScreen(w,vm)}
      composable("whatsnew"){WhatsNewScreen()}
+     composable("posteingang"){InboxScreen(w,vm)}
      composable("hilfe"){HelpScreen(w,vm)}
      composable("editor"){EditorScreen(w,vm)}
      composable("einstellungen"){SettingsScreen(vm)}
