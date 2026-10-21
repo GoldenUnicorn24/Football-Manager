@@ -1,5 +1,14 @@
 package de.gruenderelf.app.ui
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -10,10 +19,23 @@ import de.gruenderelf.app.GameViewModel
 import de.gruenderelf.engine.*
 
 @Composable fun MoreScreen(newScoutReports:Int,onNavigate: (String)->Unit,onMenu: ()->Unit){Page("Hinter der Bande","VEREIN & VERANTWORTUNG"){
- val entries=listOf("verein" to "Verein, Finanzen & Partner","training" to "Training & Co-Trainer","transfers" to if(newScoutReports>0)"Transfers & Jugend · $newScoutReports neu" else "Transfers & Jugend","karriere" to "Deine Karriere","hilfe" to "Hilfe & Tutorial","editor" to "Editor","einstellungen" to "Einstellungen","speichern" to "Speicherstände")
- entries.forEach{(route,label)->Action(label,secondary=true){onNavigate(route)}}
- Section("Gründerelf · 0.5.18"){Text("Offline. Ohne Werbung. Ohne Käufe.",color=Grass);Text("Neu: Ein einmaliges Versions-Changelog erklärt beim ersten Öffnen die wichtigsten Änderungen seit Einführung des Tutorials.",color=Muted);Text("Hilfe & Tutorial wurde vollständig auf U19/U23, Potenzialtraining, Transfers, Benachrichtigungen, Preisgelder und die aktuelle Live-Simulation angepasst.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+ Section("Verein"){
+  ListRow("Verein, Finanzen & Partner","Stadion, Ausbauten, Sponsoren",Icons.Filled.Place){onNavigate("verein")}
+  ListRow("Training & Co-Trainer","Wochenplan, Intensität, Automatik",Icons.Filled.Build){onNavigate("training")}
+  ListRow("Transfers & Jugend",if(newScoutReports>0)"$newScoutReports neue Scoutberichte" else "Scouting, Verhandlungen, U19 & U23",Icons.Filled.ShoppingCart,Blue,newScoutReports){onNavigate("transfers")}
+  ListRow("Deine Karriere","Saisonziele, Rekorde, Vereinsgeschichte",Icons.Filled.Star,Gold){onNavigate("karriere")}
+ }
+ Section("App"){
+  ListRow("Speicherstände","Speichern, importieren, exportieren",Icons.Filled.Lock,Muted){onNavigate("speichern")}
+  ListRow("Einstellungen","Match-Sounds",Icons.Filled.Settings,Muted){onNavigate("einstellungen")}
+  ListRow("Editor","Ligen, Vereine und Spieler umbenennen",Icons.Filled.Edit,Muted){onNavigate("editor")}
+  ListRow("Hilfe & Tutorial","Manager-Handbuch",Icons.Filled.Info,Muted){onNavigate("hilfe")}
+ }
  Action("Speichern & zum Startbildschirm",secondary=true,onClick=onMenu)
+ Column(Modifier.fillMaxWidth(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(2.dp)){
+  Text("GRÜNDERELF · 0.5.18",color=Faint,style=MaterialTheme.typography.labelSmall)
+  Text("Offline. Ohne Werbung. Ohne Käufe.",color=Faint,style=MaterialTheme.typography.bodySmall)
+ }
 }}
 
 @Composable fun TrainingScreen(w: World,vm: GameViewModel){
@@ -71,7 +93,7 @@ import de.gruenderelf.engine.*
 fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschauernachfrage. Besuch bleibt durch Kapazität und Wetter begrenzt.";Facility.ARTIFICIAL->"Ersetzt Hartplatz durch Kunstrasen. Platzqualität steigt auf 85.";Facility.PITCH->"Platzqualität +15. Bessere Kurzpässe und weniger Verletzungsrisiko.";Facility.TRAINING->"Trainingsqualität +15. Attributentwicklung wird schneller.";Facility.GYM->"Kraftraum +15. Erhöht die Trainingswirkung.";Facility.MEDICINE->"Medizin +15. Weniger Verletzungen, bessere Erholung; ab 60 schnellere Heilung.";Facility.CABIN->"Kabine +15. Mehr Fitnessregeneration nach jedem Spieltag.";Facility.STAND->"Tribüne +15 und bis zu 100 zusätzliche Sitzplätze. Mehr Zuschauernachfrage.";Facility.CAPACITY->"Mehr Plätze für zahlende Zuschauer. Erweiterung skaliert mit der Liga.";Facility.CLUBHOUSE->"Vereinsheim +15, zusätzlich 15 Mitglieder und +5 Kader-Moral.";Facility.YOUTH->"Jugendzentrum +15. Stärkere Nachwuchsspieler; ab 28 Training mit den Herren."}
 @Composable fun ClubScreen(w: World,vm: GameViewModel,onSaves: ()->Unit){val c=w.club();val s=c.stadium;var confirm by remember{mutableStateOf<Facility?>(null)}
  Page(c.name,"VEREIN · WIRTSCHAFT · PARTNER"){
-  Section{Row(horizontalArrangement=Arrangement.spacedBy(18.dp),verticalAlignment=Alignment.CenterVertically){Crest(c.logo,c.primary,c.secondary,Modifier.size(80.dp));Column{Text(if(w.privateTopClubMode&&w.leagues.size==5)"${c.city} · ${WorldFactory.leagueName(w,c.tier)}" else "${c.city} · gegründet ${c.founded}",color=Muted);Text("${c.members} Mitglieder",style=MaterialTheme.typography.titleLarge);Text(c.philosophy,color=Grass)}};Text("${c.playPhilosophy} · ${c.youthPhilosophy}",color=Muted);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Shirt(c.kits.home,Modifier.size(76.dp));Shirt(c.kits.away,Modifier.size(76.dp));Shirt(c.kits.keeper,Modifier.size(76.dp))};Metric("Vereinskasse",euros(c.budget));Text("Letzte Woche: ${euros(c.lastIncome.toLong())} Zuflüsse · ${euros(c.lastCosts.toLong())} Kosten",color=Muted);Text("Gehaltssumme: ${euros(w.squad().sumOf{it.wage}.toLong())} / Woche.",color=Muted);Action("Speichern",secondary=true){vm.saveAs(vm.state.value.slot)};Action("Speichern unter / Export",secondary=true,onClick=onSaves)}
+  Section{Row(horizontalArrangement=Arrangement.spacedBy(18.dp),verticalAlignment=Alignment.CenterVertically){Crest(c.logo,c.primary,c.secondary,Modifier.size(80.dp));Column{Text(if(w.privateTopClubMode&&w.leagues.size==5)"${c.city} · ${WorldFactory.leagueName(w,c.tier)}" else "${c.city} · gegründet ${c.founded}",color=Muted);Text("${c.members} Mitglieder",style=MaterialTheme.typography.titleLarge);Text(c.philosophy,color=Grass)}};Text("${c.playPhilosophy} · ${c.youthPhilosophy}",color=Muted);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Shirt(c.kits.home,Modifier.size(76.dp));Shirt(c.kits.away,Modifier.size(76.dp));Shirt(c.kits.keeper,Modifier.size(76.dp))};StatTile("Vereinskasse",euros(c.budget),Modifier.fillMaxWidth(),caption="Letzte Woche: +${euros(c.lastIncome.toLong())} · −${euros(c.lastCosts.toLong())}",accent=if(c.budget<0)Clay else Chalk);Text("Gehaltssumme: ${euros(w.squad().sumOf{it.wage}.toLong())} / Woche",color=Muted,style=MaterialTheme.typography.bodySmall);Action("Speichern",secondary=true){vm.saveAs(vm.state.value.slot)};Action("Speichern unter / Export",secondary=true,onClick=onSaves)}
   Section("Wirtschaft & Partner"){
    Metric("Kommerzielle Reputation","${c.commercialReputation} / 100");Metric("Finanzvertrauen","${c.financialTrust} / 100")
    val active=c.sponsorDeals.filter{it.active};Text("Aktive Partner · ${active.size} / 4",style=MaterialTheme.typography.titleMedium);active.forEach{d->Text("${d.category.label}: ${d.name}",style=MaterialTheme.typography.titleMedium);Text("${euros(d.weekly.toLong())}/Woche · Siegbonus ${euros(d.performanceBonus.toLong())} · noch ${d.weeksLeft} Wochen",color=Muted);if(d.youthBoost>0)Text("Jugendnetzwerk +${d.youthBoost} beim Abschluss",color=Grass);if(d.membersBoost>0)Text("Regionalwirkung: +${d.membersBoost} Mitglieder beim Abschluss",color=Grass);HorizontalDivider()}

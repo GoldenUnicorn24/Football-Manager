@@ -1,6 +1,16 @@
 package de.gruenderelf.app.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -86,7 +96,7 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
  val leagueGames=(options.size-1)*2
  val titles=listOf("Verein auswählen","Dein Spieler","Karriere starten")
  Page(titles[page],"VEREIN ÜBERNEHMEN · ${page+1} / ${titles.size}"){
-  LinearProgressIndicator(progress={(page+1)/titles.size.toFloat()},modifier=Modifier.fillMaxWidth())
+  StepProgress(page,titles.size)
   when(page){
    0->{
     Section("Land, Liga und Verein"){
@@ -164,7 +174,7 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
  val capacityOptions=listOf(100,250,500,1000,2500,5000,10000,20000,35000,50000,75000,100000)
 
  Page(titles[page],"INDIVIDUELLER VEREIN · ${page+1} / ${titles.size}"){
-  LinearProgressIndicator(progress={(page+1)/titles.size.toFloat()},modifier=Modifier.fillMaxWidth())
+  StepProgress(page,titles.size)
   when(page){
    0->Section("Wo soll dein Verein starten?"){
     Pick("Land",country,countries,{it}){country=it}
@@ -228,6 +238,23 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
  if(confirm)Confirm("Slot $saveSlot überschreiben?","Der bisherige Spielstand in diesem Slot wird ersetzt.",{confirm=false}){confirm=false;vm.createCustomReal(System.currentTimeMillis(),leagueSlotClubKey,c,p,rosterPlayers,saveSlot,tutorial)}
 }
 
+@Composable private fun ModeCard(icon: ImageVector,title: String,text: String,accent: Color,enabled: Boolean,onClick: ()->Unit){
+ Surface(onClick=onClick,enabled=enabled,color=Panel,shape=RoundedCornerShape(22.dp),border=BorderStroke(1.dp,accent.copy(alpha=.35f)),modifier=Modifier.fillMaxWidth()){
+  Row(Modifier.background(Brush.horizontalGradient(listOf(accent.copy(alpha=.12f),Color.Transparent))).padding(18.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)){
+   Box(Modifier.size(52.dp).background(accent.copy(alpha=.16f),RoundedCornerShape(16.dp)),contentAlignment=Alignment.Center){Icon(icon,contentDescription=null,tint=accent,modifier=Modifier.size(26.dp))}
+   Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){Text(title,style=MaterialTheme.typography.titleLarge,color=Chalk);Text(text,color=Muted,style=MaterialTheme.typography.bodySmall)}
+   Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,contentDescription=null,tint=accent)
+  }
+ }
+}
+
+@Composable private fun LeagueLine(country: String,leagues: String){
+ Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+  Text(country,color=Chalk,style=MaterialTheme.typography.titleSmall)
+  Text(leagues,color=Muted,style=MaterialTheme.typography.bodySmall)
+ }
+}
+
 @Composable fun CreationScreen(vm: GameViewModel,slots: List<SaveSummary>,busy: Boolean,onBack: ()->Unit){
  var mode by rememberSaveable{mutableStateOf("choose")}
  when(mode){
@@ -235,13 +262,15 @@ private fun sandboxTemplate(index: Int): PlayerDraft {
   "custom"->{CustomClubCreationScreen(vm,slots,busy){mode="choose"};return}
  }
  Page("Neue Karriere","SPIELMODUS"){
-  Section("Wie möchtest du starten?"){
-   Text("Wähle zwischen einem bestehenden Verein oder einem vollständig eigenen Klub in einer frei gewählten integrierten Liga.",color=Muted)
-   Action("Verein übernehmen",!busy){mode="takeover"}
-   Action("Individuellen Verein erstellen",!busy,secondary=true){mode="custom"}
-  }
+  Text("Wähle zwischen einem bestehenden Verein oder einem vollständig eigenen Klub in einer frei gewählten integrierten Liga.",color=Muted,style=MaterialTheme.typography.bodyLarge)
+  ModeCard(Icons.Filled.Star,"Verein übernehmen","Starte bei einem echten Verein aus Deutschland, England, Spanien, Italien oder Frankreich und bring dich selbst als Spielertrainer in den Kader.",Grass,!busy){mode="takeover"}
+  ModeCard(Icons.Filled.Create,"Individuellen Verein erstellen","Name, Wappen, Trikots, Stadion und der komplette 20er-Kader – alles nach deinen Vorstellungen.",Gold,!busy){mode="custom"}
   Section("Enthaltene Ligen"){
-   Text("Deutschland: Bundesliga bis Oberliga Hamburg. Zusätzlich: Premier League, La Liga, Serie A und Ligue 1.",color=Muted)
+   LeagueLine("Deutschland","Bundesliga bis Oberliga Hamburg")
+   LeagueLine("England","Premier League")
+   LeagueLine("Spanien","La Liga")
+   LeagueLine("Italien","Serie A")
+   LeagueLine("Frankreich","Ligue 1")
   }
   Action("Zurück zum Start",!busy,secondary=true){onBack()}
  }
