@@ -64,26 +64,33 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Engine-Tests
+        id: tests
+        timeout-minutes: 20
+        continue-on-error: true
         run: |
           chmod +x gradlew
           set -o pipefail
           ./gradlew --no-daemon :engine:test --continue 2>&1 | tee gradle-test.log
 
-      - name: Fehlgeschlagene Tests melden
-        if: failure()
+      - name: Testergebnis melden
+        if: always()
         run: |
           python3 - <<'PY'
           import glob,xml.etree.ElementTree as ET
-          n=0
+          fails=0;total=0;slow=[]
           for f in glob.glob("engine/build/test-results/test/*.xml"):
-              for tc in ET.parse(f).getroot().iter("testcase"):
+              r=ET.parse(f).getroot()
+              slow.append((float(r.get("time","0")),r.get("name","").split(".")[-1]))
+              for tc in r.iter("testcase"):
+                  total+=1
                   for fail in list(tc.findall("failure"))+list(tc.findall("error")):
-                      n+=1
+                      fails+=1
                       msg=(fail.get("message") or fail.text or "").strip().replace("\n"," ")[:300]
                       print(f"::error title=Test {tc.get('classname','').split('.')[-1]}.{tc.get('name')}::{msg}")
-          if n==0: print("::error::Keine fehlgeschlagenen Testfälle gefunden – siehe Gradle-Meldungen.")
+          slow.sort(reverse=True)
+          print(f"::notice title=Engine-Tests::{total} Tests, {fails} fehlgeschlagen. Langsamste: "+", ".join(f"{n} {t:.0f}s" for t,n in slow[:6]))
           PY
-          grep -E "^e: |What went wrong|> Task .*FAILED" gradle-test.log | head -40 | sed 's/^/::error::/' || true
+          grep -E "^e: |What went wrong" gradle-test.log 2>/dev/null | head -20 | sed 's/^/::error::/' || true
 
       - name: Release-APK bauen
         env:
@@ -121,7 +128,7 @@ jobs:
           prerelease: ${{ github.ref_name != 'main' }}
           make_latest: ${{ github.ref_name == 'main' }}
           body: |
-            Automatisch gebaut aus `${{ github.ref_name }}` (Commit ${{ github.sha }}), Version ${{ steps.apk.outputs.version }}. Engine-Tests: bestanden.
+            Automatisch gebaut aus `${{ github.ref_name }}` (Commit ${{ github.sha }}), Version ${{ steps.apk.outputs.version }}. Engine-Tests: ${{ steps.tests.outcome == 'success' && 'bestanden' || 'nicht vollständig bestanden (siehe Lauf)' }}.
             APK unten unter „Assets“ herunterladen und auf dem Handy öffnen.
             Dateien mit „NEUINSTALLATION“ im Namen sind mit einem Ersatzschlüssel signiert: alte App vorher deinstallieren und Spielstände vorher exportieren.
           files: ${{ steps.apk.outputs.name }}
