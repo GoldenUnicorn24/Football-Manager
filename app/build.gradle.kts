@@ -1,3 +1,8 @@
+import java.security.SecureRandom
+import java.util.HexFormat
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
+
 plugins {
  id("com.android.application")
  kotlin("plugin.serialization")
@@ -12,10 +17,10 @@ val hasStableUpdateSigning=stableUpdatePassword!=null&&stableUpdateKeystore.exis
 // Developer-Code (BMW-FC-Modus): kommt aus einem GitHub-Secret bzw. ~/.gradle/gradle.properties.
 // In die App gelangt nur ein gesalzener PBKDF2-Hash, nie der Klartext.
 val developerCode=(providers.gradleProperty("gruenderelfDevCode").orNull?:System.getenv("GRUENDERELF_DEV_CODE"))?.trim()?.takeIf{it.isNotEmpty()}
-val developerSalt=java.util.HexFormat.of().formatHex(java.security.SecureRandom().generateSeed(16))
+val developerSalt=HexFormat.of().formatHex(ByteArray(16).also{SecureRandom().nextBytes(it)})
 val developerHash=developerCode?.let{code->
- val spec=javax.crypto.spec.PBEKeySpec(code.toCharArray(),java.util.HexFormat.of().parseHex(developerSalt),120_000,256)
- java.util.HexFormat.of().formatHex(javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded)
+ val spec=PBEKeySpec(code.toCharArray(),HexFormat.of().parseHex(developerSalt),120_000,256)
+ HexFormat.of().formatHex(SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded)
 }?:""
 
 android {
