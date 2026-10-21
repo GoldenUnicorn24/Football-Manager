@@ -34,20 +34,20 @@ import kotlin.math.roundToInt
 @Composable
 fun DeveloperAccessDialog(vm:GameViewModel,configured:Boolean,onDismiss:()->Unit){
  var code by rememberSaveable{mutableStateOf("")}
- var confirm by rememberSaveable{mutableStateOf("")}
- val valid=code.length>=6&&(!configured&&code==confirm||configured)
  AlertDialog(
   onDismissRequest=onDismiss,
-  title={Text(if(configured)"Developer Mode" else "Developer-Code festlegen")},
+  title={Text("Developer Mode",style=MaterialTheme.typography.headlineSmall)},
   text={
    Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
-    Text(if(configured)"Developer-Code eingeben. Der BMW-FC-Modus liegt in einem unsichtbaren separaten Speicherstand." else "Beim ersten Öffnen legst du den lokalen Developer-Code selbst fest. Er wird nur als Hash gespeichert.",color=Muted)
-    OutlinedTextField(code,{code=it},singleLine=true,label={Text("Developer-Code")},visualTransformation=PasswordVisualTransformation())
-    if(!configured)OutlinedTextField(confirm,{confirm=it},singleLine=true,label={Text("Code wiederholen")},visualTransformation=PasswordVisualTransformation())
+    if(configured){
+     Text("Developer-Code eingeben. Der BMW-FC-Modus liegt in einem eigenen, unsichtbaren Speicherstand.",color=Muted)
+     Field("Developer-Code",code,password=true){code=it}
+    }else Text("In diesem Build ist kein Developer-Code hinterlegt. Der BMW-FC-Modus ist deshalb nicht verfügbar.",color=Muted)
    }
   },
-  dismissButton={TextButton(onClick=onDismiss){Text("Abbrechen")}},
-  confirmButton={Button(onClick={vm.openDeveloperMode(code,!configured);onDismiss()},enabled=valid){Text(if(configured)"BMW FC laden" else "Code setzen & laden")}}
+  dismissButton={TextButton(onClick=onDismiss){Text("Abbrechen",color=Muted)}},
+  confirmButton={if(configured)Button(onClick={vm.openDeveloperMode(code,false);onDismiss()},enabled=code.length>=4,shape=RoundedCornerShape(ControlRadius),colors=ButtonDefaults.buttonColors(containerColor=Grass,contentColor=OnAccent)){Text("BMW FC laden",fontWeight=FontWeight.Bold)}},
+  shape=RoundedCornerShape(26.dp),containerColor=PanelHigh
  )
 }
 

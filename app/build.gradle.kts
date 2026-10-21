@@ -9,14 +9,25 @@ val stableUpdatePassword = providers.gradleProperty("gruenderelfKeystorePassword
 val stableUpdateKeystore=file("gruenderelf-update.jks")
 val hasStableUpdateSigning=stableUpdatePassword!=null&&stableUpdateKeystore.exists()
 
+// Developer-Code (BMW-FC-Modus): kommt aus einem GitHub-Secret bzw. ~/.gradle/gradle.properties.
+// In die App gelangt nur ein gesalzener PBKDF2-Hash, nie der Klartext.
+val developerCode=(providers.gradleProperty("gruenderelfDevCode").orNull?:System.getenv("GRUENDERELF_DEV_CODE"))?.trim()?.takeIf{it.isNotEmpty()}
+val developerSalt=java.util.HexFormat.of().formatHex(java.security.SecureRandom().generateSeed(16))
+val developerHash=developerCode?.let{code->
+ val spec=javax.crypto.spec.PBEKeySpec(code.toCharArray(),java.util.HexFormat.of().parseHex(developerSalt),120_000,256)
+ java.util.HexFormat.of().formatHex(javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded)
+}?:""
+
 android {
  namespace="de.gruenderelf.app"
  compileSdk = 36
  buildToolsVersion="36.0.0"
  defaultConfig {
   applicationId="de.gruenderelf.app"; minSdk=26; targetSdk=36
-  versionCode=72; versionName="0.5.23-bmw17-redesign"
+  versionCode=73; versionName="0.5.24"
   testInstrumentationRunner="androidx.test.runner.AndroidJUnitRunner"
+  buildConfigField("String","DEV_CODE_HASH","\"$developerHash\"")
+  buildConfigField("String","DEV_CODE_SALT","\"$developerSalt\"")
  }
  signingConfigs {
   if(hasStableUpdateSigning)create("stableUpdate") {
@@ -38,7 +49,7 @@ android {
   }
  }
  compileOptions { sourceCompatibility=JavaVersion.VERSION_17;targetCompatibility=JavaVersion.VERSION_17 }
- buildFeatures { compose=true }
+ buildFeatures { compose=true; buildConfig=true }
  packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}";jniLibs.useLegacyPackaging=false }
  testOptions { unitTests.isIncludeAndroidResources=true }
 }

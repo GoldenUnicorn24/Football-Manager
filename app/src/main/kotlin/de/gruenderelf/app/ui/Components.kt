@@ -349,8 +349,9 @@ fun ratingColor(fraction: Float)=when{fraction<.4f->Clay;fraction<.65f->Gold;els
  }
 }
 
-@Composable fun Field(label: String,value: String,onChange: (String)->Unit){
- OutlinedTextField(value,onChange,label={Text(label)},singleLine=true,modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(12.dp),
+@Composable fun Field(label: String,value: String,password: Boolean=false,onChange: (String)->Unit){
+ OutlinedTextField(value,onChange,label={Text(label)},singleLine=true,modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(if(UiBrand.bmwMode)8.dp else 12.dp),
+  visualTransformation=if(password)androidx.compose.ui.text.input.PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
   colors=OutlinedTextFieldDefaults.colors(
    focusedBorderColor=Grass,unfocusedBorderColor=Line,focusedContainerColor=Inset,unfocusedContainerColor=Inset,
    focusedLabelColor=Grass,unfocusedLabelColor=Muted,cursorColor=Grass,focusedTextColor=Chalk,unfocusedTextColor=Chalk

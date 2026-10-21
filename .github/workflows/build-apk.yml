@@ -1,17 +1,17 @@
 name: APK bauen
 
-# Baut bei jedem Push eine signierte Release-APK.
-# Download: Reiter "Releases" (Vorabversion "Neuester Build · <Branch>")
-# oder unter Actions → Lauf → Artifacts.
+# Testet die Spiel-Engine und baut bei jedem Push eine signierte Release-APK.
+# Download: Reiter „Releases“ → „Gründerelf · <Branch>“ → Assets.
 #
-# Ohne Secrets wird mit einem Ersatzschlüssel signiert (nur Neuinstallation möglich).
-# Für echte Updates einmalig in GitHub hinterlegen (Settings → Secrets and variables → Actions):
-#   GRUENDERELF_KEYSTORE_BASE64    – die Datei gruenderelf-update.jks als Base64
+# Einmalig in GitHub hinterlegen (Settings → Secrets and variables → Actions):
+#   GRUENDERELF_KEYSTORE_BASE64    – Inhalt von gruenderelf-update.jks.base64.txt
 #   GRUENDERELF_KEYSTORE_PASSWORD  – das Keystore-Passwort
+#   GRUENDERELF_DEV_CODE           – Developer-Code für den BMW-FC-Modus (in der App landet nur ein Hash)
+# Ohne Keystore-Secrets wird mit einem Ersatzschlüssel signiert (dann nur Neuinstallation möglich).
 
 on:
   push:
-    branches: [main, "redesign/**"]
+    branches: [main, "redesign/**", "feature/**"]
   workflow_dispatch:
 
 permissions:
@@ -24,7 +24,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
 
@@ -35,17 +35,15 @@ jobs:
           PW: ${{ secrets.GRUENDERELF_KEYSTORE_PASSWORD }}
         run: |
           if [ -n "$KS" ] && [ -n "$PW" ]; then
-            echo "$KS" | base64 -d > app/gruenderelf-update.jks
+            echo "$KS" | tr -d ' \r\n' | base64 -d > app/gruenderelf-update.jks
             echo "GRUENDERELF_KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
             echo "suffix=" >> "$GITHUB_OUTPUT"
-            echo "update=true" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::Keine Keystore-Secrets hinterlegt – APK wird mit Ersatzschlüssel signiert und lässt sich NICHT als Update installieren."
             PW=gruenderelf-ci-fallback
             keytool -genkeypair -keystore app/gruenderelf-update.jks -alias gruenderelf -keyalg RSA -keysize 2048 -validity 10000 -storepass "$PW" -keypass "$PW" -dname "CN=Gruenderelf CI" -noprompt
             echo "GRUENDERELF_KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
             echo "suffix=-NEUINSTALLATION" >> "$GITHUB_OUTPUT"
-            echo "update=false" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/setup-java@v5
@@ -60,24 +58,28 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
           echo "sdk.dir=$SDK" > local.properties
           SM=$(ls "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | sort -V | tail -1)
-          echo "SDK: $SDK · sdkmanager: $SM"
           yes | "$SM" --licenses > /dev/null || true
           "$SM" --install "platforms;android-36" "build-tools;36.0.0" "platform-tools" > /dev/null
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: APK bauen
+      - name: Engine-Tests
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon :app:assembleDebug --stacktrace
+          ./gradlew --no-daemon :engine:test --stacktrace
+
+      - name: Release-APK bauen
+        env:
+          GRUENDERELF_DEV_CODE: ${{ secrets.GRUENDERELF_DEV_CODE }}
+        run: ./gradlew --no-daemon :app:assembleRelease --stacktrace
 
       - name: APK benennen
         id: apk
         run: |
           VERSION=$(grep -oP 'versionName="\K[^"]+' app/build.gradle.kts)
           BRANCH=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
-          NAME="Gruenderelf-${VERSION}-${BRANCH}-build${GITHUB_RUN_NUMBER}${{ steps.ks.outputs.suffix }}.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "$NAME"
+          NAME="Gruenderelf-${VERSION}-build${GITHUB_RUN_NUMBER}${{ steps.ks.outputs.suffix }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$NAME"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -91,10 +93,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ steps.apk.outputs.branch }}
-          name: Neuester Build · ${{ github.ref_name }}
-          prerelease: true
+          name: Gründerelf · ${{ github.ref_name }}
+          prerelease: ${{ github.ref_name != 'main' }}
+          make_latest: ${{ github.ref_name == 'main' }}
           body: |
-            Automatisch gebaut aus `${{ github.ref_name }}` (Commit ${{ github.sha }}), Version ${{ steps.apk.outputs.version }}.
+            Automatisch gebaut aus `${{ github.ref_name }}` (Commit ${{ github.sha }}), Version ${{ steps.apk.outputs.version }}. Engine-Tests: bestanden.
             APK unten unter „Assets“ herunterladen und auf dem Handy öffnen.
             Dateien mit „NEUINSTALLATION“ im Namen sind mit einem Ersatzschlüssel signiert: alte App vorher deinstallieren und Spielstände vorher exportieren.
           files: ${{ steps.apk.outputs.name }}

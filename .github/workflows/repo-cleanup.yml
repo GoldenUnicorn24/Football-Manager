@@ -1,0 +1,39 @@
+name: Repo aufräumen
+
+# Sichert jeden Branch außer main als Tag „archive/<branch>“ und löscht danach den Branch.
+# Es geht nichts verloren: jeder alte Stand bleibt über den Tag abrufbar
+# (z. B. git checkout archive/feature-bmw15-player-autonomy).
+# Läuft einmal, wenn diese Datei auf main ankommt, und danach nur noch von Hand.
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/repo-cleanup.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Branches archivieren und löschen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+          for ref in $(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin); do
+            [ "$ref" = "main" ] && continue
+            [ "$ref" = "HEAD" ] && continue
+            tag="archive/$(echo "$ref" | tr '/' '-')"
+            if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              git tag "$tag" "refs/remotes/origin/$ref"
+              git push origin "refs/tags/$tag"
+            fi
+            git push origin --delete "$ref" && echo "Archiviert: $ref → $tag"
+          done

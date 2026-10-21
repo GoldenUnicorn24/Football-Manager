@@ -121,7 +121,7 @@ import java.util.Locale
     Text("Offline · ohne Konto · ohne Werbung. Für einen Gerätewechsel kannst du Spielstände als Datei exportieren.",color=Faint,style=MaterialTheme.typography.bodySmall)
    }
    // Versionszeile: 7× antippen öffnet den Entwicklerzugang (BMW FC).
-   Text("GRÜNDERELF · 0.5.23",color=Faint,style=MaterialTheme.typography.labelSmall,modifier=Modifier.fillMaxWidth().clickable{
+   Text("GRÜNDERELF · ${de.gruenderelf.app.BuildConfig.VERSION_NAME}",color=Faint,style=MaterialTheme.typography.labelSmall,modifier=Modifier.fillMaxWidth().clickable{
     developerTaps++
     if(developerTaps>=7){developerTaps=0;developerGate=true}
    }.padding(vertical=8.dp))

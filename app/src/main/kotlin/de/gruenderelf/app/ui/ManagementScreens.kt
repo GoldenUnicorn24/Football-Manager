@@ -35,7 +35,7 @@ import de.gruenderelf.engine.*
  }
  Action("Speichern & zum Startbildschirm",secondary=true,onClick=onMenu)
  Column(Modifier.fillMaxWidth(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(2.dp)){
-  Text("GRÜNDERELF · 0.5.23",color=Faint,style=MaterialTheme.typography.labelSmall)
+  Text("GRÜNDERELF · ${de.gruenderelf.app.BuildConfig.VERSION_NAME}",color=Faint,style=MaterialTheme.typography.labelSmall)
   Text("Offline. Ohne Werbung. Ohne Käufe.",color=Faint,style=MaterialTheme.typography.bodySmall)
  }
 }}
@@ -296,7 +296,7 @@ private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}
  }
 }
 
-@Composable fun HelpScreen(w:World,vm:GameViewModel){Page("Hilfe & Tutorial","MANAGER-HANDBUCH · v0.5.22"){
+@Composable fun HelpScreen(w:World,vm:GameViewModel){Page("Hilfe & Tutorial","MANAGER-HANDBUCH · v${de.gruenderelf.app.BuildConfig.VERSION_NAME}"){
  Section("Geführtes Tutorial"){Text(if(w.user.tutorialEnabled&&!w.user.tutorialCompleted)"Das geführte Tutorial ist in dieser Karriere aktiv." else "Das Tutorial ist aktuell beendet oder deaktiviert.",color=Muted);Text("Es führt durch Startseite, Matchday-Kader, Training, Transfers/Jugend, Wettbewerbe und das Live-Spiel. Der Ablauf entspricht den aktuellen Systemen von v0.5.22.",color=Muted,style=MaterialTheme.typography.bodySmall);Action("Tutorial von vorn starten",secondary=true){vm.action("Tutorial neu gestartet."){it.user.tutorialEnabled=true;it.user.tutorialCompleted=false;it.user.tutorialStep=0}};if(w.user.tutorialEnabled&&!w.user.tutorialCompleted)Action("Tutorial beenden",secondary=true){vm.action{it.user.tutorialEnabled=false;it.user.tutorialCompleted=true}}}
  Section("Startelf & Ersatzbank"){Text("Die Startelf bleibt deine Auswahl, solange die Spieler verfügbar sind. Vor dem Spiel bestimmst du die sieben Ersatzspieler selbst. Das Spiel ergänzt nur fehlende oder ungültige Plätze, statt deine komplette Bank oder Elf neu zu sortieren.",color=Muted)}
  Section("Live-Aufstellung"){Text("Im Taktik-/Wechselbereich siehst du die komplette Formation. Spieler antippen wählt ihn für einen Wechsel aus; danach führt ein Tipp auf einen Ersatzspieler den Wechsel aus. Per Halten und Ziehen kannst du Positionsplätze tauschen. Nach einem Platzverweis bleibt eine sichtbare Lücke, die du taktisch verschieben kannst.",color=Muted)}
