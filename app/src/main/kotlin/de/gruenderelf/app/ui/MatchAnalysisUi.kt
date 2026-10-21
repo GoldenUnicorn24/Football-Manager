@@ -81,7 +81,7 @@ private fun DrawScope.drawFootballMarker(center:Offset,r:Float,kind:ShotMapKind,
 }
 
 @Composable private fun AnalysisPitch(content:DrawScope.()->Unit){
- Canvas(Modifier.fillMaxWidth().aspectRatio(105f/68f).background(Color(0xFF123B27),RoundedCornerShape(18.dp)).padding(6.dp)){
+ Canvas(Modifier.fillMaxWidth().aspectRatio(105f/68f).background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(PitchGreenLight,PitchGreen)),RoundedCornerShape(18.dp)).padding(6.dp)){
   drawPitch();content()
  }
 }

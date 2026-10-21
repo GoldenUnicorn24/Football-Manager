@@ -14,6 +14,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -40,20 +43,22 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
  Surface(Modifier.fillMaxSize(),color=Ink){
   if(state.world==null)Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)){
    when(startPage){"create"->CreationScreen(vm,slots,state.busy){startPage="start"};"import"->SavesScreen(vm,slots,state){startPage="start"};else->StartScreen(vm,slots,last,state.busy,{startPage="create"},{startPage="import"})}
-   BackHandler(startPage!="start"){startPage="start"};if(state.busy)LinearProgressIndicator(modifier=Modifier.fillMaxWidth().align(Alignment.TopCenter))
+   BackHandler(startPage!="start"){startPage="start"};if(state.busy)LinearProgressIndicator(modifier=Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter),color=Grass,trackColor=Color.Transparent)
   }else{
    val w=state.world!!;val nav=rememberNavController();val entry by nav.currentBackStackEntryAsState();val route=entry?.destination?.route?:"home"
-   val tabs=listOf(Triple("home","Start",Icons.Default.Home),Triple("kader","Kader",Icons.Default.Person),Triple("spiel","Spiel",Icons.Default.PlayArrow),Triple("liga","Liga",Icons.AutoMirrored.Filled.List),Triple("mehr","Mehr",Icons.Default.MoreVert))
+   val tabs=listOf(Triple("home","Start",Icons.Default.Home),Triple("kader","Kader",Icons.Default.Person),Triple("spiel","Spiel",Icons.Default.PlayArrow),Triple("liga","Liga",Icons.AutoMirrored.Filled.List),Triple("mehr","Mehr",Icons.Default.Menu))
    val squadBadge=NotificationSystem.squadBadge(w)
    val reportCount=NotificationSystem.moreBadge(w)
    LaunchedEffect(route,squadBadge,reportCount,w.calendar.absoluteWeek,w.calendar.season){
     if(route=="kader"&&squadBadge>0)vm.action{NotificationSystem.acknowledgeSquad(it)}
     if(route=="transfers"&&reportCount>0)vm.action{NotificationSystem.acknowledgeScoutReports(it)}
    }
-   Scaffold(containerColor=Ink,snackbarHost={SnackbarHost(snack)},bottomBar={NavigationBar(containerColor=Ink,tonalElevation=0.dp){tabs.forEach{(dest,label,icon)->
+   Scaffold(containerColor=Ink,snackbarHost={SnackbarHost(snack){data->Snackbar(data,shape=RoundedCornerShape(14.dp),containerColor=PanelHigher,contentColor=Chalk,actionColor=Grass)}},bottomBar={Column{HorizontalDivider(color=Line,thickness=1.dp);NavigationBar(containerColor=Panel,tonalElevation=0.dp){tabs.forEach{(dest,label,icon)->
     val badge=when(dest){"kader"->squadBadge;"mehr"->reportCount;else->0}
-    NavigationBarItem(selected=route==dest||(dest=="mehr"&&route !in tabs.map{it.first}),onClick={if(route!=dest)nav.navigate(dest){popUpTo("home"){saveState=true};launchSingleTop=true;restoreState=true}},icon={BadgedBox(badge={if(badge>0)Badge{Text(if(badge>9)"9+" else badge.toString())}}){Icon(icon,contentDescription=label)}},label={Text(label)})
-   }}}){padding->Box(Modifier.fillMaxSize().padding(padding)){
+    val selected=route==dest||(dest=="mehr"&&route !in tabs.map{it.first})
+    NavigationBarItem(selected=selected,onClick={if(route!=dest)nav.navigate(dest){popUpTo("home"){saveState=true};launchSingleTop=true;restoreState=true}},icon={BadgedBox(badge={if(badge>0)Badge(containerColor=Clay,contentColor=OnAccent){Text(if(badge>9)"9+" else badge.toString(),fontWeight=FontWeight.Bold)}}){Icon(icon,contentDescription=label)}},label={Text(label,style=MaterialTheme.typography.labelMedium,fontWeight=if(selected)FontWeight.Bold else FontWeight.Normal)},
+     colors=NavigationBarItemDefaults.colors(selectedIconColor=Grass,selectedTextColor=Chalk,indicatorColor=Grass.copy(alpha=.14f),unselectedIconColor=Muted,unselectedTextColor=Muted))
+   }}}}){padding->Box(Modifier.fillMaxSize().padding(padding)){
     NavHost(nav,"home"){
      composable("home"){HomeScreen(w,{nav.navigate("spiel")},{nav.navigate("spieler/${w.user.playerId}")}){nav.navigate(it)}}
      composable("kader"){SquadScreen(w,vm){nav.navigate("spieler/$it")}}
@@ -72,11 +77,11 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
      composable("spieler/{id}"){back->ProfileScreen(w,back.arguments?.getString("id")?.toIntOrNull()?:w.user.playerId,vm){nav.popBackStack()}}
     }
     TutorialCoach(w,route,vm){dest->if(route!=dest)nav.navigate(dest){launchSingleTop=true}}
-    if(state.busy)LinearProgressIndicator(modifier=Modifier.fillMaxWidth().align(Alignment.TopCenter))
+    if(state.busy)LinearProgressIndicator(modifier=Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter),color=Grass,trackColor=Color.Transparent)
    }}
    BackHandler(route=="home"){exitConfirm=true}
   }
-  state.error?.let{AlertDialog(onDismissRequest={vm.clearError()},title={Text("Das hat nicht geklappt")},text={Text(it)},confirmButton={TextButton({vm.clearError()}){Text("Verstanden")}})}
+  state.error?.let{AlertDialog(onDismissRequest={vm.clearError()},title={Text("Das hat nicht geklappt",style=MaterialTheme.typography.headlineSmall)},text={Text(it,color=Muted)},confirmButton={Button({vm.clearError()},shape=RoundedCornerShape(12.dp),colors=ButtonDefaults.buttonColors(containerColor=Grass,contentColor=OnAccent)){Text("Verstanden",fontWeight=FontWeight.Bold)}},shape=RoundedCornerShape(26.dp),containerColor=PanelHigh)}
   if(!changelogDismissedThisSession&&changelogSeenVersion!=CHANGELOG_LOADING&&changelogSeenVersion!=WHATS_NEW_VERSION)WhatsNewDialog{changelogDismissedThisSession=true;vm.markChangelogSeen(WHATS_NEW_VERSION)}
   if(exitConfirm)Confirm("Zurück zum Start?","Deine Karriere wird vorher gespeichert.",{exitConfirm=false}){exitConfirm=false;vm.backToMenu()}
  }
