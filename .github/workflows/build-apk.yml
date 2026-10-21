@@ -4,7 +4,8 @@ name: APK bauen
 # Download: Reiter "Releases" (Vorabversion "Neuester Build · <Branch>")
 # oder unter Actions → Lauf → Artifacts.
 #
-# Einmalig in GitHub hinterlegen (Settings → Secrets and variables → Actions):
+# Ohne Secrets wird mit einem Ersatzschlüssel signiert (nur Neuinstallation möglich).
+# Für echte Updates einmalig in GitHub hinterlegen (Settings → Secrets and variables → Actions):
 #   GRUENDERELF_KEYSTORE_BASE64    – die Datei gruenderelf-update.jks als Base64
 #   GRUENDERELF_KEYSTORE_PASSWORD  – das Keystore-Passwort
 
@@ -27,18 +28,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Secrets prüfen
+      - name: Keystore bereitstellen
+        id: ks
         env:
           KS: ${{ secrets.GRUENDERELF_KEYSTORE_BASE64 }}
           PW: ${{ secrets.GRUENDERELF_KEYSTORE_PASSWORD }}
         run: |
-          if [ -z "$KS" ] || [ -z "$PW" ]; then
-            echo "::error::Secrets GRUENDERELF_KEYSTORE_BASE64 und GRUENDERELF_KEYSTORE_PASSWORD fehlen (Settings → Secrets and variables → Actions)."
-            exit 1
+          if [ -n "$KS" ] && [ -n "$PW" ]; then
+            echo "$KS" | base64 -d > app/gruenderelf-update.jks
+            echo "GRUENDERELF_KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
+            echo "suffix=" >> "$GITHUB_OUTPUT"
+            echo "update=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Keine Keystore-Secrets hinterlegt – APK wird mit Ersatzschlüssel signiert und lässt sich NICHT als Update installieren."
+            PW=gruenderelf-ci-fallback
+            keytool -genkeypair -keystore app/gruenderelf-update.jks -alias gruenderelf -keyalg RSA -keysize 2048 -validity 10000 -storepass "$PW" -keypass "$PW" -dname "CN=Gruenderelf CI" -noprompt
+            echo "GRUENDERELF_KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
+            echo "suffix=-NEUINSTALLATION" >> "$GITHUB_OUTPUT"
+            echo "update=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Keystore wiederherstellen
-        run: echo "${{ secrets.GRUENDERELF_KEYSTORE_BASE64 }}" | base64 -d > app/gruenderelf-update.jks
 
       - uses: actions/setup-java@v4
         with:
@@ -50,18 +58,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Release-APK bauen
-        env:
-          GRUENDERELF_KEYSTORE_PASSWORD: ${{ secrets.GRUENDERELF_KEYSTORE_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
+          ./gradlew --no-daemon :app:assembleRelease --stacktrace
 
       - name: APK benennen
         id: apk
         run: |
           VERSION=$(grep -oP 'versionName="\K[^"]+' app/build.gradle.kts)
           BRANCH=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
-          NAME="Gruenderelf-${VERSION}-${BRANCH}-build${GITHUB_RUN_NUMBER}.apk"
+          NAME="Gruenderelf-${VERSION}-${BRANCH}-build${GITHUB_RUN_NUMBER}${{ steps.ks.outputs.suffix }}.apk"
           cp app/build/outputs/apk/release/app-release.apk "$NAME"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
@@ -81,6 +87,7 @@ jobs:
           body: |
             Automatisch gebaut aus `${{ github.ref_name }}` (Commit ${{ github.sha }}), Version ${{ steps.apk.outputs.version }}.
             APK unten unter „Assets“ herunterladen und auf dem Handy öffnen.
+            Dateien mit „NEUINSTALLATION“ im Namen sind mit einem Ersatzschlüssel signiert: alte App vorher deinstallieren und Spielstände vorher exportieren.
           files: ${{ steps.apk.outputs.name }}
 
       - name: Keystore entfernen
