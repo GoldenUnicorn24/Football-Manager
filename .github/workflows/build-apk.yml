@@ -94,7 +94,8 @@ jobs:
 
       - name: Build-Fehler melden
         if: failure()
-        run: grep -E "^e: |What went wrong|ERROR:|Missing class|> Task .*FAILED" gradle-build.log 2>/dev/null | head -50 | sed 's/^/::error::/' || true
+        run: |
+          grep -E "^e: |What went wrong|ERROR:|Missing class|> Task .*FAILED" gradle-build.log 2>/dev/null | head -50 | sed 's/^/::error::/' || true
 
       - name: APK benennen
         id: apk
