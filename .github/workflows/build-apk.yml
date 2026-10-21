@@ -1,0 +1,88 @@
+name: APK bauen
+
+# Baut bei jedem Push eine signierte Release-APK.
+# Download: Reiter "Releases" (Vorabversion "Neuester Build · <Branch>")
+# oder unter Actions → Lauf → Artifacts.
+#
+# Einmalig in GitHub hinterlegen (Settings → Secrets and variables → Actions):
+#   GRUENDERELF_KEYSTORE_BASE64    – die Datei gruenderelf-update.jks als Base64
+#   GRUENDERELF_KEYSTORE_PASSWORD  – das Keystore-Passwort
+
+on:
+  push:
+    branches: [main, "redesign/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Secrets prüfen
+        env:
+          KS: ${{ secrets.GRUENDERELF_KEYSTORE_BASE64 }}
+          PW: ${{ secrets.GRUENDERELF_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KS" ] || [ -z "$PW" ]; then
+            echo "::error::Secrets GRUENDERELF_KEYSTORE_BASE64 und GRUENDERELF_KEYSTORE_PASSWORD fehlen (Settings → Secrets and variables → Actions)."
+            exit 1
+          fi
+
+      - name: Keystore wiederherstellen
+        run: echo "${{ secrets.GRUENDERELF_KEYSTORE_BASE64 }}" | base64 -d > app/gruenderelf-update.jks
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Release-APK bauen
+        env:
+          GRUENDERELF_KEYSTORE_PASSWORD: ${{ secrets.GRUENDERELF_KEYSTORE_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+
+      - name: APK benennen
+        id: apk
+        run: |
+          VERSION=$(grep -oP 'versionName="\K[^"]+' app/build.gradle.kts)
+          BRANCH=$(echo "${GITHUB_REF_NAME}" | tr '/' '-')
+          NAME="Gruenderelf-${VERSION}-${BRANCH}-build${GITHUB_RUN_NUMBER}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: ${{ steps.apk.outputs.name }}
+
+      - name: Als Release zum Download bereitstellen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ steps.apk.outputs.branch }}
+          name: Neuester Build · ${{ github.ref_name }}
+          prerelease: true
+          body: |
+            Automatisch gebaut aus `${{ github.ref_name }}` (Commit ${{ github.sha }}), Version ${{ steps.apk.outputs.version }}.
+            APK unten unter „Assets“ herunterladen und auf dem Handy öffnen.
+          files: ${{ steps.apk.outputs.name }}
+
+      - name: Keystore entfernen
+        if: always()
+        run: rm -f app/gruenderelf-update.jks
