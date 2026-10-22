@@ -29,7 +29,7 @@ android {
  buildToolsVersion="36.0.0"
  defaultConfig {
   applicationId="de.gruenderelf.app"; minSdk=26; targetSdk=36
-  versionCode=73; versionName="0.5.24"
+  versionCode=74; versionName="0.5.25"
   testInstrumentationRunner="androidx.test.runner.AndroidJUnitRunner"
   buildConfigField("String","DEV_CODE_HASH","\"$developerHash\"")
   buildConfigField("String","DEV_CODE_SALT","\"$developerSalt\"")
