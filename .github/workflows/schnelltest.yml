@@ -1,0 +1,51 @@
+name: Schnelltest Engine
+
+# Führt bei Fix-Branches gezielt die Kalibrierungs-, Territorium- und Torwarttests aus.
+on:
+  push:
+    branches: ["fix/**"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - "MonteCarloV0455Test"
+          - "EngineTest"
+          - "MatchTerritoryPhaseTest"
+          - "MatchSpatialModelTest"
+          - "BmwGoalkeeperDiagnosticsTest"
+          - "MatchAiTest"
+          - "UnifiedLiveRuntimeTest"
+          - "ShotModelTest"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: ${{ matrix.suite }}
+        run: |
+          chmod +x gradlew
+          sed -i 's/include(":app", ":engine")/include(":engine")/' settings.gradle.kts
+          set +e
+          ./gradlew --no-daemon :engine:test --tests "de.gruenderelf.engine.${{ matrix.suite }}" --continue > out.log 2>&1
+          code=$?
+          grep -hoE "MONTE_CARLO_AFTER.*|CALIBRATION:.*|NEUER_DIAG.*" out.log | sort -u | sed "s/^/::notice title=${{ matrix.suite }}::/"
+          python3 - <<'PY'
+          import glob,xml.etree.ElementTree as ET
+          t=f=0
+          for p in glob.glob("engine/build/test-results/test/*.xml"):
+              for tc in ET.parse(p).getroot().iter("testcase"):
+                  t+=1
+                  for x in list(tc.findall("failure"))+list(tc.findall("error")):
+                      f+=1;print(f"::error title={tc.get('name')}::"+((x.get('message') or x.text or '').strip().replace('\n',' ')[:300]))
+          print(f"::notice title=Ergebnis::{t} Tests, {f} fehlgeschlagen")
+          PY
+          grep -E "^e: |What went wrong" out.log | head -8 | sed 's/^/::error::/'
+          exit $code

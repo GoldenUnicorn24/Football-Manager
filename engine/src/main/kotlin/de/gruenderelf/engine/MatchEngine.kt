@@ -413,7 +413,17 @@ object MatchEngine {
   m.chainZone=when(phase){LivePhase.POSSESSION->0;LivePhase.ATTACK,LivePhase.COUNTER->1;LivePhase.DANGEROUS_ATTACK->2;LivePhase.SHOT_ON_TARGET,LivePhase.SHOT_OFF_TARGET,LivePhase.WOODWORK,LivePhase.GOAL->3;else->m.chainZone}
   if(detail.isNotBlank())m.chainNarrative=detail
   m.chainOwnerClubId=id;m.homeInPossession=home;m.livePhase=phase;m.liveClubId=id;m.livePlayerId=playerId;m.liveDetail=detail;m.liveEventSerial++
-  if(phase in setOf(LivePhase.POSSESSION,LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK,LivePhase.COUNTER))synchronizeOpenPlayTerritory(m,home,phase)
+  if(phase in openPlayPhases){m.openPlayIntent=phase;synchronizeOpenPlayTerritory(m,home,phase)}
+ }
+
+ private val openPlayPhases=setOf(LivePhase.POSSESSION,LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK,LivePhase.COUNTER)
+
+ /** Phase, nach der die Simulation entscheidet: bei offenem Spiel die Absicht, sonst die angezeigte Phase. */
+ private fun simulationPhase(m:LiveMatch):LivePhase{
+  if(m.livePhase !in openPlayPhases||m.openPlayIntent !in openPlayPhases)return m.livePhase
+  // Ältere Spielstände kennen keine Absicht: dann gilt die angezeigte Phase, falls sie höher ist.
+  fun rank(p:LivePhase)=when(p){LivePhase.POSSESSION->0;LivePhase.ATTACK->1;LivePhase.COUNTER->2;else->3}
+  return if(rank(m.openPlayIntent)>=rank(m.livePhase))m.openPlayIntent else m.livePhase
  }
 
  /**
@@ -494,13 +504,9 @@ object MatchEngine {
   val phase=territorialPhase(home,m.ballY,requested,requested==LivePhase.COUNTER&&m.counterTicksRemaining>0)
   val changed=phase!=m.livePhase
   m.livePhase=phase
-  when(phase){
-   LivePhase.POSSESSION->{m.chainStep=0;m.chainZone=0}
-   LivePhase.ATTACK->{m.chainStep=1;m.chainZone=1}
-   LivePhase.DANGEROUS_ATTACK->{m.chainStep=2;m.chainZone=2}
-   LivePhase.COUNTER->{m.chainZone=1}
-   else->Unit
-  }
+  // Nur Anzeige und Zone folgen dem Territorium. Die taktische Absicht (openPlayIntent/chainStep)
+  // bleibt erhalten, sonst wird jeder Angriff, dessen Ball knapp vor der Zone liegt, neu aufgebaut.
+  m.chainZone=when(phase){LivePhase.POSSESSION->0;LivePhase.ATTACK,LivePhase.COUNTER->1;LivePhase.DANGEROUS_ATTACK->2;else->m.chainZone}
   if(changed||m.liveDetail.isBlank()||
    (phase==LivePhase.POSSESSION&&m.liveDetail.contains("Angriff",true))||
    (phase==LivePhase.ATTACK&&m.liveDetail.contains("Tornähe",true))||
@@ -1206,15 +1212,16 @@ object MatchEngine {
    val distribution=it.attributes.passing*.42+it.attributes.vision*.30+it.attributes.technique*.18+it.attributes.keeping*.10
    ((distribution-55.0).coerceAtLeast(0.0)*.00075).coerceAtMost(.055)
   }?:0.0
-  val patternKey=when(m.livePhase){LivePhase.POSSESSION->"AUFBAU";LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK->if(effective.width>=4)"FLUEGEL" else "HALBRAUM";LivePhase.COUNTER->"DIAGONALE";else->"RESTVERTEIDIGUNG"};val automatismRisk=(1-MatchIntelligence.patternFactor(c,patternKey))*.055
+  val patternKey=when(simulationPhase(m)){LivePhase.POSSESSION->"AUFBAU";LivePhase.ATTACK,LivePhase.DANGEROUS_ATTACK->if(effective.width>=4)"FLUEGEL" else "HALBRAUM";LivePhase.COUNTER->"DIAGONALE";else->"RESTVERTEIDIGUNG"};val automatismRisk=(1-MatchIntelligence.patternFactor(c,patternKey))*.055
   val chainSecurity=when(effective.buildUp){BuildUp.TIKI_TAKA,BuildUp.SHORT->m.chainPasses.coerceAtMost(7)*.0028;BuildUp.MIXED,BuildUp.WIDE->m.chainPasses.coerceAtMost(5)*.0014;else->0.0}
-  val turnoverChance=((when(m.livePhase){LivePhase.POSSESSION->.034;LivePhase.ATTACK->.048;LivePhase.DANGEROUS_ATTACK->.068;LivePhase.COUNTER->.064;else->.075}
+  val intent=simulationPhase(m)
+  val turnoverChance=((when(intent){LivePhase.POSSESSION->.034;LivePhase.ATTACK->.048;LivePhase.DANGEROUS_ATTACK->.068;LivePhase.COUNTER->.064;else->.075}
    +buildRisk(effective.buildUp)+(effective.tempo-3)*.006+(mentality-3)*.004-controlEdge*.034+(1-fatigue)*.075+modeRisk+automatismRisk-(if(primeCarrier).040 else 0.0)-keeperBuildUpBonus-chainSecurity)*calibration.turnover).coerceIn(if(primeCarrier).006 else .012,.34)
   if(rng.chance(turnoverChance)){
    transferPossession(w,m,!home,if(rng.chance(.55))PossessionChangeReason.INTERCEPTION else PossessionChangeReason.TACKLE,rng,true);m.rngState=rng.state;return
   }
 
-  when(m.livePhase){
+  when(intent){
    LivePhase.COUNTER->{
     m.counterTicksRemaining=(m.counterTicksRemaining-1).coerceAtLeast(0);m.chainTicks++
     val mover=moverFor(w,m,home,rng)

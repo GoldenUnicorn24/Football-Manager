@@ -356,7 +356,9 @@ fun CompetitionType.sortPriority()=when(this){CompetitionType.NATIONAL_CUP,Compe
  var chainPasses:Int=0,
  var chainZone:Int=0,
  var chainNarrative:String="",
- var ballTrace:MutableList<BallFrame> = mutableListOf()
+ var ballTrace:MutableList<BallFrame> = mutableListOf(),
+ /** Taktische Absicht der laufenden Ballphase. livePhase ist die territorial ehrliche Anzeige. */
+ var openPlayIntent:LivePhase=LivePhase.POSSESSION
 
 )
 @Serializable data class IndividualFocus(val playerId: Int,val focus: Focus)
