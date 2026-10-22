@@ -21,6 +21,10 @@ class BmwGoalkeeperDiagnosticsTest {
     }
     w.squad().forEach{it.fitness=100.0;it.injuryWeeks=0;it.unavailableWeeks=0}
     WorldFactory.autoLineup(w,w.user.clubId)
+    // Vergleich „derselbe Torwart, schwächere Werte“: Die Aufstellung würde den
+    // künstlich geschwächten Neuer sonst zu Recht durch Timo Falk ersetzen.
+    val keeperSlot=Formations.positions(w.club().tactics.formation).indexOf(Position.TW)
+    WorldFactory.assignSlot(w,keeperSlot,neuer.id)
     val f=w.nextFixture()!!
     val m=MatchEngine.simulateFullMatch(w,f)
     val bmwHome=m.homeId==w.user.clubId
