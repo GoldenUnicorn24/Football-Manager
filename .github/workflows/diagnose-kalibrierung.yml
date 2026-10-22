@@ -13,12 +13,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        commit: [d95e924, 9d14f8c, dffef52, c0bb584, ee585b2, 10bb270, f6011cb, 27ef21b, 9aa2f07, 2557e11, 6e8565c, c6567e4, c79adca, 01266f1, 433d322, 2235dcd]
+        commit: ["d95e924", "9d14f8c", "dffef52", "c0bb584", "e9475f3", "ee585b2", "10bb270", "f6011cb", "9aa2f07", "c6567e4", "01266f1", "4da85ee", "433d322", "e99403a", "183d1ff", "25af7ae", "8e799e0", "a970918", "2235dcd"]
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - run: git checkout ${{ matrix.commit }} -- engine gradle gradlew settings.gradle.kts build.gradle.kts gradle.properties
+      - run: git checkout -f "${{ matrix.commit }}" && git clean -fdq
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
