@@ -1,0 +1,34 @@
+name: Diagnose Kalibrierung
+
+# Misst Torquote und xG an mehreren Ständen der Versionsgeschichte parallel.
+on:
+  push:
+    branches: ["diagnose/**"]
+  workflow_dispatch:
+
+jobs:
+  measure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        commit: [d95e924, 9d14f8c, dffef52, c0bb584, ee585b2, 10bb270, f6011cb, 27ef21b, 9aa2f07, 2557e11, 6e8565c, c6567e4, c79adca, 01266f1, 433d322, 2235dcd]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - run: git checkout ${{ matrix.commit }} -- engine gradle gradlew settings.gradle.kts build.gradle.kts gradle.properties
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Messen
+        run: |
+          chmod +x gradlew
+          # nur die Engine bauen, die App wird nicht gebraucht
+          sed -i 's/include(":app", ":engine")/include(":engine")/' settings.gradle.kts
+          ./gradlew --no-daemon :engine:test --tests 'de.gruenderelf.engine.MonteCarloV0455Test' --tests 'de.gruenderelf.engine.EngineTest.amateurCalibrationAcross600Matches' --continue 2>&1 | tee out.log || true
+          grep -hoE "MONTE_CARLO_AFTER.*|CALIBRATION:.*" out.log engine/build/test-results/test/*.xml 2>/dev/null | sort -u | sed "s/^/::notice title=${{ matrix.commit }}::/" || true
+          grep -E "^e: |What went wrong" out.log | head -5 | sed "s/^/::warning title=${{ matrix.commit }}::/" || true
