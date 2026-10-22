@@ -29,11 +29,13 @@ class BmwGoalkeeperDiagnosticsTest {
     WorldFactory.assignSlot(w,keeperSlot,neuer.id)
     // gleiche Partie und gleicher Zufall für den starken und den geschwächten Neuer
     val f=w.nextFixture()!!.copy(id=910000+i)
-    val m=MatchEngine.simulateFullMatch(w,f)
+    // Beim Anpfiff prüfen: Nach einer Roten Karte oder Verletzung wäre der Torwartplatz später leer bzw. neu besetzt.
+    val m=MatchEngine.start(w,f)
     val bmwHome=m.homeId==w.user.clubId
-    val opp=if(bmwHome)m.away else m.home
     val gkId=(if(bmwHome)m.homeXi else m.awayXi)[Formations.positions(if(bmwHome)m.homeFormation else m.awayFormation).indexOf(Position.TW)]
     assertEquals(neuer.id,gkId,"Manuel Neuer is not in the actual goalkeeper slot")
+    MatchEngine.simulateRemaining(w,m)
+    val opp=if(bmwHome)m.away else m.home
     return Triple(m,opp,neuer)
    }
    val (em,es,en)=run(false)
