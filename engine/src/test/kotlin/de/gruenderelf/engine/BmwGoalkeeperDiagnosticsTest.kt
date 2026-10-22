@@ -8,9 +8,11 @@ class BmwGoalkeeperDiagnosticsTest {
  @Test fun neuerIsActuallyUsedAndOutperformsAnAverageKeeper(){
   var eliteGoals=0;var weakGoals=0;var eliteXg=0.0;var weakXg=0.0
   var eliteSot=0;var weakSot=0;var eliteClean=0;var weakClean=0
+  // Die BMW-Welt ist groß: einmal erzeugen und pro Spiel nur kopieren.
+  val base=SaveCodec.encode(BmwDeveloperWorldFactory.create(310000L))
   repeat(50){i->
    fun run(weaken:Boolean):Triple<LiveMatch,MatchStats,Player>{
-    val w=BmwDeveloperWorldFactory.create(310000L+i)
+    val w=SaveCodec.decode(base)
     val neuer=w.squad().first{it.name=="Manuel Neuer"}
     if(weaken){
      neuer.attributes.keeping=55
@@ -25,7 +27,8 @@ class BmwGoalkeeperDiagnosticsTest {
     // künstlich geschwächten Neuer sonst zu Recht durch Timo Falk ersetzen.
     val keeperSlot=Formations.positions(w.club().tactics.formation).indexOf(Position.TW)
     WorldFactory.assignSlot(w,keeperSlot,neuer.id)
-    val f=w.nextFixture()!!
+    // gleiche Partie und gleicher Zufall für den starken und den geschwächten Neuer
+    val f=w.nextFixture()!!.copy(id=910000+i)
     val m=MatchEngine.simulateFullMatch(w,f)
     val bmwHome=m.homeId==w.user.clubId
     val opp=if(bmwHome)m.away else m.home
