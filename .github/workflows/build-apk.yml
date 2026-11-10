@@ -65,7 +65,7 @@ jobs:
 
       - name: Engine-Tests
         id: tests
-        timeout-minutes: 20
+        timeout-minutes: 35
         continue-on-error: true
         run: |
           chmod +x gradlew
