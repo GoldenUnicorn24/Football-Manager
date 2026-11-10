@@ -58,8 +58,8 @@ private val tutorialPages=listOf(
   "mehr",7,true
  ),
  TutorialPage(
-  "mehr","Mehr, Hilfe & What's New",
-  "Unter Mehr findest du Verein, Training, Transfers, Karriere, Einstellungen, Speicherstände und das vollständige Manager-Handbuch. What's New kannst du dort jederzeit erneut öffnen, auch nachdem die einmalige Versionsanzeige beim ersten Start geschlossen wurde.",
+  "mehr","Mehr & Hilfe",
+  "Unter Mehr findest du Verein, Training, Transfers, Karriere, Einstellungen, Speicherstände und das Manager-Handbuch.",
   null,8
  )
 )
