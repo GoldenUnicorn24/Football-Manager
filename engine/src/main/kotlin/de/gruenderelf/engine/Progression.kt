@@ -167,7 +167,7 @@ object SeasonEngine {
     }
    }
   }
-  w.calendar.absoluteWeek++;EventsEngine.apply(w)
+  w.calendar.absoluteWeek++;EventsEngine.apply(w);ClubLife.afterLeagueWeek(w,live)
   val own=if(live.homeId==w.user.clubId)live.home.goals else live.away.goals;val other=if(live.homeId==w.user.clubId)live.away.goals else live.home.goals
   w.news("Spieltag ${w.calendar.matchday}: $own:$other","${live.attendance} Zuschauer. Wochenzuflüsse: ${w.club().lastIncome} €. Kosten: ${w.club().lastCosts} €.",if(own>other)"good" else if(own<other)"bad" else "normal")
   w.live=null;w.calendar.matchday++
@@ -202,6 +202,7 @@ object SeasonEngine {
   val top=w.players.values.filter{it.clubId in w.leagues.first{l->l.tier==tier}.clubIds}.sortedWith(compareByDescending<Player>{it.stats.goals}.thenBy{it.id}).firstOrNull()
   if(top?.id==w.user.playerId&&w.self().stats.goals>0)awards.add("Torjäger: ${w.self().stats.goals} Tore")
   w.history.add(SeasonHistory(w.calendar.season,w.user.clubId,WorldFactory.leagueName(w,tier),rank,row.points,row.goalsFor,outcome,awards))
+  w.life.seasonReview=ClubLife.buildReview(w,rank,rows.size,row,outcome,awards)
   // Im privaten Topclub-Spielstand bleibt die 12er-Eliteliga bewusst stabil. Dadurch werden
   // Real-Clubs nicht nach einer Saison in die Fantasiepyramide verschoben.
   if(!w.privateTopClubMode){

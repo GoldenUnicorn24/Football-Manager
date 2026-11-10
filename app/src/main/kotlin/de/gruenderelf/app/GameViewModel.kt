@@ -200,6 +200,7 @@ class GameViewModel(application: Application): AndroidViewModel(application){
  fun rejectAssistantSubstitution()=liveAction{w->w.live?.let{MatchEngine.rejectAssistantSubstitution(w,it)}}
  fun resumeIncident()=liveAction{w->w.live?.let{MatchEngine.resumeIncident(w,it)}}
  fun secondHalf()=liveAction{it.live?.let{m->MatchEngine.secondHalf(m)}}
+ fun teamTalk(talk: TeamTalk)=liveAction{w->val delta=MatchdaySystem.talkDelta(w,talk);MatchdaySystem.teamTalk(w,talk);mutable.update{it.copy(message=MatchdaySystem.talkReaction(delta))}}
  fun finishWeek()=work{
   val current=mutable.value.world?:return@work
   withContext(Dispatchers.Default){SeasonEngine.advanceWeek(current);SaveCodec.requireRuntimeIntegrity(current)}

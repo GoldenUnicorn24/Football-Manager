@@ -8,7 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-const val WHATS_NEW_VERSION="0.5.26"
+const val WHATS_NEW_VERSION="0.5.27"
 // Kompatibilitätsalias: bestehende Preferences/Tests behalten ihren bisherigen Schlüssel.
 const val CHANGELOG_VERSION=WHATS_NEW_VERSION
 const val CHANGELOG_LOADING="__loading__"
@@ -19,9 +19,13 @@ const val CHANGELOG_LOADING="__loading__"
 }
 
 @Composable private fun WhatsNewContent(){
- WhatIsNewBlock("Aufgeräumt","Weniger Erklärtexte, keine doppelten Knöpfe, ruhigere Karten. Die Übersicht zeigt Hinweise nur noch, wenn wirklich etwas offen ist.")
- WhatIsNewBlock("Neue Navigation","Schlankere Leiste unten und ein Zurück-Pfeil auf allen Unterseiten.")
- WhatIsNewBlock("Startbildschirm","Zeigt nur noch belegte Spielstände – Weiterspielen steht ganz oben.")
+ WhatIsNewBlock("Vorstand mit Folgen","Alle vier Wochen tagt der Vorstand: Prämie, gekürzte Mittel, Ultimatum – und nach zwei Ultimaten die Entlassung mit Angeboten anderer Vereine.")
+ WhatIsNewBlock("Saisonrückblick","Nach dem letzten Spieltag: Platz, Bilanz, beste Spieler und Titel auf einen Blick.")
+ WhatIsNewBlock("Spieltag","Gegnervorschau mit voraussichtlicher Elf, Pressekonferenz vor Ligaspielen und Kabinenansprache in der Halbzeit.")
+ WhatIsNewBlock("Ticketpreise","Im Vereinsbereich einstellbar: günstig füllt das Stadion und bringt Mitglieder, teuer bringt mehr pro Spiel.")
+ WhatIsNewBlock("Länderspielpausen","Nach Spieltag 7, 15 und 25 reisen deine besten Spieler ab – der Rest erholt sich.")
+ WhatIsNewBlock("Übersichtlicher","Kader, Spielerprofil und Transfers sind in Reiter gegliedert. Liga mit Wettbewerbs-Chips und Spieltag-Pfeilen.")
+ WhatIsNewBlock("Besser lesbar","Größere Kleinschrift, mehr Kontrast, dezente Animationen und Vibration bei Toren.")
 }
 @Composable fun WhatsNewDialog(onDismiss:()->Unit){
  AlertDialog(

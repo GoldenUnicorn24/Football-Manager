@@ -1,7 +1,9 @@
 package de.gruenderelf.app.ui
 import android.graphics.Paint
 import android.graphics.Typeface
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -68,8 +70,8 @@ val GrassBright get()=brand(0xFF8BF5C4,0xFF55B8FF)  // Akzent-Verlauf
 val GrassDeep get()=brand(0xFF178A5E,0xFF0B2D52)
 val OnAccent get()=brand(0xFF070B0A,0xFFFFFFFF)     // Text auf Akzentflächen
 val Chalk get()=brand(0xFFF1F5F2,0xFFF8FAFC)        // Text primär
-val Muted get()=brand(0xFF8C9E97,0xFFC7CED7)        // Text sekundär
-val Faint get()=brand(0xFF586A63,0xFF6E7A88)        // Text tertiär / deaktiviert
+val Muted get()=brand(0xFF9DAFA8,0xFFC7CED7)        // Text sekundär
+val Faint get()=brand(0xFF7A8C85,0xFF8A95A3)        // Text tertiär / deaktiviert
 val Clay get()=brand(0xFFFF7864,0xFFE7222E)         // negativ / Warnung
 val Blue get()=brand(0xFF6DB3FF,0xFF0066B1)         // Info / Nebenposition
 val Gold get()=brand(0xFFF4C766,0xFF6DCFF6)         // Hinweis / Auszeichnung
@@ -115,10 +117,10 @@ private const val Tabular="tnum"
   titleSmall=TextStyle(fontFamily=Medium,fontSize=14.sp,lineHeight=19.sp),
   bodyLarge=TextStyle(fontSize=16.sp,lineHeight=23.sp),
   bodyMedium=TextStyle(fontSize=14.sp,lineHeight=21.sp),
-  bodySmall=TextStyle(fontSize=12.5.sp,lineHeight=18.sp),
+  bodySmall=TextStyle(fontSize=13.sp,lineHeight=18.sp),
   labelLarge=TextStyle(fontFamily=Medium,fontSize=14.sp,lineHeight=18.sp,letterSpacing=0.2.sp),
-  labelMedium=TextStyle(fontFamily=Medium,fontSize=12.sp,lineHeight=16.sp,letterSpacing=0.3.sp),
-  labelSmall=TextStyle(fontWeight=FontWeight.Bold,fontSize=10.5.sp,lineHeight=14.sp,letterSpacing=1.4.sp)
+  labelMedium=TextStyle(fontFamily=Medium,fontSize=12.5.sp,lineHeight=16.sp,letterSpacing=0.3.sp),
+  labelSmall=TextStyle(fontWeight=FontWeight.Bold,fontSize=11.5.sp,lineHeight=15.sp,letterSpacing=1.1.sp)
  )
  val shapes=Shapes(
   extraSmall=RoundedCornerShape(10.dp),small=RoundedCornerShape(12.dp),medium=RoundedCornerShape(16.dp),
@@ -173,17 +175,20 @@ data class NavTab(val route: String,val label: String,val icon: ImageVector,val 
 
 /** Flache Navigationsleiste: Akzentstrich über dem aktiven Ziel statt Material-Pille. */
 @Composable fun BottomBar(tabs: List<NavTab>,selected: String,onSelect: (String)->Unit){
+ val haptic=androidx.compose.ui.platform.LocalHapticFeedback.current
  Surface(color=Panel,modifier=Modifier.fillMaxWidth()){
   Column(Modifier.windowInsetsPadding(WindowInsets.navigationBars)){
    HorizontalDivider(color=Line,thickness=1.dp)
    Row(Modifier.fillMaxWidth().height(60.dp).selectableGroup()){
     tabs.forEach{tab->
      val active=tab.route==selected
-     Column(Modifier.weight(1f).fillMaxHeight().selectable(selected=active,role=Role.Tab,onClick={onSelect(tab.route)}),horizontalAlignment=Alignment.CenterHorizontally){
-      Box(Modifier.width(28.dp).height(3.dp).background(if(active)Grass else Color.Transparent,RoundedCornerShape(bottomStart=3.dp,bottomEnd=3.dp)))
+     val tint by animateColorAsState(if(active)Grass else Muted,tween(200),label="tab")
+     val bar by animateColorAsState(if(active)Grass else Color.Transparent,tween(200),label="tabBar")
+     Column(Modifier.weight(1f).fillMaxHeight().selectable(selected=active,role=Role.Tab,onClick={if(!active)haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove);onSelect(tab.route)}),horizontalAlignment=Alignment.CenterHorizontally){
+      Box(Modifier.width(28.dp).height(3.dp).background(bar,RoundedCornerShape(bottomStart=3.dp,bottomEnd=3.dp)))
       Spacer(Modifier.height(7.dp))
       Box{
-       Icon(tab.icon,contentDescription=null,tint=if(active)Grass else Muted,modifier=Modifier.size(24.dp))
+       Icon(tab.icon,contentDescription=null,tint=tint,modifier=Modifier.size(24.dp))
        if(tab.badge>0)Box(Modifier.align(Alignment.TopEnd).offset(x=10.dp,y=(-4).dp)){CountBadge(tab.badge)}
       }
       Spacer(Modifier.height(3.dp))
@@ -404,6 +409,22 @@ fun suitabilitySymbol(player: Player?,target: Position)=when{player==null->"–"
  }
 }
 
+/** Ein Knopf, der mehrere Aktionen als Menü anbietet – statt einer Knopfreihe. */
+@Composable fun ActionMenu(text: String,options: List<Pair<String,()->Unit>>,enabled: Boolean=true){
+ var open by remember{mutableStateOf(false)}
+ Box{
+  Surface(onClick={open=true},enabled=enabled,shape=RoundedCornerShape(ControlRadius),color=Inset,contentColor=if(enabled)Chalk else Faint,border=BorderStroke(1.dp,if(open)Grass.copy(alpha=.6f) else Line),modifier=Modifier.fillMaxWidth()){
+   Row(Modifier.fillMaxWidth().heightIn(min=50.dp).padding(start=14.dp,end=10.dp),verticalAlignment=Alignment.CenterVertically){
+    Text(text,Modifier.weight(1f),style=MaterialTheme.typography.bodyLarge,maxLines=1,overflow=TextOverflow.Ellipsis)
+    Icon(Icons.Filled.KeyboardArrowDown,contentDescription=null,tint=if(open)Grass else Muted)
+   }
+  }
+  DropdownMenu(open,{open=false}){
+   options.forEach{(label,run)->DropdownMenuItem(text={Text(label,color=Chalk)},onClick={open=false;run()})}
+  }
+ }
+}
+
 /** Ab dieser Länge öffnet [Pick] eine durchsuchbare Liste statt eines Dropdowns. */
 const val SEARCHABLE_PICK_THRESHOLD=12
 
@@ -457,7 +478,8 @@ const val SEARCHABLE_PICK_THRESHOLD=12
 /** Gerundeter Balken mit Verlauf. */
 @Composable fun Bar(fraction: Float,color: Color,modifier: Modifier=Modifier,height: Dp=6.dp){
  Box(modifier.fillMaxWidth().height(height).clip(CircleShape).background(Track)){
-  Box(Modifier.fillMaxWidth(fraction.coerceIn(0f,1f)).fillMaxHeight().clip(CircleShape).background(Brush.horizontalGradient(listOf(color.copy(alpha=.55f),color))))
+  val shown by animateFloatAsState(fraction.coerceIn(0f,1f),tween(450),label="bar")
+  Box(Modifier.fillMaxWidth(shown).fillMaxHeight().clip(CircleShape).background(Brush.horizontalGradient(listOf(color.copy(alpha=.55f),color))))
  }
 }
 

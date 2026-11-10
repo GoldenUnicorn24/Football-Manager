@@ -55,7 +55,7 @@ object MatchEngine {
   autoTuneAiTactics(w,h,a);autoTuneAiTactics(w,a,h)
   val rng=SeededRandom(w.seed xor(f.id.toLong()*1000003) xor w.calendar.season.toLong())
   val weather=rng.pick(listOf("Trocken","Trocken","Leichter Regen","Wind","Dauerregen"));val derby=w.isDerby(h.id,a.id)
-  val fans=((h.members*.7+h.reputation*3.4)*(if(derby)1.35 else 1.0)*(if(h.stadium.floodlights)1.18 else 1.0)*(1+h.stadium.stand*.003)*(if(weather=="Dauerregen").72 else 1.0)*rng.int(85,115)/100).roundToInt().coerceIn(0,h.stadium.capacity)
+  val fans=((h.members*.7+h.reputation*3.4)*(if(derby)1.35 else 1.0)*(if(h.stadium.floodlights)1.18 else 1.0)*(1+h.stadium.stand*.003)*(if(weather=="Dauerregen").72 else 1.0)*TicketSystem.attendanceFactor(h)*rng.int(85,115)/100).roundToInt().coerceIn(0,h.stadium.capacity)
   val m=LiveMatch(
    f.id,h.id,a.id,rng.state,duration=90,
    homeXi=h.tactics.xi.toMutableList(),awayXi=a.tactics.xi.toMutableList(),
@@ -1722,7 +1722,7 @@ object MatchEngine {
    p.stats.appearances++;p.stats.minutes+=m.minutesPlayed[id]?:0;p.stats.goals+=m.goals.count{it.playerId==id};p.stats.assists+=m.goals.count{it.assistId==id};p.stats.yellow+=m.yellows[id]?:0
    if(id in m.sentOff){p.stats.red++;p.unavailableReason=UnavailableReason.SUSPENDED;p.unavailableWeeks=2};p.sharpness=(p.sharpness+5).coerceAtMost(100);p.form=perf.rating.coerceIn(1.0,10.0)
   }
-  for((id,score,conceded) in listOf(Triple(m.homeId,m.home.goals,m.away.goals),Triple(m.awayId,m.away.goals,m.home.goals))){val c=w.clubs.getValue(id);val result=if(score>conceded)"S" else if(score==conceded)"U" else "N";c.form.add(result);if(c.form.size>5)c.form.removeAt(0);w.squad(id).forEach{it.morale=(it.morale+if(result=="S")4 else if(result=="N")-3 else 0).coerceIn(5,100)};if(id==m.homeId){c.lastIncome=m.attendance*(if(!w.privateTopClubMode&&c.tier>=7)4 else if(w.privateTopClubMode)18 else 22-c.tier*2);c.budget+=c.lastIncome}else c.lastIncome=0}
+  for((id,score,conceded) in listOf(Triple(m.homeId,m.home.goals,m.away.goals),Triple(m.awayId,m.away.goals,m.home.goals))){val c=w.clubs.getValue(id);val result=if(score>conceded)"S" else if(score==conceded)"U" else "N";c.form.add(result);if(c.form.size>5)c.form.removeAt(0);w.squad(id).forEach{it.morale=(it.morale+if(result=="S")4 else if(result=="N")-3 else 0).coerceIn(5,100)};if(id==m.homeId){c.lastIncome=(m.attendance*(if(!w.privateTopClubMode&&c.tier>=7)4 else if(w.privateTopClubMode)18 else 22-c.tier*2)*TicketSystem.priceFactor(c)).roundToInt();TicketSystem.afterHomeMatch(c);c.budget+=c.lastIncome}else c.lastIncome=0}
   YouthCompetitionSystem.returnTemporaryAfterMatch(w,m)
  }
 }

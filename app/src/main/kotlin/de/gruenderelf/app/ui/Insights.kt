@@ -76,7 +76,7 @@ fun boardView(w: World): BoardView{
  val tableScore=if(played==0)0.0 else (expected-actual).toDouble()/size*120*weight
  val formScore=c.form.takeLast(5).sumOf{when(it){"S"->3.0;"N"->-3.0;else->0.0}}
  val moneyScore=if(c.budget<0)-15.0 else 0.0
- val confidence=(62+tableScore+formScore+moneyScore).roundToInt().coerceIn(5,100)
+ val confidence=BoardSystem.confidence(w)
  val (headline,message)=when{
   played==0->"Saisonziel" to "Der Vorstand erwartet ungefähr Platz $expected – passend zur Kaderstärke im Ligavergleich."
   confidence>=80->"Volles Vertrauen" to "Der Vorstand ist begeistert. Platz $actual liegt über der Erwartung (Platz $expected)."
@@ -144,6 +144,7 @@ fun unreadNews(w: World)=w.news.count{it.id>w.user.newsReadUpTo}
   }
   Bar(b.confidence/100f,color)
   Text(b.message,color=Chalk.copy(alpha=.86f),style=MaterialTheme.typography.bodyMedium)
+  if(!BoardSystem.exempt(w))Text("Nächste Sitzung in ${BoardSystem.weeksToReview(w)} Wochen${w.life.board.lastVerdict.takeIf{it.isNotBlank()}?.let{" · zuletzt: $it"}?:""}",color=Muted,style=MaterialTheme.typography.bodySmall)
  }
 }
 

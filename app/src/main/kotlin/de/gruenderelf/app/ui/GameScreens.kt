@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.PlayArrow
@@ -218,20 +220,27 @@ private fun tableRowModifier(own: Boolean)=Modifier.fillMaxWidth().background(if
  var competition by rememberSaveable{mutableStateOf("Liga")};var country by rememberSaveable(w.user.clubId,w.calendar.season){mutableStateOf(ownCountry)};var tier by rememberSaveable(w.user.clubId,w.calendar.season){mutableIntStateOf(ownLeague.tier)};var day by rememberSaveable(w.calendar.season){mutableIntStateOf(w.calendar.matchday)};var fullTable by rememberSaveable{mutableStateOf(false)};var group by rememberSaveable{mutableStateOf("A")};var euroRound by rememberSaveable(w.calendar.season){mutableIntStateOf(1)}
  if(competition !in competitionOptions)competition="Liga"
  Page("Wettbewerbe"){
-  Pick("Wettbewerb",competition,competitionOptions,{it}){competition=it}
+  ChipRow(competitionOptions,competition){competition=it}
   when(competition){
    "Liga"->{
     val countries=w.leagues.map{WorldFactory.leagueCountry(w,it.tier)}.distinct().sortedWith(compareBy<String>{if(it==ownCountry)0 else 1}.thenBy{it});if(country !in countries)country=ownCountry
-    Pick("Land",country,countries,{it}){selected->country=selected;val options=w.leagues.filter{WorldFactory.leagueCountry(w,it.tier)==selected}.sortedBy{it.tier};tier=if(selected==ownCountry)ownLeague.tier else options.first().tier;day=1}
     val countryLeagues=w.leagues.filter{WorldFactory.leagueCountry(w,it.tier)==country}.sortedBy{it.tier};if(countryLeagues.none{it.tier==tier})tier=countryLeagues.first().tier
-    Pick("Liga",tier,countryLeagues.map{it.tier},{WorldFactory.leagueName(w,it)}){tier=it;day=1}
-    if(tier==ownLeague.tier)Pill("Deine aktuelle Liga",Grass)
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
+     if(countries.size>1)Box(Modifier.weight(1f)){Pick("Land",country,countries,{it}){selected->country=selected;val options=w.leagues.filter{WorldFactory.leagueCountry(w,it.tier)==selected}.sortedBy{it.tier};tier=if(selected==ownCountry)ownLeague.tier else options.first().tier;day=1}}
+     Box(Modifier.weight(1f)){Pick("Liga",tier,countryLeagues.map{it.tier},{WorldFactory.leagueName(w,it)}){tier=it;day=1}}
+    }
     SegmentedTabs(listOf("Kompakt","Ausführlich"),if(fullTable)1 else 0){fullTable=it==1}
     LeagueTable(w,tier,fullTable)
     TopScorersSection(w,tier)
     val rounds=(w.leagues.first{it.tier==tier}.clubIds.size-1)*2;if(day !in 1..rounds)day=1
-    Pick("Spieltag",day,(1..rounds).toList(),{"Spieltag $it"}){day=it}
-    Section("Spieltag $day"){w.fixtures.filter{it.competition==CompetitionType.LEAGUE&&it.tier==tier&&it.matchday==day}.forEach{f->CompetitionResultRow(w,f)}}
+    Section{
+     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+      IconButton({day--},enabled=day>1){Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft,contentDescription="Vorheriger Spieltag",tint=if(day>1)Chalk else Faint)}
+      Text("Spieltag $day",Modifier.weight(1f),textAlign=TextAlign.Center,style=MaterialTheme.typography.titleLarge,color=Chalk)
+      IconButton({day++},enabled=day<rounds){Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight,contentDescription="Nächster Spieltag",tint=if(day<rounds)Chalk else Faint)}
+     }
+     w.fixtures.filter{it.competition==CompetitionType.LEAGUE&&it.tier==tier&&it.matchday==day}.forEach{f->CompetitionResultRow(w,f)}
+    }
    }
    cupName->{
     val count=w.fixtures.count{it.competition==CompetitionType.NATIONAL_CUP&&it.round==1}
@@ -369,16 +378,15 @@ private fun statNumber(text: String)=text.replace(',','.').filter{it.isDigit()||
  LaunchedEffect(running,speed,m?.fixtureId){m?.let{vm.setLiveRunning(running,speed,it.fixtureId)}}
  DisposableEffect(m?.fixtureId){onDispose{m?.let{vm.setLiveRunning(false,speed,it.fixtureId)}}}
  if(m==null){
-  Page("${w.nextFixture()?.let{CompetitionEngine.displayName(w,it.competition)}?:"Spieltag"} ${w.calendar.matchday}","KREIDE AN DEN SCHUHEN"){
-   w.nextFixture()?.let{NextGame(w,it,"Anpfiff"){vm.startMatch();userPaused=false}}
-   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
-    StatTile("Formation",w.club().tactics.formation,Modifier.weight(1f))
-    StatTile("Mentalität","${w.club().tactics.mentality} / 5",Modifier.weight(1f))
+  Page("${w.nextFixture()?.let{CompetitionEngine.displayName(w,it.competition)}?:"Spieltag"} ${w.calendar.matchday}"){
+   w.nextFixture()?.let{f->
+    NextGame(w,f,"Anpfiff"){vm.startMatch();userPaused=false}
+    OpponentPreview(w,f)
+    PressConference(w,f,vm)
    }
-   Section("Vor dem Anpfiff"){
-    val missing=w.squad().filter{!it.available&&!it.youth}
-    if(missing.isEmpty())ListRow("Alle Spieler sind verfügbar","Der komplette Profikader steht bereit.",Icons.Filled.CheckCircle,Grass)
-    else missing.forEach{ListRow(it.name,if(it.injuryWeeks>0)it.injury else it.unavailableReason?.label,Icons.Filled.Warning,Clay)}
+   val missing=w.squad().filter{!it.available&&!it.youth}
+   if(missing.isNotEmpty())Section("Ausfälle"){
+    missing.forEach{ListRow(it.name,if(it.injuryWeeks>0)it.injury else it.unavailableReason?.label,Icons.Filled.Warning,Clay)}
    }
   };return
  }
@@ -387,8 +395,12 @@ private fun statNumber(text: String)=text.replace(',','.').filter{it.isDigit()||
  MatchAudioEffects(w,m,soundsEnabled)
  val h=w.clubs.getValue(m.homeId);val a=w.clubs.getValue(m.awayId);val ownHome=m.homeId==w.user.clubId;val ownClub=w.club();var livePreset by rememberSaveable(m.fixtureId){mutableStateOf("Individuell")}
  val ownXiRaw=if(ownHome)m.homeXi else m.awayXi;val xi=ownXiRaw.filter{it!=0};val bench=if(ownHome)m.homeBench else m.awayBench;val ownSubs=if(ownHome)m.homeSubs else m.awaySubs;val ownFormation=if(ownHome)m.homeFormation else m.awayFormation;val conserve=if(ownHome)m.homeConserveEnergy else m.awayConserveEnergy;val allOut=if(ownHome)m.homeAllOutAttack else m.awayAllOutAttack;val controlGame=if(ownHome)m.homeControlGame else m.awayControlGame
+ val haptic=androidx.compose.ui.platform.LocalHapticFeedback.current;val goalsTotal=m.home.goals+m.away.goals
+ var seenGoals by rememberSaveable(m.fixtureId){mutableIntStateOf(goalsTotal)}
+ LaunchedEffect(goalsTotal,m.finished){if(goalsTotal>seenGoals||(m.finished&&seenGoals>=0)){haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)};seenGoals=if(m.finished)-1 else goalsTotal}
  Page(if(m.finished)"Abpfiff" else if(m.halfTime)m.breakType.label else if(m.incidentPause)"Spiel unterbrochen" else "Am Seitenrand","${m.weather.uppercase()} · ${m.attendance} ZUSCHAUER"){
   Scoreboard(w,m,h,a,running)
+  TeamTalkSection(w,vm)
   Section{
    if(!m.finished){
     if(m.halfTime)Action(MatchEngine.breakActionLabel(m),true){vm.secondHalf();userPaused=false}

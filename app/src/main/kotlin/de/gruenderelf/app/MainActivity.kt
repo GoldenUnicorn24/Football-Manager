@@ -22,6 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.*
 import de.gruenderelf.app.ui.*
+import de.gruenderelf.engine.BoardSystem
 import de.gruenderelf.engine.NotificationSystem
 
 class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState: Bundle?){super.onCreate(savedInstanceState);enableEdgeToEdge(statusBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),navigationBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT));setContent{GruenderelfRoot()}}}
@@ -39,7 +40,8 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
   return
  }
  LaunchedEffect(state.world?.user?.clubId){if(state.world!=null)startPage="start"}
- LaunchedEffect(state.message){state.message?.let{snack.showSnackbar(it);vm.clearMessage()}}
+ val haptic=androidx.compose.ui.platform.LocalHapticFeedback.current
+ LaunchedEffect(state.message){state.message?.let{haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress);snack.showSnackbar(it);vm.clearMessage()}}
  Surface(Modifier.fillMaxSize(),color=Ink){
   if(state.world==null)Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)){
    when(startPage){"create"->CreationScreen(vm,slots,state.busy){startPage="start"};"import"->SavesScreen(vm,slots,state){startPage="start"};else->StartScreen(vm,slots,last,state.busy,{startPage="create"},{startPage="import"})}
@@ -82,6 +84,10 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
   }
   state.error?.let{AlertDialog(onDismissRequest={vm.clearError()},title={Text("Das hat nicht geklappt",style=MaterialTheme.typography.headlineSmall)},text={Text(it,color=Muted)},confirmButton={Button({vm.clearError()},shape=RoundedCornerShape(12.dp),colors=ButtonDefaults.buttonColors(containerColor=Grass,contentColor=OnAccent)){Text("Verstanden",fontWeight=FontWeight.Bold)}},shape=RoundedCornerShape(26.dp),containerColor=PanelHigh)}
   if(!changelogDismissedThisSession&&changelogSeenVersion!=CHANGELOG_LOADING&&changelogSeenVersion!=WHATS_NEW_VERSION)WhatsNewDialog{changelogDismissedThisSession=true;vm.markChangelogSeen(WHATS_NEW_VERSION)}
+  state.world?.let{sw->
+   if(sw.life.board.dismissed&&sw.live==null)DismissalDialog(sw,state.busy){id->vm.action("Neuer Verein übernommen.",persistNow=true){BoardSystem.acceptOffer(it,id)}}
+   else if(sw.live==null)sw.life.seasonReview?.let{r->SeasonReviewDialog(r){vm.action{it.life.seasonReview=null}}}
+  }
   if(exitConfirm)Confirm("Zurück zum Start?","Deine Karriere wird vorher gespeichert.",{exitConfirm=false}){exitConfirm=false;vm.backToMenu()}
  }
 }
