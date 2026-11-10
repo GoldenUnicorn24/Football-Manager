@@ -113,26 +113,19 @@ fun unreadNews(w: World)=w.news.count{it.id>w.user.newsReadUpTo}
   Check(benchShort==0,if(benchShort==0)"Bank vollständig" else "Noch $benchShort Bankplatz/-plätze frei","Ersatzbank","kader"),
   Check(tired==0,if(tired==0)"Kader ist fit" else "$tired Spieler unter 65 % Fitness","Belastung","training")
  )
- val next=w.nextFixture()
- Surface(color=Panel,shape=RoundedCornerShape(CardRadius),border=BorderStroke(1.dp,Grass.copy(alpha=.35f)),modifier=Modifier.fillMaxWidth()){
-  Column(Modifier.background(Brush.verticalGradient(listOf(Grass.copy(alpha=.09f),Color.Transparent))).padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
-   Eyebrow("NÄCHSTER SCHRITT")
-   if(w.live!=null){
-    Text("Die Partie läuft noch.",style=MaterialTheme.typography.titleLarge,color=Chalk)
-    Action("Zur Live-Partie",onClick=onGame)
-    return@Column
-   }
-   checks.forEach{c->
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(enabled=!c.ok){onNavigate(c.route)}.padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){
-     Icon(if(c.ok)Icons.Filled.CheckCircle else Icons.Filled.Warning,contentDescription=if(c.ok)"erledigt" else "offen",tint=if(c.ok)Grass else Gold,modifier=Modifier.size(20.dp))
-     Text(c.title,Modifier.weight(1f),color=if(c.ok)Muted else Chalk,style=MaterialTheme.typography.bodyMedium)
-     if(!c.ok)Text(c.hint+" ›",color=Gold,style=MaterialTheme.typography.labelMedium)
+ // Nur zeigen, wenn vor dem Anpfiff wirklich etwas offen ist; zum Spiel führt die Spielkarte darunter.
+ val open=checks.filter{!it.ok}
+ if(w.live!=null||open.isEmpty())return
+ Surface(color=Panel,shape=RoundedCornerShape(CardRadius),border=BorderStroke(1.dp,Gold.copy(alpha=.35f)),modifier=Modifier.fillMaxWidth()){
+  Column(Modifier.padding(horizontal=16.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
+   Eyebrow("VOR DEM ANPFIFF",Gold)
+   open.forEach{c->
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable{onNavigate(c.route)}.padding(vertical=6.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){
+     Icon(Icons.Filled.Warning,contentDescription=null,tint=Gold,modifier=Modifier.size(20.dp))
+     Text(c.title,Modifier.weight(1f),color=Chalk,style=MaterialTheme.typography.bodyMedium)
+     Text(c.hint+" ›",color=Gold,style=MaterialTheme.typography.labelMedium)
     }
    }
-   if(next!=null){
-    val opp=w.clubs.getValue(if(next.homeId==w.user.clubId)next.awayId else next.homeId)
-    Action(if(checks.all{it.ok})"Weiter zum Anpfiff · ${opp.shortName}" else "Trotzdem zum Spiel · ${opp.shortName}",onClick=onGame)
-   }else Text("Kein Spiel angesetzt.",color=Muted)
   }
  }
 }

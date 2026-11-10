@@ -8,9 +8,12 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -27,6 +30,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -134,30 +138,60 @@ fun ratingColor(fraction: Float)=when{fraction<.4f->Clay;fraction<.65f->Gold;els
 @Composable fun PageFrame(transparent: Boolean=false,wide: Boolean=false,content: @Composable ColumnScope.()->Unit){
  Box(Modifier.fillMaxSize().background(if(transparent)Color.Transparent else Ink).drawBehind{
   val r=(size.width*1.1f).coerceAtLeast(1f)
-  drawRect(Brush.radialGradient(listOf(Grass.copy(alpha=.11f),Color.Transparent),center=Offset(size.width*.92f,-size.width*.08f),radius=r))
-  drawRect(Brush.radialGradient(listOf(Color(0xFF1B4A6B).copy(alpha=.10f),Color.Transparent),center=Offset(0f,size.height*.35f),radius=r*.8f))
+  drawRect(Brush.radialGradient(listOf(Grass.copy(alpha=.08f),Color.Transparent),center=Offset(size.width*.92f,-size.width*.08f),radius=r))
  },contentAlignment=Alignment.TopCenter){
-  Column(Modifier.widthIn(max=if(wide)1040.dp else 640.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=16.dp).padding(top=18.dp,bottom=32.dp),verticalArrangement=Arrangement.spacedBy(14.dp),content=content)
+  Column(Modifier.widthIn(max=if(wide)1040.dp else 640.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=16.dp).padding(top=16.dp,bottom=32.dp),verticalArrangement=Arrangement.spacedBy(16.dp),content=content)
  }
 }
 
 @Composable fun Eyebrow(text: String,color: Color=Grass){
- Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
-  Box(Modifier.width(14.dp).height(3.dp).background(color,CircleShape))
-  Text(text,color=color,style=MaterialTheme.typography.labelSmall,maxLines=2,overflow=TextOverflow.Ellipsis)
+ Text(text,color=color,style=MaterialTheme.typography.labelSmall,maxLines=2,overflow=TextOverflow.Ellipsis)
+}
+
+/** Zurück-Ziel für Unterseiten. Auf den Haupt-Tabs null – dann zeigt [Page] keinen Pfeil. */
+val LocalPageBack=staticCompositionLocalOf<(()->Unit)?>{null}
+
+@Composable fun Page(title: String,kicker: String="",wide: Boolean=false,content: @Composable ColumnScope.()->Unit){
+ val back=LocalPageBack.current
+ PageFrame(wide=wide){
+  Row(Modifier.fillMaxWidth().padding(top=4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
+   if(back!=null)Surface(onClick=back,shape=CircleShape,color=PanelHigh,contentColor=Chalk,border=BorderStroke(1.dp,Line),modifier=Modifier.size(40.dp)){
+    Box(contentAlignment=Alignment.Center){Icon(Icons.AutoMirrored.Filled.ArrowBack,contentDescription="Zurück",modifier=Modifier.size(20.dp))}
+   }
+   Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)){
+    if(kicker.isNotBlank())Eyebrow(kicker,if(UiBrand.bmwMode)Color(0xFF9BCBFF) else Grass)
+    Text(title,style=if(back!=null)MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineLarge,color=Chalk,maxLines=2,overflow=TextOverflow.Ellipsis)
+   }
+   if(UiBrand.bmwMode)MStripes()
+  }
+  content()
  }
 }
 
-@Composable fun Page(title: String,kicker: String="DEIN VEREIN. DEIN WEG.",wide: Boolean=false,content: @Composable ColumnScope.()->Unit){
- PageFrame(wide=wide){
-  Column(Modifier.padding(top=6.dp,bottom=4.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-   Eyebrow(kicker,if(UiBrand.bmwMode)Color(0xFF9BCBFF) else Grass)
-   Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-    Text(title,Modifier.weight(1f),style=MaterialTheme.typography.headlineLarge,color=Chalk)
-    if(UiBrand.bmwMode)MStripes()
+/** Ein Ziel der unteren Navigationsleiste. */
+data class NavTab(val route: String,val label: String,val icon: ImageVector,val badge: Int=0)
+
+/** Flache Navigationsleiste: Akzentstrich über dem aktiven Ziel statt Material-Pille. */
+@Composable fun BottomBar(tabs: List<NavTab>,selected: String,onSelect: (String)->Unit){
+ Surface(color=Panel,modifier=Modifier.fillMaxWidth()){
+  Column(Modifier.windowInsetsPadding(WindowInsets.navigationBars)){
+   HorizontalDivider(color=Line,thickness=1.dp)
+   Row(Modifier.fillMaxWidth().height(60.dp).selectableGroup()){
+    tabs.forEach{tab->
+     val active=tab.route==selected
+     Column(Modifier.weight(1f).fillMaxHeight().selectable(selected=active,role=Role.Tab,onClick={onSelect(tab.route)}),horizontalAlignment=Alignment.CenterHorizontally){
+      Box(Modifier.width(28.dp).height(3.dp).background(if(active)Grass else Color.Transparent,RoundedCornerShape(bottomStart=3.dp,bottomEnd=3.dp)))
+      Spacer(Modifier.height(7.dp))
+      Box{
+       Icon(tab.icon,contentDescription=null,tint=if(active)Grass else Muted,modifier=Modifier.size(24.dp))
+       if(tab.badge>0)Box(Modifier.align(Alignment.TopEnd).offset(x=10.dp,y=(-4).dp)){CountBadge(tab.badge)}
+      }
+      Spacer(Modifier.height(3.dp))
+      Text(tab.label,color=if(active)Chalk else Muted,style=MaterialTheme.typography.labelMedium,fontWeight=if(active)FontWeight.Bold else FontWeight.Normal,maxLines=1)
+     }
+    }
    }
   }
-  content()
  }
 }
 
@@ -182,7 +216,7 @@ fun ratingColor(fraction: Float)=when{fraction<.4f->Clay;fraction<.65f->Gold;els
 
 @Composable fun SectionTitle(title: String,trailing: (@Composable ()->Unit)?=null){
  Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){
-  Box(Modifier.width(if(UiBrand.bmwMode)3.dp else 4.dp).height(18.dp).background(if(UiBrand.bmwMode)SolidColor(BmwMBlue) else Brush.verticalGradient(listOf(GrassBright,Grass)),if(UiBrand.bmwMode)RectangleShape else CircleShape))
+  if(UiBrand.bmwMode)Box(Modifier.width(3.dp).height(18.dp).background(BmwMBlue))
   Text(title,Modifier.weight(1f),style=MaterialTheme.typography.titleLarge,color=Chalk)
   trailing?.invoke()
  }
@@ -190,7 +224,7 @@ fun ratingColor(fraction: Float)=when{fraction<.4f->Clay;fraction<.65f->Gold;els
 
 @Composable fun Section(title: String?=null,content: @Composable ColumnScope.()->Unit){
  Surface(color=Panel,shape=RoundedCornerShape(CardRadius),border=BorderStroke(1.dp,Line),modifier=Modifier.fillMaxWidth()){
-  Column(Modifier.background(Brush.verticalGradient(listOf(PanelHigh.copy(alpha=.6f),Panel.copy(alpha=0f)),endY=420f)).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+  Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
    if(title!=null)SectionTitle(title)
    content()
   }
@@ -212,7 +246,7 @@ fun ratingColor(fraction: Float)=when{fraction<.4f->Clay;fraction<.65f->Gold;els
 @Composable fun ListRow(title: String,subtitle: String?=null,icon: ImageVector?=null,tint: Color=Grass,badge: Int=0,onClick: (()->Unit)?=null){
  val base=Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
  Row((if(onClick!=null)base.clickable(onClick=onClick) else base).padding(horizontal=4.dp,vertical=8.dp).heightIn(min=44.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)){
-  if(icon!=null)Box(Modifier.size(40.dp).background(tint.copy(alpha=.13f),RoundedCornerShape(12.dp)).border(1.dp,tint.copy(alpha=.22f),RoundedCornerShape(12.dp)),contentAlignment=Alignment.Center){Icon(icon,contentDescription=null,tint=tint,modifier=Modifier.size(20.dp))}
+  if(icon!=null)Box(Modifier.size(40.dp).background(tint.copy(alpha=.13f),RoundedCornerShape(12.dp)),contentAlignment=Alignment.Center){Icon(icon,contentDescription=null,tint=tint,modifier=Modifier.size(20.dp))}
   Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)){
    Text(title,style=MaterialTheme.typography.titleMedium,color=Chalk)
    if(subtitle!=null)Text(subtitle,color=Muted,style=MaterialTheme.typography.bodySmall)
@@ -326,7 +360,7 @@ fun suitabilitySymbol(player: Player?,target: Position)=when{player==null->"–"
   }
  }else{
   Surface(onClick=onClick,enabled=enabled,shape=shape,color=Color.Transparent,contentColor=if(enabled)OnAccent else Faint,modifier=Modifier.fillMaxWidth()){
-   Box(Modifier.fillMaxWidth().heightIn(min=52.dp).background(if(enabled)Brush.horizontalGradient(listOf(Grass,GrassBright)) else SolidColor(PanelHigh)).padding(horizontal=16.dp,vertical=13.dp),contentAlignment=Alignment.Center){
+   Box(Modifier.fillMaxWidth().heightIn(min=52.dp).background(if(enabled)Grass else PanelHigh).padding(horizontal=16.dp,vertical=13.dp),contentAlignment=Alignment.Center){
     Text(text,style=MaterialTheme.typography.labelLarge.copy(fontWeight=FontWeight.Bold),textAlign=TextAlign.Center)
    }
   }

@@ -62,32 +62,31 @@ import java.util.Locale
  var developerGate by rememberSaveable{mutableStateOf(false)}
  val developerConfigured by vm.developerPasswordConfigured.collectAsState()
  val latest=slots.firstOrNull{it.slot==lastSlot}?:slots.maxByOrNull{it.updatedAt}
+ val others=slots.filter{it.slot!=latest?.slot}.sortedBy{it.slot}
  Box(Modifier.fillMaxSize().background(Ink)){
   NightStadium(Modifier.fillMaxWidth().height(380.dp))
   StadiumScrim(Modifier.fillMaxWidth().height(380.dp))
   PageFrame(transparent=true){
-   Spacer(Modifier.height(268.dp))
-   Column(verticalArrangement=Arrangement.spacedBy(6.dp)){
-    Eyebrow("VOM HARTPLATZ NACH GANZ OBEN")
-    Text("GRÜNDERELF",style=MaterialTheme.typography.displaySmall,color=Chalk)
-    Text("Gründe deinen Club. Stell dich selbst auf. Mach aus einer Mannschaft einen Verein, an den man sich erinnert.",color=Muted,style=MaterialTheme.typography.bodyLarge)
-   }
+   Spacer(Modifier.height(262.dp))
+   Text("GRÜNDERELF",style=MaterialTheme.typography.displaySmall,color=Chalk)
    if(latest!=null){
     Surface(color=Panel,shape=RoundedCornerShape(22.dp),border=BorderStroke(1.dp,Grass.copy(alpha=.35f)),modifier=Modifier.fillMaxWidth()){
-     Column(Modifier.background(Brush.verticalGradient(listOf(Grass.copy(alpha=.10f),Color.Transparent))).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-      Eyebrow("ZULETZT GESPIELT · SLOT ${latest.slot}")
-      Column(verticalArrangement=Arrangement.spacedBy(1.dp)){SaveInfo(latest)}
+     Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
+      Row(verticalAlignment=Alignment.CenterVertically){
+       Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(1.dp)){SaveInfo(latest)}
+       IconButton(onClick={delete=latest.slot},enabled=!busy,modifier=Modifier.size(40.dp)){Icon(Icons.Filled.Delete,contentDescription="Slot ${latest.slot} löschen",tint=if(busy)Faint else Muted)}
+      }
       Action("Weiterspielen",!busy){vm.load(latest.slot)}
      }
     }
    }
-   Action("Neue Karriere",!busy,secondary=latest!=null,onClick=onNew)
-   Action("Spielstand importieren",!busy,true,onImport)
-   SectionTitle("Deine Vereinsgeschichten",trailing={Text("${slots.size} / 5",color=Muted,style=MaterialTheme.typography.labelLarge)})
-   for(slot in 1..5){val s=slots.firstOrNull{it.slot==slot};SlotCard(slot,s,busy,s!=null&&s.slot==latest?.slot,{vm.load(slot)},{delete=slot})}
-   Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
-    Icon(Icons.Filled.Lock,contentDescription=null,tint=Faint,modifier=Modifier.size(16.dp))
-    Text("Offline · ohne Konto · ohne Werbung. Für einen Gerätewechsel kannst du Spielstände als Datei exportieren.",color=Faint,style=MaterialTheme.typography.bodySmall)
+   Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
+    Box(Modifier.weight(1f)){Action("Neue Karriere",!busy,secondary=latest!=null,onClick=onNew)}
+    Box(Modifier.weight(1f)){Action("Importieren",!busy,true,onImport)}
+   }
+   if(others.isNotEmpty()){
+    SectionTitle("Weitere Spielstände")
+    others.forEach{s->SlotCard(s.slot,s,busy,false,{vm.load(s.slot)},{delete=s.slot})}
    }
    // Versionszeile: 7× antippen öffnet den Entwicklerzugang (BMW FC).
    Text("GRÜNDERELF · ${de.gruenderelf.app.BuildConfig.VERSION_NAME}",color=Faint,style=MaterialTheme.typography.labelSmall,modifier=Modifier.fillMaxWidth().clickable{
@@ -104,16 +103,20 @@ import java.util.Locale
  val export=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")){it?.let{uri->vm.exportTo(uri)}}
  val importer=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){it?.let{uri->vm.importFrom(uri,slot)}}
  fun openImport(){importer.launch(arrayOf("application/octet-stream","application/json","*/*"))}
- Page("Spielstände","FÜNF PLÄTZE FÜR DEINE GESCHICHTEN"){
-  state.world?.let{w->Section("Aktive Karriere"){
+ CompositionLocalProvider(LocalPageBack provides onBack){Page("Spielstände"){
+  state.world?.let{w->Section{
    Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)){
     Crest(w.club().logo,w.club().primary,w.club().secondary,Modifier.size(52.dp))
-    Column(Modifier.weight(1f)){Text(w.club().name,style=MaterialTheme.typography.titleLarge,maxLines=1,overflow=TextOverflow.Ellipsis);Text("Aktuell in Slot ${state.slot}",color=Muted,style=MaterialTheme.typography.bodySmall)}
+    Column(Modifier.weight(1f)){Text(w.club().name,style=MaterialTheme.typography.titleLarge,maxLines=1,overflow=TextOverflow.Ellipsis);Text("Slot ${state.slot}",color=Muted,style=MaterialTheme.typography.bodySmall)}
    }
-   Action("Jetzt speichern",!state.busy){vm.saveAs(state.slot)}
+   Action("Speichern",!state.busy){vm.saveAs(state.slot)}
   }}
-  Section("Ziel auswählen"){Pick("Speicherplatz",slot,(1..5).toList(),{i->"Slot $i · ${slots.firstOrNull{it.slot==i}?.clubName?:"Leer"}"}){slot=it};if(state.world!=null)Action("Speichern unter Slot $slot",!state.busy){if(slots.any{it.slot==slot}&&slot!=state.slot)confirm="save" else vm.saveAs(slot)};Action("Datei in Slot $slot importieren",!state.busy,true){if(slots.any{it.slot==slot})confirm="import" else openImport()};state.world?.let{w->Action("Als .gruenderelf exportieren",!state.busy,true){export.launch("Gruenderelf-${w.calendar.season}-Spieltag-${w.calendar.matchday}.gruenderelf")}}}
-  Section("Speicherverhalten"){Text("Nach einem bestätigten Spieltag wird die gesamte Welt automatisch gespeichert. Aufstellung, Training und Ausbauten werden bei einer Änderung gesichert.",style=MaterialTheme.typography.bodyMedium);Text("Laufende Spiele werden etwa alle 15 Minuten und bei Halbzeit, Unterbrechungen und Abpfiff gesichert. Exportdateien vor dem Deinstallieren aufbewahren.",color=Muted,style=MaterialTheme.typography.bodySmall)};Action("Zurück",secondary=true,onClick=onBack)
- }
+  Section(if(state.world!=null)"Anderer Slot & Datei" else "Datei importieren"){
+   Pick("Speicherplatz",slot,(1..5).toList(),{i->"Slot $i · ${slots.firstOrNull{it.slot==i}?.clubName?:"Leer"}"}){slot=it}
+   if(state.world!=null&&slot!=state.slot)Action("In Slot $slot speichern",!state.busy,true){if(slots.any{it.slot==slot})confirm="save" else vm.saveAs(slot)}
+   Action("Datei in Slot $slot importieren",!state.busy,true){if(slots.any{it.slot==slot})confirm="import" else openImport()}
+   state.world?.let{w->Action("Als Datei exportieren",!state.busy,true){export.launch("Gruenderelf-${w.calendar.season}-Spieltag-${w.calendar.matchday}.gruenderelf")}}
+  }
+ }}
  confirm?.let{action->Confirm("Slot $slot überschreiben?","Die bisherige Karriere in diesem Slot wird ersetzt. Beim Dateiimport nur, wenn die Datei gültig ist.",{confirm=null}){confirm=null;if(action=="save")vm.saveAs(slot)else openImport()}}
 }

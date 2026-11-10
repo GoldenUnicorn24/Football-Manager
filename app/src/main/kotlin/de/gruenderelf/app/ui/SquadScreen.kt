@@ -75,14 +75,13 @@ private fun suitabilityColor(p: Player?,target: Position)=when{p==null->Muted;p.
 }
 
 @Composable fun SquadScreen(w: World,vm: GameViewModel,onProfile: (Int)->Unit){val c=w.club();var slot by remember{mutableStateOf<Int?>(null)};var tacticPreset by remember{mutableStateOf("Individuell")};val slots=Formations.positions(c.tactics.formation)
- Page("Die Mannschaft","${c.shortName} · KADER & TAKTIK"){
+ Page("Kader"){
   Section("Aufstellung"){
    Pick("Formation",c.tactics.formation,Formations.all.keys.toList()){v->vm.action{require(it.live==null){"Formation nach dem Spiel ändern."};it.club().tactics.formation=v;WorldFactory.autoLineup(it)}}
    Pitch(w){slot=it}
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){LegendDot(Grass,"✓ Hauptposition");LegendDot(Blue,"≈ Nebenposition")}
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){LegendDot(Gold,"~ Spielbar");LegendDot(Clay,"✕ Unpassend")}
    Action("Beste Elf nach Position & Fitness",w.live==null){vm.action{WorldFactory.autoLineup(it)}}
-   Text("Jeder Platz zeigt die Stärke des Spielers genau auf dieser Position. Antippen zum Umstellen.",color=Faint,style=MaterialTheme.typography.bodySmall)
   }
 
   val current=slots.mapIndexedNotNull{i,pos->c.tactics.xi.getOrNull(i)?.let{w.players[it]}?.let{Triple(it,pos,it.ratingAt(pos))}}
@@ -101,7 +100,6 @@ private fun suitabilityColor(p: Player?,target: Position)=when{p==null->Muted;p.
    return "${p.name} · ${p.position.name} · ${p.ca}"
   }
   Section("Rollen & Standards"){
-   Text("Lege fest, wer Verantwortung übernimmt und wen die Mannschaft im Angriff gezielt sucht.",color=Muted,style=MaterialTheme.typography.bodySmall)
    Pick("Kapitän",c.tactics.captainId,roleIds,{roleName(it)}){v->vm.action{require(it.live==null){"Rollen erst nach dem Spiel ändern."};it.club().tactics.captainId=v}}
    Pick("Zielspieler",c.tactics.targetPlayerId,targetIds,{roleName(it,"Kein fester Zielspieler")}){v->vm.action{require(it.live==null){"Rollen erst nach dem Spiel ändern."};it.club().tactics.targetPlayerId=v}}
    Text("Wird im letzten Drittel häufiger gesucht – mehr Abschlüsse, aber keine Torgarantie.",color=Muted,style=MaterialTheme.typography.bodySmall)
@@ -110,11 +108,9 @@ private fun suitabilityColor(p: Player?,target: Position)=when{p==null->Muted;p.
    Pick("Freistöße",c.tactics.freeKickTakerId,roleIds,{roleName(it)}){v->vm.action{require(it.live==null){"Standards erst nach dem Spiel ändern."};it.club().tactics.freeKickTakerId=v}}
    Pick("Ecken links",c.tactics.cornerLeftTakerId,roleIds,{roleName(it)}){v->vm.action{require(it.live==null){"Standards erst nach dem Spiel ändern."};it.club().tactics.cornerLeftTakerId=v}}
    Pick("Ecken rechts",c.tactics.cornerRightTakerId,roleIds,{roleName(it)}){v->vm.action{require(it.live==null){"Standards erst nach dem Spiel ändern."};it.club().tactics.cornerRightTakerId=v}}
-   Text("Ist ein eingeteilter Spieler nicht auf dem Platz, übernimmt automatisch der passendste Mitspieler.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
 
   Section("Ersatzbank auswählen · ${c.tactics.bench.size} / 7"){
-   Text("Du bestimmst die sieben Ersatzspieler selbst. Entferne bei voller Bank zuerst einen Spieler und wähle danach den Ersatz.",color=Muted,style=MaterialTheme.typography.bodySmall)
    val benchCandidates=w.squad().filter{!it.youth&&!it.retired&&it.id !in c.tactics.xi}.sortedWith(compareBy<Player>{it.position.ordinal}.thenByDescending{it.ca})
    benchCandidates.forEach{p->
     val selected=p.id in c.tactics.bench
@@ -124,7 +120,6 @@ private fun suitabilityColor(p: Player?,target: Position)=when{p==null->Muted;p.
      TextButton({onProfile(p.id)}){Text("Profil")}
     }
    }
-   if(c.tactics.bench.size<7)Text("Noch ${7-c.tactics.bench.size} Bankplatz/-plätze frei. Beim Spielstart werden nur fehlende Plätze automatisch aufgefüllt.",color=Gold,style=MaterialTheme.typography.bodySmall)
   }
   Section("Spielidee"){
    Pick("Taktik-Vorlage",tacticPreset,tacticPresets,{it}){v->tacticPreset=v;if(v!="Individuell")vm.action{require(it.live==null){"Taktik nach dem Spiel ändern."};applyTacticPreset(it.club().tactics,v)}}
@@ -139,7 +134,6 @@ private fun suitabilityColor(p: Player?,target: Position)=when{p==null->Muted;p.
      TextButton(onClick={vm.action("$plan geladen."){world->require(world.live==null){"Taktik erst nach dem Spiel laden."};val saved=world.savedTactics[plan]?:return@action;val changed=world.club().tactics.formation!=saved.formation;applySavedTactic(world.club().tactics,saved);if(changed)WorldFactory.autoLineup(world)}},enabled=plan in w.savedTactics){Text("Laden")}
     }
    }
-   Text("Gespeichert werden Formation und Spielidee. Bei einer anderen Formation stellt der Co-Trainer die Elf positionsgerecht neu auf.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
   Section("Alle Spieler"){w.squad().filter{!it.youth}.sortedWith(compareBy<Player>{it.position.ordinal}.thenByDescending{it.ca}).forEach{PlayerRow(it,w,onProfile)}}
  }
@@ -148,10 +142,10 @@ private fun suitabilityColor(p: Player?,target: Position)=when{p==null->Muted;p.
 }
 
 @Composable fun ProfileScreen(w: World,id: Int,vm: GameViewModel,onBack: ()->Unit){val p=w.players[id]?:return;var release by remember{mutableStateOf(false)}
- Page(p.name,if(id==w.user.playerId)"DU · SPIELERTRAINER" else "SPIELERPROFIL"){
+ Page(p.name,if(id==w.user.playerId)"DU · SPIELERTRAINER" else ""){
   Section{Row(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically){PlayerPortrait(p.appearance,w.clubs[p.clubId]?.kits?.home?:w.club().kits.home,Modifier.size(84.dp));Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)){Text("${p.position.label} · Nr. ${p.number}",style=MaterialTheme.typography.titleMedium,color=Chalk);Text("${w.calendar.season-p.birthYear} Jahre · ${p.nationality}",color=Muted,style=MaterialTheme.typography.bodySmall);Text("${p.height} cm · ${p.weight} kg · ${p.foot.label}",color=Muted,style=MaterialTheme.typography.bodySmall)};RatingBadge("${p.ca}",Grass,56.dp)};Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){StatTile("Einsätze","${p.stats.appearances}",Modifier.weight(1f));StatTile("Tore","${p.stats.goals}",Modifier.weight(1f));StatTile("Vorlagen","${p.stats.assists}",Modifier.weight(1f))};Meter("Fitness",p.fitness.roundToInt());Meter("Moral",p.morale);Meter("Schärfe",p.sharpness);if(p.injuryWeeks>0)Text("${p.injury} · ${p.injuryWeeks} Wochen",color=Clay);if(p.unavailableWeeks>0)Text("${p.unavailableReason?.label} · ${p.unavailableWeeks} Spieltag(e)",color=Clay)}
   Section("Positionsprofil"){Position.entries.sortedByDescending{p.ratingAt(it)}.take(6).forEach{pos->Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Text("${pos.label} · ${p.roleAt(pos)}",color=if(pos==p.position)Chalk else Muted);SuitabilityBadge(p,pos)}}}
-  if(p.clubId==w.user.clubId)Section("Matchrolle"){Pick("Rolle",p.role,PlayerRole.entries.toList(),{it.label}){v->vm.action{require(it.live==null){"Rolle erst nach dem Spiel ändern."};it.players.getValue(id).role=v}};Text("Die Rolle beeinflusst Entscheidungswege der Match-KI und nicht nur die angezeigte Position.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+  if(p.clubId==w.user.clubId)Section("Matchrolle"){Pick("Rolle",p.role,PlayerRole.entries.toList(),{it.label}){v->vm.action{require(it.live==null){"Rolle erst nach dem Spiel ändern."};it.players.getValue(id).role=v}}}
   if(p.clubId==w.user.clubId&&!p.youth)Section("Individuelle Anweisungen"){
    val active=w.club().tactics.instructions[p.id]?:emptyList();Text("${active.size} / 3 aktiv · wirken direkt auf Laufwege, Pressing, Passrisiko, Abschlusswahl und Fitness.",color=Muted,style=MaterialTheme.typography.bodySmall)
    PlayerInstruction.entries.forEach{ins->Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(ins.label);Text(when(ins){PlayerInstruction.OVERLAP->"Mehr Vorstöße über außen, höhere Belastung.";PlayerInstruction.CUT_INSIDE->"Flügel zieht in Abschlussräume.";PlayerInstruction.RUN_IN_BEHIND->"Mehr Tiefenläufe, aber erhöhtes Abseitsrisiko.";PlayerInstruction.HOLD_POSITION->"Mehr Restverteidigung, weniger Vorwärtsdrang.";PlayerInstruction.PRESS_MORE->"Aggressiver gegen den Ball, kostet Fitness.";PlayerInstruction.PRESS_LESS->"Kräfte sparen und Raum halten.";PlayerInstruction.TIGHT_MARKING->"Engere Zuordnung und mehr Defensivdruck.";PlayerInstruction.RISKY_PASSES->"Mehr kreative Vertikalpässe, aber zusätzliche Fehlpässe.";PlayerInstruction.SHOOT_MORE->"Wird häufiger als Schütze ausgewählt."},color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(ins in active,{enabled->vm.action{TacticalInstructionSystem.set(it,p.id,ins,enabled)}},enabled=w.live==null&&(ins in active||active.size<3))}}
@@ -164,13 +158,11 @@ private fun suitabilityColor(p: Player?,target: Position)=when{p==null->Muted;p.
    val promiseText=when{share+0.05>=target->"Versprechen aktuell erfüllt";share+0.20>=target->"Spielzeit knapp unter Erwartung";else->"Spielzeit deutlich unter Versprechen"}
    Pick("Versprochene Kaderrolle",p.promisedRole,SquadRole.entries.toList(),{it.label}){newRole->vm.action("Kaderrolle mit ${p.lastName} besprochen."){world->require(world.live==null){"Rollenversprechen erst nach dem Spiel ändern."};val q=world.players.getValue(id);val old=q.promisedRole;if(newRole!=old){q.promisedRole=newRole;q.morale=(q.morale+when{newRole.ordinal<old.ordinal->2;newRole.ordinal>old.ordinal->-4;else->0}).coerceIn(5,100);world.club().dynamics.hierarchyStability=(world.club().dynamics.hierarchyStability+when{newRole.ordinal<old.ordinal->1;newRole.ordinal>old.ordinal->-2;else->0}).coerceIn(0,100)}}}
    Text("$promiseText · ${p.stats.appearances} Einsätze in $seniorMatches Pflichtspielen",color=if(share+0.05>=target)Grass else if(share+0.20>=target)Gold else Clay,style=MaterialTheme.typography.bodySmall)
-   Text("Nicht eingehaltene Spielzeitversprechen drücken Moral, Beziehung und Hierarchie und können Wechselwünsche auslösen.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
   Section("Sichtbare Attribute"){p.attributes.values().forEach{(label,value)->Meter(label,value,PLAYER_RATING_MAX)};if(p.attributes.values().values.any{it>99})Text("Elite-Skala 100–150 · Fortschritt über 99 entsteht nur durch Spezialprogramme.",color=if(w.developer.enabled)Color(0xFF9BCBFF) else Grass,style=MaterialTheme.typography.bodySmall)}
   Section("Einschätzung"){Text(if(w.user.difficulty==Difficulty.HARDCORE)"Potenzial wird auf dieser Schwierigkeit nicht angezeigt." else if(w.user.difficulty==Difficulty.SANDBOX)"Sandbox-Spielerwerte sind frei gesetzt. Geschätztes Potenzial: ${p.hidden.potential}" else "Geschätztes Potenzial: ${if(w.user.difficulty==Difficulty.CASUAL)p.hidden.potential.toString() else "${(p.hidden.potential-5).coerceAtLeast(p.ca)}–${(p.hidden.potential+5).coerceAtMost(PLAYER_RATING_MAX)}"}");Text("Form ${dec(p.form)} · ${p.stats.appearances} Einsätze · ${p.stats.minutes} Minuten",color=Muted);Text("Spielertyp: ${p.personalityType(w.calendar.season).label} · Matchrolle: ${p.effectiveRole().label}",color=Gold);if(p.youth){Text("${p.youthSquad.label} · Entwicklung: ${p.youthProfile.path.label} · Lernfähigkeit ${p.youthProfile.learning} · Profibereitschaft ${YouthEngine.readiness(w,p)}/100",color=Muted);Text("Nachwuchs: ${p.youthTeamStats.appearances} Sp · ${p.youthTeamStats.goals} Tore · ${p.youthTeamStats.assists} Vorlagen · Ø ${dec(p.youthTeamStats.averageRating)}",color=Gold);Text(YouthEngine.riskLabel(w,p),color=if(YouthEngine.readiness(w,p)>=65)Grass else Clay)}}
   if(id!=w.user.playerId&&p.clubId==w.user.clubId)Section("Unter vier Augen"){val talk=p.lastTalkWeek!=w.calendar.absoluteWeek;Action("Mehr zeigen",talk,true){vm.action{ClubActions.talk(it,id,0)}};Action("Chance geben",talk,true){vm.action{ClubActions.talk(it,id,1)}};Action("Ehrlich sein",talk,true){vm.action{ClubActions.talk(it,id,2)}};if(!talk)Text("Ihr habt diese Woche bereits gesprochen.",color=Muted);Action("Gehen lassen",w.live==null,true){release=true}}
   if(p.youth)Section("Nachwuchsteam"){
-   Text("${p.youthSquad.label} ist sein fester Kader. Du kannst ihn dauerhaft hochziehen oder nur für das nächste Profispiel nominieren.",color=Muted,style=MaterialTheme.typography.bodySmall)
    if(p.youthSquad==YouthSquad.U19)Action("In die U23 verschieben",w.live==null,true){vm.action{YouthCompetitionSystem.move(it,id,YouthSquad.U23)}} else if(w.calendar.season-p.birthYear<=19)Action("Zur U19 verschieben",w.live==null,true){vm.action{YouthCompetitionSystem.move(it,id,YouthSquad.U19)}}
    Action("Nur für das nächste Profispiel",w.live==null,true){vm.action{YouthCompetitionSystem.temporaryCallUp(it,id)}}
    Action("Dauerhaft in den Profikader hochziehen",w.live==null){vm.action{ClubActions.promote(it,id)}}
@@ -180,11 +172,10 @@ private fun suitabilityColor(p: Player?,target: Position)=when{p==null->Muted;p.
     Action("Sofort in den Nachwuchs zurück",w.live==null,true){vm.action{YouthCompetitionSystem.returnTemporary(it,id,true)}}
     Action("Dauerhaft im Profikader behalten",w.live==null){vm.action{YouthCompetitionSystem.makeTemporaryPermanent(it,id)}}
    }else{
-    Text("Junge Profis können gezielt in U19/U23 wechseln. Dort erhalten sie Nachwuchsspielpraxis und zusätzlichen Academy-Entwicklungsfortschritt.",color=Muted,style=MaterialTheme.typography.bodySmall)
     if(w.calendar.season-p.birthYear<=19)Action("In die U19 schicken",w.live==null,true){vm.action{YouthCompetitionSystem.assignToYouth(it,id,YouthSquad.U19)}}
     Action("In die U23 schicken",w.live==null,true){vm.action{YouthCompetitionSystem.assignToYouth(it,id,YouthSquad.U23)}}
    }
-  };Action("Zurück",secondary=true,onClick=onBack)
+  };if(LocalPageBack.current==null)Action("Zurück",secondary=true,onClick=onBack)
  }
  if(release)Confirm("${p.lastName} freistellen?","Er verlässt deinen Verein ablösefrei.",{release=false}){release=false;vm.action{ClubActions.release(it,id)}}
 }

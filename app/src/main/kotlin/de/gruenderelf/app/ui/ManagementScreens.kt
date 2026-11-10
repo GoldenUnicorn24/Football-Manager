@@ -2,6 +2,7 @@ package de.gruenderelf.app.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,26 +25,22 @@ import androidx.compose.ui.unit.dp
 import de.gruenderelf.app.GameViewModel
 import de.gruenderelf.engine.*
 
-@Composable fun MoreScreen(newScoutReports:Int,unreadNews:Int=0,onNavigate: (String)->Unit,onMenu: ()->Unit){Page("Hinter der Bande","VEREIN & VERANTWORTUNG"){
+@Composable fun MoreScreen(newScoutReports:Int,unreadNews:Int=0,onNavigate: (String)->Unit,onMenu: ()->Unit){Page("Mehr"){
  Section("Verein"){
   ListRow("Posteingang",if(unreadNews>0)"$unreadNews ungelesene Meldungen" else "Alle Meldungen gelesen",Icons.Filled.Email,Gold,unreadNews){onNavigate("posteingang")}
-  ListRow("Verein, Finanzen & Partner","Stadion, Ausbauten, Sponsoren",Icons.Filled.Place){onNavigate("verein")}
-  ListRow("Training & Co-Trainer","Wochenplan, Intensität, Eliteentwicklung",Icons.Filled.Build){onNavigate("training")}
+  ListRow("Verein & Finanzen","Stadion, Ausbauten, Sponsoren",Icons.Filled.Place){onNavigate("verein")}
+  ListRow("Training","Wochenplan, Co-Trainer, Eliteentwicklung",Icons.Filled.Build){onNavigate("training")}
   ListRow("Transfers & Jugend",if(newScoutReports>0)"$newScoutReports neue Scoutberichte" else "Scouting, Verhandlungen, U19 & U23",Icons.Filled.ShoppingCart,Blue,newScoutReports){onNavigate("transfers")}
-  ListRow("Deine Karriere","Saisonziele, Rekorde, Vereinsgeschichte",Icons.Filled.Star,Gold){onNavigate("karriere")}
+  ListRow("Karriere","Saisonziele, Rekorde, Vereinsgeschichte",Icons.Filled.Star,Gold){onNavigate("karriere")}
  }
  Section("App"){
-  ListRow("What's New","Die Neuerungen dieser Version",Icons.Filled.Notifications,Grass){onNavigate("whatsnew")}
   ListRow("Speicherstände","Speichern, importieren, exportieren",Icons.Filled.Lock,Muted){onNavigate("speichern")}
   ListRow("Einstellungen","Match-Ansicht und Sounds",Icons.Filled.Settings,Muted){onNavigate("einstellungen")}
   ListRow("Editor","Ligen, Vereine und Spieler umbenennen",Icons.Filled.Edit,Muted){onNavigate("editor")}
   ListRow("Hilfe & Tutorial","Manager-Handbuch",Icons.Filled.Info,Muted){onNavigate("hilfe")}
  }
  Action("Speichern & zum Startbildschirm",secondary=true,onClick=onMenu)
- Column(Modifier.fillMaxWidth(),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(2.dp)){
-  Text("GRÜNDERELF · ${de.gruenderelf.app.BuildConfig.VERSION_NAME}",color=Faint,style=MaterialTheme.typography.labelSmall)
-  Text("Offline. Ohne Werbung. Ohne Käufe.",color=Faint,style=MaterialTheme.typography.bodySmall)
- }
+ Text("GRÜNDERELF · ${de.gruenderelf.app.BuildConfig.VERSION_NAME} · Neuerungen",color=Faint,style=MaterialTheme.typography.labelSmall,textAlign=androidx.compose.ui.text.style.TextAlign.Center,modifier=Modifier.fillMaxWidth().clickable{onNavigate("whatsnew")}.padding(vertical=10.dp))
 }}
 
 private val weekDays=listOf("Mo","Di","Mi","Do","Fr","Sa","So")
@@ -86,7 +83,7 @@ private fun unitColor(u: UnitType)=when{u==UnitType.OFF||u==UnitType.RECOVERY->B
  var playerId by remember{mutableIntStateOf(w.user.playerId)};var focus by remember{mutableStateOf(Focus.FINISHING)}
  var intensivePlayerId by rememberSaveable{mutableIntStateOf(w.user.playerId)};var intensiveFocus by rememberSaveable{mutableStateOf(Focus.TECHNIQUE)};var intensiveConfirm by remember{mutableStateOf<Int?>(null)}
  var masterclassPlayerId by rememberSaveable{mutableIntStateOf(w.user.playerId)};var masterclassConfirm by remember{mutableStateOf<Int?>(null)}
- Page("Training & Co-Trainer","PLANUNG · ENTWICKLUNG · DELEGATION"){
+ Page("Training"){
   Section("Co-Trainer-Automatik"){
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Profikader automatisch trainieren");Text("Der Co-Trainer plant Woche, Intensität, Gegnerfokus und individuelle Schwerpunkte.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(assistant.autoSeniorTraining,{v->vm.action{it.assistantCoach.autoSeniorTraining=v}})}
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Jugend automatisch entwickeln");Text("Seniortraining, Mentoren und Extra-Foki werden nach Reife und Risiko dosiert.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(assistant.autoYouthTraining,{v->vm.action{it.assistantCoach.autoYouthTraining=v}})}
@@ -112,7 +109,6 @@ private fun unitColor(u: UnitType)=when{u==UnitType.OFF||u==UnitType.RECOVERY->B
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Geheimtraining");Text("Vor Derby/Pokal: mehr Fokus, aber zusätzliche Belastung.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(w.training.secretSession,{v->vm.action{it.training.secretSession=v;it.club().dynamics.opponentPrep=(it.club().dynamics.opponentPrep+if(v)4 else -2).coerceIn(0,100);it.club().dynamics.fatigueLoad=(it.club().dynamics.fatigueLoad+if(v)3 else 0).coerceIn(0,100)}})}
   }
   Section("Intensivtraining & Eliteentwicklung"){
-   Text("Normales Training endet praktisch bei Rating 99. Werte bis 150 sind für jeden Spieler möglich, aber nur über lange, teure Intensiv- und Potenzialblöcke mit Elite-Einrichtungen.",color=Muted)
    val candidates=w.squad().filter{!it.retired}.sortedBy{it.name};if(candidates.isNotEmpty()){val selected=intensivePlayerId.takeIf{id->candidates.any{it.id==id}}?:candidates.first().id;val p=w.players.getValue(selected);Pick("Spieler",selected,candidates.map{it.id},{w.players.getValue(it).name}){intensivePlayerId=it};Pick("Schwerpunkt",intensiveFocus,Focus.entries.toList(),{it.label}){intensiveFocus=it};Metric("Gesamtstärke","${p.ca} / $PLAYER_RATING_MAX");Metric("Entwicklungsgrenze","${p.hidden.potential} / $PLAYER_RATING_MAX");val reason=IntensiveTrainingSystem.reason(w,selected);Action("Intensivprogramm · ${IntensiveTrainingSystem.duration(w,p)} Wochen · ${euros(IntensiveTrainingSystem.cost(w,p))}",reason==null){intensiveConfirm=selected};if(reason!=null)Text(reason,color=Muted,style=MaterialTheme.typography.bodySmall);val potentialReason=IntensiveTrainingSystem.potentialReason(w,selected);Action("Potenzialprogramm · ${IntensiveTrainingSystem.potentialDuration(w,p)} Wochen · ${euros(IntensiveTrainingSystem.potentialCost(w,p))}",potentialReason==null,true){vm.action("Potenzialtraining gestartet."){IntensiveTrainingSystem.startPotential(it,selected,intensiveFocus)}};Text(if(p.hidden.potential>=99)"Elitebereich 100–150: ein kompletter Spezialblock hebt die Entwicklungsgrenze höchstens um 1. Je höher das Niveau, desto länger und teurer wird jeder weitere Schritt." else "Bis 99 bleibt die Entwicklung schneller. Danach gelten Elite-Anforderungen an Trainingszentrum, Kraftraum, Medizin, Staff und Professionalität.",color=if(p.hidden.potential>=99)Gold else Muted,style=MaterialTheme.typography.bodySmall);if(potentialReason!=null)Text(potentialReason,color=Muted,style=MaterialTheme.typography.bodySmall)}
    if(w.intensiveTraining.isNotEmpty()){HorizontalDivider();w.intensiveTraining.forEach{pr->val p=w.players[pr.playerId];Text("${p?.name?:"Spieler"} · ${pr.focus.label}",style=MaterialTheme.typography.titleMedium);Text("Noch ${pr.weeksLeft} von ${pr.totalWeeks} Wochen · ${if(pr.raisesPotential)"Potenzialförderung" else "Attributförderung"} · Fortschritt ${(pr.progress*100).toInt()} %",color=Grass)}}
   }
@@ -135,14 +131,13 @@ private fun unitColor(u: UnitType)=when{u==UnitType.OFF||u==UnitType.RECOVERY->B
 
 fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschauernachfrage. Besuch bleibt durch Kapazität und Wetter begrenzt.";Facility.ARTIFICIAL->"Ersetzt Hartplatz durch Kunstrasen. Platzqualität steigt mindestens auf 85.";Facility.PITCH->"Bessere Ballzirkulation und weniger Belastung. Ab Stufe 100 wird jeder Ausbau kleiner und deutlich teurer.";Facility.TRAINING->"Höhere Trainingswirkung. Stufe 105 ist Voraussetzung für Eliteentwicklung über Rating 99.";Facility.GYM->"Steigert physische Trainingswirkung. Stufe 105 ist Voraussetzung für Eliteentwicklung über Rating 99.";Facility.MEDICINE->"Weniger Verletzungen und bessere Regeneration. Stufe 105 ist Voraussetzung für Eliteentwicklung über Rating 99.";Facility.CABIN->"Mehr Fitnessregeneration und professionellere Spieltagsabläufe.";Facility.STAND->"Bessere Stadioninfrastruktur und zusätzliche Sitzplatzqualität.";Facility.CAPACITY->"Mehr Plätze für zahlende Zuschauer. Erweiterung skaliert mit der Liga.";Facility.CLUBHOUSE->"Stärkt Moral, Mitgliederbindung und professionelle Vereinsstrukturen.";Facility.YOUTH->"Verbessert Nachwuchsentwicklung. Eliteausbau über 100 wird zunehmend teuer und langsam."}
 @Composable fun ClubScreen(w: World,vm: GameViewModel,onSaves: ()->Unit){val c=w.club();val s=c.stadium;var confirm by remember{mutableStateOf<Facility?>(null)}
- Page(c.name,"VEREIN · WIRTSCHAFT · PARTNER"){
-  Section{Row(horizontalArrangement=Arrangement.spacedBy(18.dp),verticalAlignment=Alignment.CenterVertically){Crest(c.logo,c.primary,c.secondary,Modifier.size(80.dp));Column{Text(if(w.privateTopClubMode&&w.leagues.size==5)"${c.city} · ${WorldFactory.leagueName(w,c.tier)}" else "${c.city} · gegründet ${c.founded}",color=Muted);Text("${c.members} Mitglieder",style=MaterialTheme.typography.titleLarge);Text(c.philosophy,color=Grass)}};Text("${c.playPhilosophy} · ${c.youthPhilosophy}",color=Muted);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Shirt(c.kits.home,Modifier.size(76.dp));Shirt(c.kits.away,Modifier.size(76.dp));Shirt(c.kits.keeper,Modifier.size(76.dp))};StatTile("Vereinskasse",euros(c.budget),Modifier.fillMaxWidth(),caption="Letzte Woche: +${euros(c.lastIncome.toLong())} · −${euros(c.lastCosts.toLong())}",accent=if(c.budget<0)Clay else Chalk);Text("Gehaltssumme: ${euros(w.squad().sumOf{it.wage}.toLong())} / Woche",color=Muted,style=MaterialTheme.typography.bodySmall);Action("Speichern",secondary=true){vm.saveAs(vm.state.value.slot)};Action("Speichern unter / Export",secondary=true,onClick=onSaves)}
+ Page(c.name){
+  Section{Row(horizontalArrangement=Arrangement.spacedBy(18.dp),verticalAlignment=Alignment.CenterVertically){Crest(c.logo,c.primary,c.secondary,Modifier.size(80.dp));Column{Text(if(w.privateTopClubMode&&w.leagues.size==5)"${c.city} · ${WorldFactory.leagueName(w,c.tier)}" else "${c.city} · gegründet ${c.founded}",color=Muted);Text("${c.members} Mitglieder",style=MaterialTheme.typography.titleLarge);Text(c.philosophy,color=Grass)}};Text("${c.playPhilosophy} · ${c.youthPhilosophy}",color=Muted);Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Shirt(c.kits.home,Modifier.size(76.dp));Shirt(c.kits.away,Modifier.size(76.dp));Shirt(c.kits.keeper,Modifier.size(76.dp))};StatTile("Vereinskasse",euros(c.budget),Modifier.fillMaxWidth(),caption="Letzte Woche: +${euros(c.lastIncome.toLong())} · −${euros(c.lastCosts.toLong())}",accent=if(c.budget<0)Clay else Chalk);Text("Gehaltssumme: ${euros(w.squad().sumOf{it.wage}.toLong())} / Woche",color=Muted,style=MaterialTheme.typography.bodySmall)}
   Section("Wirtschaft & Partner"){
    Metric("Kommerzielle Reputation","${c.commercialReputation} / 100");Metric("Finanzvertrauen","${c.financialTrust} / 100")
    val active=c.sponsorDeals.filter{it.active};Text("Aktive Partner · ${active.size} / 4",style=MaterialTheme.typography.titleMedium);active.forEach{d->Text("${d.category.label}: ${d.name}",style=MaterialTheme.typography.titleMedium);Text("${euros(d.weekly.toLong())}/Woche · Siegbonus ${euros(d.performanceBonus.toLong())} · noch ${d.weeksLeft} Wochen",color=Muted);if(d.youthBoost>0)Text("Jugendnetzwerk +${d.youthBoost} beim Abschluss",color=Grass);if(d.membersBoost>0)Text("Regionalwirkung: +${d.membersBoost} Mitglieder beim Abschluss",color=Grass);HorizontalDivider()}
    if(c.sponsorOffers.isEmpty())Text("Aktuell liegen keine zusätzlichen Partnerangebote vor.",color=Muted) else {Text("Offene Angebote",style=MaterialTheme.typography.titleMedium);c.sponsorOffers.forEach{d->Text("${d.category.label}: ${d.name}",style=MaterialTheme.typography.titleMedium);Text("${euros(d.weekly.toLong())}/Woche · Handgeld ${euros(d.signingBonus)} · ${d.weeksLeft} Wochen · Mindest-Reputation ${d.minReputation}",color=Muted);Action("Partnerschaft annehmen",c.reputation>=d.minReputation&&active.size<4&&active.none{it.category==d.category}){vm.action("Partnerschaft abgeschlossen."){EconomySystem.accept(it,it.user.clubId,d.id)}};HorizontalDivider()}}
    val canRefresh=w.calendar.absoluteWeek-c.lastCommercialRefreshWeek>=8;Action(if(canRefresh)"Neue Sponsorangebote prüfen" else "Neue Angebote in ${(8-(w.calendar.absoluteWeek-c.lastCommercialRefreshWeek)).coerceAtLeast(0)} Wochen",enabled=canRefresh,secondary=true){vm.action{EconomySystem.refreshOffers(it,it.club())}}
-   Text("Einnahmen: Mitglieder, Merchandising, Medienwert, Siegboni und bis zu vier Partner. Trikotpartner stärken das Merchandising, Hauptpartner den Medienwert. Stadion, Staff und Academy kosten laufend Geld.",color=Muted,style=MaterialTheme.typography.bodySmall)
   }
   Section(s.name){Text("${s.surface.label} · ${s.capacity} Plätze · ${s.seats} Sitzplätze");Text(if(s.floodlights)"Flutlicht vorhanden" else "Noch ohne Flutlicht",color=if(s.floodlights)Grass else Muted);Meter("Platzqualität",s.pitchQuality,FACILITY_LEVEL_MAX)}
   if(w.construction.isNotEmpty())Section("Laufende Arbeiten"){w.construction.forEach{p->Text(p.facility.label,style=MaterialTheme.typography.titleMedium);LinearProgressIndicator(progress={1f-p.weeksLeft.toFloat()/p.totalWeeks},modifier=Modifier.fillMaxWidth());Text("Noch ${p.weeksLeft} von ${p.totalWeeks} Wochen",color=Muted)}}
@@ -157,7 +152,7 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
  var negotiationPlayerId by rememberSaveable{mutableStateOf<Int?>(null)};var marketView by rememberSaveable{mutableStateOf("Spielersuche")};var planningView by rememberSaveable{mutableStateOf("Transfers")};var nameQuery by rememberSaveable{mutableStateOf("")};var clubFilter by rememberSaveable{mutableIntStateOf(0)};var scoutRegion by rememberSaveable{mutableStateOf(ScoutRegion.DOMESTIC)}
  var outboundPlayerId by rememberSaveable{mutableIntStateOf(w.squad().firstOrNull{!it.retired&&it.id!=w.user.playerId&&it.loanParentClubId==0}?.id?:w.user.playerId)};var outboundDeal by rememberSaveable{mutableStateOf(DealType.BUY)}
  var youthFirst by rememberSaveable{mutableStateOf("")};var youthLast by rememberSaveable{mutableStateOf("")};var youthNation by rememberSaveable{mutableStateOf("Deutschland")};var youthAge by rememberSaveable{mutableIntStateOf(16)};var youthPos by rememberSaveable{mutableStateOf(Position.ZM)};var youthFoot by rememberSaveable{mutableStateOf(Foot.RIGHT)};var youthBlueprint by rememberSaveable{mutableStateOf(YouthBlueprint.BALANCED)};var youthRole by rememberSaveable{mutableStateOf(PlayerRole.BOX_TO_BOX)}
- Page("Kaderplanung & Academy","SUCHE · SCOUTING · U19/U23 · VERTRÄGE"){
+ Page("Transfers & Jugend"){
   val c=w.club();val academy=c.academy
   SegmentedTabs(listOf("Transfermarkt","Jugend & Academy"),if(planningView=="Jugend")1 else 0){planningView=if(it==1)"Jugend" else "Transfers"}
   if(planningView=="Jugend"){
@@ -169,14 +164,12 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
    Section("U19 & U23 Spielbetrieb"){
     fun summary(label:String,x:AcademyTeamSeason)="$label · ${x.played} Sp · ${x.wins}S ${x.draws}U ${x.losses}N · ${x.points} P · ${x.goalsFor}:${x.goalsAgainst}${x.lastResult.takeIf{it.isNotBlank()}?.let{" · zuletzt $it"}?:""}"
     Text(summary("U19",academy.u19Season),color=Grass);Text(summary("U23",academy.u23Season),color=Gold)
-    Text("Eigener Kader und eigene Saison je Team. Alle zwei Wochen ein Nachwuchsspiel – Einsätze und Leistungen treiben die Entwicklung.",color=Muted,style=MaterialTheme.typography.bodySmall)
-    Text("Jugendspieler können dauerhaft hochgezogen oder nur für das nächste Profispiel nominiert werden. Eine Notfall-Nominierung kehrt nach diesem Spiel automatisch zurück.",color=Grass,style=MaterialTheme.typography.bodySmall)
    }
    Section("Junge Profis in den Nachwuchs schicken"){
     val prospects=w.squad().filter{!it.youth&&!it.retired&&!it.temporarySeniorCallUp&&it.id!=w.user.playerId&&it.loanParentClubId==0&&w.calendar.season-it.birthYear<=22}.sortedBy{w.calendar.season-it.birthYear}
     if(prospects.isEmpty())Text("Aktuell gibt es keinen U23-berechtigten Profispieler.",color=Muted)
     prospects.forEach{p->
-     PlayerRow(p,w,onProfile);Text("Als Nachwuchsspieler erhält er wieder U19/U23-Spielpraxis und den zusätzlichen Academy-Entwicklungsweg.",color=Muted,style=MaterialTheme.typography.bodySmall)
+     PlayerRow(p,w,onProfile)
      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
       if(w.calendar.season-p.birthYear<=19)TextButton({vm.action{YouthCompetitionSystem.assignToYouth(it,p.id,YouthSquad.U19)}},Modifier.weight(1f),enabled=w.live==null){Text("In U19")}
       TextButton({vm.action{YouthCompetitionSystem.assignToYouth(it,p.id,YouthSquad.U23)}},Modifier.weight(1f),enabled=w.live==null){Text("In U23")}
@@ -185,13 +178,11 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
     }
    }
    Section("Gezielte Talentsuche"){
-    Text("Name, Nationalität, Alter, Position und Entwicklungsrichtung dürfen vorgegeben werden. Stärke und Potenzial bleiben academyabhängig und unsicher.",color=Muted)
     Text("Verfügbare Suchen: ${CustomYouthSystem.remainingSlots(w)} / 2",color=Grass)
     Field("Vorname",youthFirst){youthFirst=it.take(30)};Field("Nachname",youthLast){youthLast=it.take(30)};Field("Nationalität",youthNation){youthNation=it.take(30)}
     Pick("Alter",youthAge,listOf(15,16,17),{"$it Jahre"}){youthAge=it};Pick("Position",youthPos,Position.entries.toList(),{it.label}){youthPos=it};Pick("Fuß",youthFoot,Foot.entries.toList(),{it.label}){youthFoot=it};Pick("Grundprofil",youthBlueprint,YouthBlueprint.entries.toList(),{it.label}){youthBlueprint=it};Pick("Zielrolle",youthRole,PlayerRole.entries.filter{it!=PlayerRole.AUTO},{it.label}){youthRole=it}
     val cost=CustomYouthSystem.searchCost(w,youthAge,youthPos,youthFoot,youthBlueprint,youthRole);Metric("Scouting-Auftrag",euros(cost));Action("Talentsuche beauftragen · ${euros(cost)}",CustomYouthSystem.remainingSlots(w)>0&&c.budget>=cost&&youthFirst.trim().length>=2&&youthLast.trim().length>=2&&w.live==null){vm.action("Gezielte Talentsuche abgeschlossen."){CustomYouthSystem.create(it,youthFirst,youthLast,youthNation,youthAge,youthPos,youthFoot,youthBlueprint,youthRole)}}
     Action("Jugend-Transfermarkt öffnen",secondary=true){planningView="Transfers";marketView="Jugendmarkt"}
-    Text("Dort kannst du reale U19/U23-Talente anderer Vereine kaufen oder leihen und vor Abschluss direkt U19, U23 oder Profikader als Ziel festlegen.",color=Muted,style=MaterialTheme.typography.bodySmall)
    }
    YouthSquad.entries.forEach{squad->
     val season=if(squad==YouthSquad.U19)academy.u19Season else academy.u23Season
@@ -215,7 +206,6 @@ fun facilityEffect(f: Facility)=when(f){Facility.FLOODLIGHTS->"18 % mehr Zuschau
      val selected=outboundPlayerId.takeIf{id->offerable.any{it.id==id}}?:offerable.first().id
      Pick("Spieler",selected,offerable.map{it.id},{id->w.players[id]?.let{"${it.name} · ${if(it.youth)"${it.youthSquad.label} · " else ""}${it.position.label} · Stärke ${it.ca}"}?:"Spieler"}){outboundPlayerId=it}
      Pick("Angebotsart",outboundDeal,listOf(DealType.BUY,DealType.LOAN,DealType.LOAN_OPTION),{it.label}){outboundDeal=it}
-     Text("Der Spieler wird aktiv mehreren passenden Vereinen angeboten. Angebote bleiben getrennt, damit du vergleichen und mit jedem Verein einzeln verhandeln kannst.",color=Muted,style=MaterialTheme.typography.bodySmall)
      Action("Mehrere Angebote einholen",w.live==null&&ScoutingTransferSystem.transferWindowOpen(w),true){vm.action{OutboundTransferSystem.requestOffers(it,selected,outboundDeal)}}
     }
    }
@@ -318,12 +308,11 @@ private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}
  val contribution=p.stats.goals+p.stats.assists;val seasons=p.career+PlayerSeason(w.calendar.season,w.club().name,p.stats);val best=seasons.maxByOrNull{it.stats.goals+it.stats.assists}
  val legacy=(totals.appearances+totals.goals*3+totals.assists*2+w.history.sumOf{it.awards.size*8}+w.history.count{it.outcome=="Aufstieg"}*15).coerceAtLeast(0)
  val legacyLabel=when{legacy>=500->"Vereinslegende";legacy>=260->"Vereinsikone";legacy>=120->"Identifikationsfigur";legacy>=45->"Stammkraft";else->"Gründer"}
- Page(p.name,"SPIELERKARRIERE & VEREINSGESCHICHTE"){
+ Page("Karriere"){
   Section("Saison ${w.calendar.season}"){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Metric("Einsätze","${p.stats.appearances}");Metric("Tore","${p.stats.goals}");Metric("Vorlagen","${p.stats.assists}")};Text("${p.stats.minutes} Minuten · ${p.stats.yellow} gelbe Karten · ${p.stats.red} Platzverweise",color=Muted);Text("$age Jahre · Stärke ${p.ca} · ${p.foot.label}",color=Muted);if(p.injuryWeeks>0)Text("${p.injury}: ${p.injuryWeeks} Wochen",color=Clay)}
   Section("Dein Karriereweg"){
    Pick("Karrierefokus",w.user.playerCareerFocus,PlayerCareerFocus.entries.toList(),{it.label}){focus->vm.action("Karrierefokus geändert."){it.user.playerCareerFocus=focus}}
    Text(w.user.playerCareerFocus.description,color=Muted,style=MaterialTheme.typography.bodySmall)
-   if(w.user.playerCareerFocus!=PlayerCareerFocus.BALANCED)Text("Der Fokus hat einen kleinen echten Einfluss auf deine wöchentliche Entwicklung; Teamtraining und Spielpraxis bleiben wichtiger.",color=Grass,style=MaterialTheme.typography.bodySmall)
   }
   Section("Persönliche Saisonziele"){
    Text("Einsätze · ${p.stats.appearances}/24",color=if(p.stats.appearances>=24)Grass else Chalk);LinearProgressIndicator(progress={(p.stats.appearances/24f).coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth())
@@ -338,7 +327,7 @@ private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}
    Text("Wirtschaft · positive Vereinskasse",color=if(w.club().budget>=0)Grass else Clay);Text(euros(w.club().budget),color=Muted)
   }
   val all=w.players.values.filter{!it.retired||it.career.isNotEmpty()};val scorer=all.maxByOrNull{careerTotals(it).goals};val apps=all.maxByOrNull{careerTotals(it).appearances};val assists=all.maxByOrNull{careerTotals(it).assists}
-  Section("Vereinsrekorde & Hall of Fame"){scorer?.let{Text("Rekordtorschütze · ${it.name} · ${careerTotals(it).goals}",color=Gold)};apps?.let{Text("Meiste Einsätze · ${it.name} · ${careerTotals(it).appearances}")};assists?.let{Text("Meiste Vorlagen · ${it.name} · ${careerTotals(it).assists}")};Text("Rekorde berücksichtigen laufende und abgeschlossene Spielzeiten der im Spiel bekannten Karrieren.",color=Muted,style=MaterialTheme.typography.bodySmall)}
+  Section("Vereinsrekorde & Hall of Fame"){scorer?.let{Text("Rekordtorschütze · ${it.name} · ${careerTotals(it).goals}",color=Gold)};apps?.let{Text("Meiste Einsätze · ${it.name} · ${careerTotals(it).appearances}")};assists?.let{Text("Meiste Vorlagen · ${it.name} · ${careerTotals(it).assists}")}}
   Section("Vereinsgeschichte"){if(w.history.isEmpty())Text("Euer erstes Kapitel läuft. Nach Saisonende stehen hier Platzierung, Aufstieg und Auszeichnungen.",color=Muted);w.history.asReversed().forEach{h->Text("${h.season} · ${h.outcome}",style=MaterialTheme.typography.titleLarge,color=if(h.outcome=="Aufstieg")Grass else Chalk);Text("${h.league}: Platz ${h.rank}, ${h.points} Punkte, ${h.goals} Tore");h.awards.forEach{Text(it,color=Grass)};HorizontalDivider()}}
   if(p.career.isNotEmpty())Section("Deine abgeschlossenen Spielzeiten"){p.career.asReversed().forEach{Text("${it.season} · ${it.clubName}");Text("${it.stats.appearances} Einsätze · ${it.stats.goals} Tore · ${it.stats.assists} Vorlagen",color=Muted)}}
  }
@@ -363,7 +352,7 @@ private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}
 @Composable fun SettingsScreen(vm: GameViewModel){
  val soundsEnabled by vm.soundsEnabled.collectAsState()
  val tacticalMatchView by vm.tacticalMatchView.collectAsState()
- Page("Einstellungen","SPIELERLEBNIS"){
+ Page("Einstellungen"){
   Section("Match-Ansicht"){
    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
     Column(Modifier.weight(1f)){Text("Taktische Draufsicht",style=MaterialTheme.typography.titleMedium);Text(if(tacticalMatchView)"Alle Spieler bewegen sich einzeln mit dem Ball." else "Klassische Gründerelf-Ansicht.",color=Muted,style=MaterialTheme.typography.bodySmall)}
@@ -396,7 +385,7 @@ private fun nextMilestone(value:Int,steps:List<Int>)=steps.firstOrNull{it>value}
  val currentPlayer=safePlayerId?.let{w.players[it]}
  var firstText by remember(safePlayerId,currentPlayer?.firstName){mutableStateOf(currentPlayer?.firstName?:"")}
  var lastText by remember(safePlayerId,currentPlayer?.lastName){mutableStateOf(currentPlayer?.lastName?:"")}
- Page("Editor","DEINE WELT · DEINE NAMEN"){
+ Page("Editor"){
   Section("Liga umbenennen"){
    Pick("Liga",tier,(1..10).toList(),{WorldFactory.leagueName(w,it)}){tier=it;clubId=w.leagues.first{l->l.tier==it}.clubIds.first()}
    Field("Ligabezeichnung",leagueText){leagueText=it.take(40)}

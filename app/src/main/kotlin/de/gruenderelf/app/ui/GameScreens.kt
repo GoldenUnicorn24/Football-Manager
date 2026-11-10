@@ -98,16 +98,14 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
     StatTile("Ø Moral","$morale",Modifier.weight(1f),accent=ratingColor(morale/100f))
     StatTile("Ø Fitness","$fitness %",Modifier.weight(1f),accent=ratingColor(fitness/100f))
    }
-   Section("Hinweise"){
-    var count=0
-    if(expiring.isNotEmpty()){count++;ListRow(if(expiring.size==1)"1 Vertrag läuft aus" else "${expiring.size} Verträge laufen aus",expiring.joinToString{it.lastName},Icons.Filled.DateRange,Gold){onNavigate("kader")}}
-    if(finishedReports.isNotEmpty()){count++;ListRow(if(finishedReports.size==1)"1 Scoutbericht vollständig" else "${finishedReports.size} Scoutberichte vollständig","Im Scouting ansehen",Icons.Filled.Search,Blue){onNavigate("transfers")}}
-    if(count==0)ListRow("Keine offenen Hinweise","Verträge und Scouting sind im grünen Bereich.",Icons.Filled.CheckCircle,Grass)
+   if(expiring.isNotEmpty()||finishedReports.isNotEmpty())Section("Hinweise"){
+    if(expiring.isNotEmpty()){ListRow(if(expiring.size==1)"1 Vertrag läuft aus" else "${expiring.size} Verträge laufen aus",expiring.joinToString{it.lastName},Icons.Filled.DateRange,Gold){onNavigate("kader")}}
+    if(finishedReports.isNotEmpty()){ListRow(if(finishedReports.size==1)"1 Scoutbericht vollständig" else "${finishedReports.size} Scoutberichte vollständig","Im Scouting ansehen",Icons.Filled.Search,Blue){onNavigate("transfers")}}
    }
    Section("Form & Kabine"){
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
      Text("Letzte Spiele",color=Muted,style=MaterialTheme.typography.bodySmall)
-     if(c.form.isEmpty())Text("Die Geschichte beginnt.",color=Muted,style=MaterialTheme.typography.bodySmall) else Row(horizontalArrangement=Arrangement.spacedBy(5.dp)){c.form.takeLast(5).forEach{FormDot(it)}}
+     if(c.form.isEmpty())Text("–",color=Muted,style=MaterialTheme.typography.bodySmall) else Row(horizontalArrangement=Arrangement.spacedBy(5.dp)){c.form.takeLast(5).forEach{FormDot(it)}}
     }
     HairlineDivider()
     if(tired.isEmpty())Text("Der Kader wirkt frisch.",color=Grass,style=MaterialTheme.typography.bodyMedium)else Text("${tired.take(3).joinToString{it.lastName}} brauchen Aufmerksamkeit.",color=Gold,style=MaterialTheme.typography.bodyMedium)
@@ -117,7 +115,7 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
    BoardSection(w)
    Section("Saisonverlauf"){TableHistoryChart(history,table.size)}
    InboxPreview(w){onNavigate("posteingang")}
-   Section("Gründer. Trainer. Nummer ${p.number}."){
+   Section("Dein Spieler"){
     Row(horizontalArrangement=Arrangement.spacedBy(16.dp),verticalAlignment=Alignment.CenterVertically){
      PlayerPortrait(p.appearance,c.kits.home)
      Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)){Text(p.name,style=MaterialTheme.typography.titleLarge,maxLines=1,overflow=TextOverflow.Ellipsis);Text(p.position.label,color=Grass,style=MaterialTheme.typography.bodyMedium);Text("${p.stats.goals} Tore · ${p.stats.assists} Vorlagen",color=Muted,style=MaterialTheme.typography.bodySmall)}
@@ -125,10 +123,7 @@ private fun suitabilityColorForMatch(p: Player,target: Position)=when{p.position
     }
     Meter("Deine Fitness",p.fitness.roundToInt())
     if(!p.available)Text(if(p.injuryWeeks>0)"${p.injury}: ${p.injuryWeeks} Wochen" else "${p.unavailableReason?.label}",color=Clay)
-    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)){
-     Box(Modifier.weight(1f)){Action("Profil",secondary=true,onClick=onProfile)}
-     Box(Modifier.weight(1f)){Action("Karriere",secondary=true){onNavigate("karriere")}}
-    }
+    Action("Profil",secondary=true,onClick=onProfile)
    }
   })
  }
@@ -189,8 +184,6 @@ private fun tableRowModifier(own: Boolean)=Modifier.fillMaxWidth().background(if
    }
   }
   if(germanPyramid){if(tier>1)ZoneLegend(Grass,"Platz 1–2 steigen auf");if(tier<5)ZoneLegend(Clay,"Die letzten zwei steigen ab")}
-  else if(w.privateTopClubMode)Text("Für diese Topliga wird außerhalb des abgebildeten Ligabaums kein Auf- oder Abstieg simuliert.",color=Muted,style=MaterialTheme.typography.bodySmall)
-  Text("Bei Punktgleichheit: Tordifferenz, erzielte Tore, feste Vereinsreihenfolge.",color=Faint,style=MaterialTheme.typography.bodySmall)
  }
 }
 
@@ -224,8 +217,7 @@ private fun tableRowModifier(own: Boolean)=Modifier.fillMaxWidth().background(if
  } else listOf("Liga",cupName,CompetitionType.EURO_ELITE.label)
  var competition by rememberSaveable{mutableStateOf("Liga")};var country by rememberSaveable(w.user.clubId,w.calendar.season){mutableStateOf(ownCountry)};var tier by rememberSaveable(w.user.clubId,w.calendar.season){mutableIntStateOf(ownLeague.tier)};var day by rememberSaveable(w.calendar.season){mutableIntStateOf(w.calendar.matchday)};var fullTable by rememberSaveable{mutableStateOf(false)};var group by rememberSaveable{mutableStateOf("A")};var euroRound by rememberSaveable(w.calendar.season){mutableIntStateOf(1)}
  if(competition !in competitionOptions)competition="Liga"
- val eyebrow=if(real)"LIGEN · POKALE · EUROPA · CLUB WORLD CUP${if(w.fantasyCupEnabled)" · KRONE" else ""}" else "LIGA · GRÜNDERPOKAL · EUROPA-ELITELIGA"
- Page("Wettbewerbe",eyebrow){
+ Page("Wettbewerbe"){
   Pick("Wettbewerb",competition,competitionOptions,{it}){competition=it}
   when(competition){
    "Liga"->{
@@ -243,7 +235,7 @@ private fun tableRowModifier(own: Boolean)=Modifier.fillMaxWidth().background(if
    }
    cupName->{
     val count=w.fixtures.count{it.competition==CompetitionType.NATIONAL_CUP&&it.round==1}
-    Section(cupName){Text("${count*2} Vereine · sechs K.-o.-Runden · jede Runde ein Spiel. Bei Gleichstand folgen Verlängerung und Elfmeterschießen.",color=Muted);if(real)Text("Im DFB-Pokal starten 64 deutsche Vereine aus dem im Spiel enthaltenen Ligabaum.",color=Grass);val own=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP&&(it.homeId==w.user.clubId||it.awayId==w.user.clubId)};if(own.isEmpty())Text("Dein Verein ist in dieser Saison nicht qualifiziert.",color=Muted)else Text("Dein Weg: ${own.count{it.played}} von ${own.size} bislang angesetzten Partien.",color=Grass)}
+    Section(cupName){Text("${count*2} Vereine · sechs K.-o.-Runden",color=Muted);val own=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP&&(it.homeId==w.user.clubId||it.awayId==w.user.clubId)};if(own.isEmpty())Text("Dein Verein ist in dieser Saison nicht qualifiziert.",color=Muted)else Text("Dein Weg: ${own.count{it.played}} von ${own.size} bislang angesetzten Partien.",color=Grass)}
     val rounds=w.fixtures.filter{it.competition==CompetitionType.NATIONAL_CUP}.groupBy{it.round}.toSortedMap();rounds.forEach{(_,games)->Section(games.first().stage){games.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}}
    }
    CompetitionType.CLUB_WORLD_CUP.label->{
@@ -251,7 +243,6 @@ private fun tableRowModifier(own: Boolean)=Modifier.fillMaxWidth().background(if
     val groups=all.filter{it.stage=="Gruppenphase"}
     val ownIn=all.any{it.homeId==w.user.clubId||it.awayId==w.user.clubId}
     Section(CompetitionType.CLUB_WORLD_CUP.label){
-     Text("32 Vereine · acht Vierergruppen. Die ersten zwei jeder Gruppe erreichen das Achtelfinale; danach geht es direkt im K.-o.-System bis zum Finale.",color=Muted)
      Text("Siegerprämie: ${euros(CompetitionPrizeSystem.clubWorldCupPrize(w))}.",color=Grass)
      if(!ownIn)Text("Dein Verein ist in dieser Saison nicht qualifiziert.",color=Muted)
     }
@@ -267,7 +258,6 @@ private fun tableRowModifier(own: Boolean)=Modifier.fillMaxWidth().background(if
     val games=w.fixtures.filter{it.competition==CompetitionType.ETERNAL_CROWN}
     val ownIn=games.any{it.homeId==w.user.clubId||it.awayId==w.user.clubId}||w.user.clubId in w.fantasyCupByes
     Section(CompetitionType.ETERNAL_CROWN.label){
-     Text("Die besten sechs Vereine jeder spielbaren Liga qualifizieren sich. Falls die Teilnehmerzahl keine Zweierpotenz ist, gibt es zuerst eine Vorrunde mit Freilosen; danach folgt ausschließlich K.-o. bis zum Finale.",color=Muted)
      Text("Siegprämien steigen je Runde um 200.000 € · Turniersieger zusätzlich ${euros(CompetitionPrizeSystem.eternalCrownPrize(w))}.",color=Grass)
      if(!ownIn)Text("Dein Verein ist in dieser Saison nicht qualifiziert.",color=Muted)
     }
@@ -279,14 +269,13 @@ private fun tableRowModifier(own: Boolean)=Modifier.fillMaxWidth().background(if
     val leaguePhase=w.fixtures.filter{it.competition==type&&it.stage=="Ligaphase"};val modern=real&&type in listOf(CompetitionType.CHAMPIONS_LEAGUE,CompetitionType.EUROPA_LEAGUE)&&leaguePhase.isNotEmpty()&&leaguePhase.all{it.group.isBlank()}
     if(modern){
      val ownInCompetition=w.fixtures.any{it.competition==type&&(it.homeId==w.user.clubId||it.awayId==w.user.clubId)}
-     Section(type.label){Text("36 Vereine · acht Ligaphasen-Spiele pro Club, davon vier zuhause und vier auswärts. Platz 1–8 erreicht direkt das Achtelfinale, Platz 9–24 spielt die Play-offs.",color=Muted);Text("Ab den Play-offs werden die Duelle bis einschließlich Halbfinale mit Hin- und Rückspiel ausgetragen; das Finale ist ein einzelnes Spiel.",color=Grass);if(!ownInCompetition)Text("Dein Verein ist in dieser Saison nicht für diesen Wettbewerb qualifiziert.",color=Muted)}
+     if(!ownInCompetition)Section{Text("Dein Verein ist in dieser Saison nicht qualifiziert.",color=Muted)}
      EuroLeaguePhaseTable(w,type)
      if(euroRound !in 1..8)euroRound=1
      Pick("Ligaphasen-Spieltag",euroRound,(1..8).toList(),{"Runde $it"}){euroRound=it}
      Section("Ligaphase · Runde $euroRound"){leaguePhase.filter{it.round==euroRound}.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}
      val knockouts=w.fixtures.filter{it.competition==type&&it.stage!="Ligaphase"}.groupBy{it.round}.toSortedMap();knockouts.forEach{(_,games)->Section(games.first().stage){games.sortedBy{it.id}.forEach{CompetitionResultRow(w,it)}}}
     }else{
-     Section(type.label){Text("32 Vereine · acht Vierergruppen · Hin- und Rückspiele. Die ersten zwei jeder Gruppe erreichen das Achtelfinale.",color=Muted);Text("Internationale Fantasievereine treffen auf die stärksten Clubs der obersten nationalen Liga.",color=Grass)}
      Pick("Gruppe",group,('A'..'H').map{it.toString()},{"Gruppe $it"}){group=it}
      Section("Gruppe $group"){CompetitionEngine.groupTable(w,group,type).forEachIndexed{i,r->val c=w.clubs.getValue(r.clubId);Column(tableRowModifier(c.id==w.user.clubId).padding(horizontal=6.dp,vertical=8.dp),verticalArrangement=Arrangement.spacedBy(3.dp)){Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){RankChip(i+1,if(i<2)Grass else null);Crest(c.logo,c.primary,c.secondary,Modifier.size(22.dp));Text("${c.name} (${c.shortName})",Modifier.weight(1f),fontWeight=if(i<2)FontWeight.Bold else FontWeight.Normal,maxLines=1,overflow=TextOverflow.Ellipsis);Text("${r.points} P",fontWeight=FontWeight.Bold)};Text("Sp ${r.played} · S ${r.won} · U ${r.drawn} · N ${r.lost} · ${r.goalsFor}:${r.goalsAgainst}",Modifier.padding(start=34.dp),color=Muted,style=MaterialTheme.typography.bodySmall)}}}
      Section("Gruppenspiele"){w.fixtures.filter{it.competition==type&&it.stage=="Ligaphase"&&it.group==group}.sortedWith(compareBy<Fixture>{it.round}.thenBy{it.id}).forEach{f->Text("RUNDE ${f.round}",color=Faint,style=MaterialTheme.typography.labelSmall);CompetitionResultRow(w,f)}}
@@ -472,7 +461,7 @@ private fun statNumber(text: String)=text.replace(',','.').filter{it.isDigit()||
    LiveLineupEditor(w,m,ownHome,out,{out=it},{from,to->vm.moveLiveLineupSlot(from,to)})
    if(ownXiRaw.any{it==0})Text("Die rote LÜCKE zeigt den Platzverweis. Ziehe einen aktiven Spieler darauf, um die Unterzahl taktisch anders zu verteilen.",color=Gold,style=MaterialTheme.typography.bodySmall)
    if(suggestions.isNotEmpty()){
-    Text("Co-Trainer-Empfehlungen",style=MaterialTheme.typography.titleMedium);Text("Priorisiert schwache Live-Leistung, Fitness, Form, Gelb-Risiko, Spielstand und Positionspassung. Jeder Raus- und Rein-Spieler erscheint nur einmal.",color=Muted,style=MaterialTheme.typography.bodySmall)
+    Text("Co-Trainer-Empfehlungen",style=MaterialTheme.typography.titleMedium)
     suggestions.forEachIndexed{i,sug->val po=w.players.getValue(sug.outId);val pi=w.players.getValue(sug.inId);Surface(color=if(out==sug.outId&&incoming==sug.inId)Grass.copy(alpha=.10f) else PanelHigh,shape=RoundedCornerShape(14.dp),border=BorderStroke(1.dp,if(out==sug.outId&&incoming==sug.inId)Grass.copy(alpha=.4f) else Line),modifier=Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable{out=sug.outId;incoming=sug.inId}){Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text("${i+1}. ${po.shortName} → ${pi.shortName}",fontWeight=FontWeight.Bold);SuitabilityBadge(pi,sug.target)};Text(sug.reason,color=Muted,style=MaterialTheme.typography.bodySmall)}}}
    }
    Text("Ersatzbank",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold)
@@ -490,7 +479,6 @@ private fun statNumber(text: String)=text.replace(',','.').filter{it.isDigit()||
   var selectedAssistantOuts by remember(m.assistantSubSuggestedMinute,outs.hashCode(),ins.hashCode()){mutableStateOf(outs.toSet())}
   AlertDialog(onDismissRequest={},title={Text(if(forced)"Co-Trainer: Verletzungswechsel" else if(outs.size>1)"Co-Trainer: Wechsel auswählen" else "Co-Trainer: Wechselvorschlag")},text={Column(Modifier.heightIn(max=500.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)){
    Text("${MatchEngine.clockLabel(m)}. Minute · ${m.home.goals}:${m.away.goals}",color=Muted)
-   if(outs.size>1)Text("Wähle per Klick genau die Wechsel aus, die du übernehmen willst. Nicht gewählte Vorschläge werden kurzfristig nicht erneut vorgeschlagen.",color=Gold,style=MaterialTheme.typography.bodySmall)
    outs.forEachIndexed{i,outId->val inId=ins.getOrNull(i)?:return@forEachIndexed;val outPlayer=w.players[outId]?:return@forEachIndexed;val inPlayer=w.players[inId]?:return@forEachIndexed;val ownHome=w.user.clubId==m.homeId;val lineup=if(ownHome)m.homeXi else m.awayXi;val slotIndex=lineup.indexOf(outId);val target=Formations.positions(if(ownHome)m.homeFormation else m.awayFormation).getOrElse(slotIndex.coerceAtLeast(0)){outPlayer.position};Row(Modifier.fillMaxWidth().clickable{selectedAssistantOuts=if(outId in selectedAssistantOuts)selectedAssistantOuts-outId else selectedAssistantOuts+outId},verticalAlignment=Alignment.Top,horizontalArrangement=Arrangement.spacedBy(8.dp)){Checkbox(outId in selectedAssistantOuts,{checked->selectedAssistantOuts=if(checked)selectedAssistantOuts+outId else selectedAssistantOuts-outId});Column(Modifier.weight(1f)){Text("${outPlayer.name} → ${inPlayer.name}",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold);Text("${target.label} · Eignung ${inPlayer.ratingAt(target)}/${PLAYER_RATING_MAX} · ${m.assistantSubReasons.getOrNull(i).orEmpty()}",color=Muted,style=MaterialTheme.typography.bodySmall)}}}
    if(forced)Text("Ein abgewählter verletzter Spieler führt anschließend zur manuellen Verletzungsunterbrechung.",color=Gold,style=MaterialTheme.typography.bodySmall)
   }},confirmButton={Button(onClick={vm.acceptAssistantSubstitution(selectedAssistantOuts);userPaused=false},enabled=selectedAssistantOuts.isNotEmpty()){Text(if(selectedAssistantOuts.size>1)"${selectedAssistantOuts.size} Wechsel annehmen" else "Auswahl annehmen")}},dismissButton={OutlinedButton(onClick={vm.rejectAssistantSubstitution();userPaused=false}){Text("Alle ablehnen")}})
@@ -501,7 +489,6 @@ private fun statNumber(text: String)=text.replace(',','.').filter{it.isDigit()||
   AlertDialog(onDismissRequest={},title={Text("Du am Ball")},text={Column(Modifier.heightIn(max=500.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){
    Text("${MatchEngine.clockLabel(m)}. Minute · ${m.home.goals}:${m.away.goals}. Was machst du?")
    Surface(color=Inset,shape=RoundedCornerShape(12.dp),border=BorderStroke(1.dp,Line),modifier=Modifier.fillMaxWidth()){Column(Modifier.padding(10.dp),verticalArrangement=Arrangement.spacedBy(3.dp)){Text("Distanz zum Tor: ca. ${context.distanceMeters} m",fontWeight=FontWeight.Bold);Text("Gegnerdruck: ${context.pressureLabel} · ca. ${context.nearbyOpponents} Gegenspieler in der Nähe",color=Muted,style=MaterialTheme.typography.bodySmall)}}
-   Text("Schuss = direkter Abschluss · Dribbling = Raumgewinn mit Ballverlustrisiko · Flanke/Steilpass = Chance kreieren · Sicherungspass = Ballbesitz priorisieren.",color=Muted,style=MaterialTheme.typography.bodySmall)
    choices.forEach{d->Action(d.label,true,d!=Decision.SHOOT){vm.decide(d)}}
   }},confirmButton={})
  }

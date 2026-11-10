@@ -53,12 +53,9 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
     if(route=="kader"&&squadBadge>0)vm.action{NotificationSystem.acknowledgeSquad(it)}
     if(route=="transfers"&&reportCount>0)vm.action{NotificationSystem.acknowledgeScoutReports(it)}
    }
-   Scaffold(containerColor=Ink,snackbarHost={SnackbarHost(snack){data->Snackbar(data,shape=RoundedCornerShape(14.dp),containerColor=PanelHigher,contentColor=Chalk,actionColor=Grass)}},bottomBar={Column{HorizontalDivider(color=Line,thickness=1.dp);NavigationBar(containerColor=Panel,tonalElevation=0.dp){tabs.forEach{(dest,label,icon)->
-    val badge=when(dest){"kader"->squadBadge;"mehr"->reportCount;else->0}
-    val selected=route==dest||(dest=="mehr"&&route !in tabs.map{it.first})
-    NavigationBarItem(selected=selected,onClick={if(route!=dest)nav.navigate(dest){popUpTo("home"){saveState=true};launchSingleTop=true;restoreState=true}},icon={BadgedBox(badge={if(badge>0)Badge(containerColor=Clay,contentColor=OnAccent){Text(if(badge>9)"9+" else badge.toString(),fontWeight=FontWeight.Bold)}}){Icon(icon,contentDescription=label)}},label={Text(label,style=MaterialTheme.typography.labelMedium,fontWeight=if(selected)FontWeight.Bold else FontWeight.Normal)},
-     colors=NavigationBarItemDefaults.colors(selectedIconColor=Grass,selectedTextColor=Chalk,indicatorColor=Grass.copy(alpha=.14f),unselectedIconColor=Muted,unselectedTextColor=Muted))
-   }}}}){padding->Box(Modifier.fillMaxSize().padding(padding)){
+   Scaffold(containerColor=Ink,snackbarHost={SnackbarHost(snack){data->Snackbar(data,shape=RoundedCornerShape(14.dp),containerColor=PanelHigher,contentColor=Chalk,actionColor=Grass)}},bottomBar={BottomBar(tabs.map{(dest,label,icon)->NavTab(dest,label,icon,when(dest){"kader"->squadBadge;"mehr"->reportCount;else->0})},if(route in tabs.map{it.first})route else "mehr"){dest->if(route!=dest)nav.navigate(dest){popUpTo("home"){saveState=true};launchSingleTop=true;restoreState=true}}}){padding->Box(Modifier.fillMaxSize().padding(padding)){
+    val goBack:()->Unit={nav.popBackStack()}
+    CompositionLocalProvider(LocalPageBack provides (if(route in tabs.map{it.first})null else goBack)){
     NavHost(nav,"home"){
      composable("home"){HomeScreen(w,{nav.navigate("spiel")},{nav.navigate("spieler/${w.user.playerId}")}){nav.navigate(it)}}
      composable("kader"){SquadScreen(w,vm){nav.navigate("spieler/$it")}}
@@ -76,6 +73,7 @@ class MainActivity: ComponentActivity(){override fun onCreate(savedInstanceState
      composable("einstellungen"){SettingsScreen(vm)}
      composable("speichern"){SavesScreen(vm,slots,state){nav.popBackStack()}}
      composable("spieler/{id}"){back->ProfileScreen(w,back.arguments?.getString("id")?.toIntOrNull()?:w.user.playerId,vm){nav.popBackStack()}}
+    }
     }
     TutorialCoach(w,route,vm){dest->if(route!=dest)nav.navigate(dest){launchSingleTop=true}}
     if(state.busy)LinearProgressIndicator(modifier=Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter),color=Grass,trackColor=Color.Transparent)

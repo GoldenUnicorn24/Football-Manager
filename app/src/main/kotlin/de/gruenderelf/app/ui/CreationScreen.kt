@@ -124,7 +124,6 @@ private fun replaceKit(kits:Kits,kind:String,kit:Kit)=when(kind){
   when(page){
    0->{
     Section("Land, Liga und Verein"){
-     Text("Wähle zuerst das Land, danach die verfügbare Liga und schließlich deinen Verein. Deutschland reicht bis zur Oberliga Hamburg.",color=Muted)
      Pick("Land",country,countries,{it}){country=it}
      Pick("Liga",league.name,leagues.map{it.name},{it}){leagueName=it}
      Pick("Verein übernehmen",clubKey,options.map{it.key},{key->options.first{it.key==key}.let{"${it.shortName} · ${it.name}"}}){clubKey=it}
@@ -145,7 +144,6 @@ private fun replaceKit(kits:Kits,kind:String,kit:Kit)=when(kind){
    }
    1->{
     Section("Dich zusätzlich in den Kader aufnehmen"){
-     Text("Du wirst als zusätzlicher Spieler des ausgewählten Vereins eingefügt; kein vorhandener Spieler wird dafür entfernt.",color=Muted)
      PlayerDraftEditor(p,{person(it)},false)
     }
     AttributeEditor(p){person(it)}
@@ -157,7 +155,6 @@ private fun replaceKit(kits:Kits,kind:String,kit:Kit)=when(kind){
      Pick("Speicherplatz",saveSlot,(1..5).toList(),{i->"Slot $i · ${slots.firstOrNull{it.slot==i}?.clubName?:"Leer"}"}){saveSlot=it}
      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Geführtes Tutorial",style=MaterialTheme.typography.titleMedium);Text("Wird nur für diese Karriere gespeichert und kann später neu gestartet oder beendet werden.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(tutorial,{tutorial=it})}
      Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("Krone der Kontinente",style=MaterialTheme.typography.titleMedium);Text("Optionaler Fantasy-Pokal: die besten Vereine aller spielbaren Ligen treten gegeneinander an.",color=Muted,style=MaterialTheme.typography.bodySmall)};Switch(fantasyCup,{fantasyCup=it})}
-     Text("Alle integrierten Ligen werden parallel simuliert. Deutsche Vereine können innerhalb der fünf deutschen Spielklassen auf- und absteigen.",color=Muted)
      Action("Karriere starten",!busy){if(slots.any{it.slot==saveSlot})confirm=true else vm.createRealMode(System.currentTimeMillis(),clubKey,p,saveSlot,tutorial,fantasyCup)}
     }
    }
@@ -257,7 +254,6 @@ private fun replaceKit(kits:Kits,kind:String,kit:Kit)=when(kind){
      ColorPicker("Sekundärfarbe",c.secondary){club(c.copy(secondary=it))}
      Action(if(c.logo.customImage==null)"Eigenes Wappen hochladen" else "Wappenbild ersetzen",secondary=true){logoLauncher.launch("image/*")}
      if(c.logo.customImage!=null)Action("Eigenes Wappen entfernen",secondary=true){club(c.copy(logo=c.logo.copy(customImage=null)));brandingMessage="Eigenes Wappen entfernt. Die Gründerelf-Vorlage ist wieder aktiv."}
-     Text("PNG/JPG wird automatisch verkleinert und direkt in den exportierbaren Spielstand eingebettet.",color=Muted,style=MaterialTheme.typography.labelSmall)
     }
     Section("Trikots"){
      Pick("Kleidung",clothing,kitKinds){clothing=it}
@@ -278,7 +274,6 @@ private fun replaceKit(kits:Kits,kind:String,kit:Kit)=when(kind){
     val safe=rosterIndex.coerceIn(0,rosterPlayers.lastIndex)
     val selected=rosterPlayers[safe]
     Section("20er-Kader · du + 19 Spieler"){
-     Text("Jeder Mitspieler kann einzeln benannt, positioniert und mit eigenen Attributen ausgestattet werden.",color=Muted)
      Pick("Spieler bearbeiten",safe,rosterPlayers.indices.toList(),{"${it+2}. ${rosterPlayers[it].firstName} ${rosterPlayers[it].lastName} · ${rosterPlayers[it].position.label}"}){rosterIndex=it}
     }
     Section("Spieler ${safe+2}"){PlayerDraftEditor(selected,{changed->roster(rosterPlayers.toMutableList().apply{this[safe]=changed})},false)}
@@ -316,8 +311,7 @@ private fun replaceKit(kits:Kits,kind:String,kit:Kit)=when(kind){
   "takeover"->{TakeoverCreationScreen(vm,slots,busy){mode="choose"};return}
   "custom"->{CustomClubCreationScreen(vm,slots,busy){mode="choose"};return}
  }
- Page("Neue Karriere","SPIELMODUS"){
-  Text("Wähle zwischen einem bestehenden Verein oder einem vollständig eigenen Klub in einer frei gewählten integrierten Liga.",color=Muted,style=MaterialTheme.typography.bodyLarge)
+ Page("Neue Karriere"){
   ModeCard(Icons.Filled.Star,"Verein übernehmen","Starte bei einem echten Verein und bring dich selbst als Spielertrainer in den Kader.",Grass,!busy){mode="takeover"}
   ModeCard(Icons.Filled.Create,"Individuellen Verein erstellen","Name, eigenes Wappen, Trikots, Stadion und der komplette 20er-Kader – alles nach deinen Vorstellungen.",Gold,!busy){mode="custom"}
   Section("Enthaltene Ligen"){
